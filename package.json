@@ -1,0 +1,27 @@
+{
+  "name": "miti99bot",
+  "version": "0.1.0",
+  "description": "Telegram bot with plug-n-play module system, deployed to Cloudflare Workers.",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20.6"
+  },
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy && npm run register",
+    "register": "node --env-file=.env.deploy scripts/register.js",
+    "register:dry": "node --env-file=.env.deploy scripts/register.js --dry-run",
+    "lint": "biome check src tests scripts",
+    "format": "biome format --write src tests scripts",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "grammy": "^1.30.0"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.0",
+    "vitest": "^2.1.0",
+    "wrangler": "^3.90.0"
+  }
+}

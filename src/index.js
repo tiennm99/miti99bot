@@ -1,0 +1,61 @@
+/**
+ * @file fetch entry point for the Cloudflare Worker.
+ *
+ * Routes:
+ *   GET  /         — "miti99bot ok" health check (unauthenticated).
+ *   POST /webhook  — Telegram webhook. grammY validates the
+ *                    X-Telegram-Bot-Api-Secret-Token header against
+ *                    env.TELEGRAM_WEBHOOK_SECRET and replies 401 on mismatch.
+ *   *              — 404.
+ *
+ * There is NO admin HTTP surface. `setWebhook` + `setMyCommands` run at
+ * deploy time from `scripts/register.js`, not from the Worker.
+ */
+
+import { webhookCallback } from "grammy";
+import { getBot } from "./bot.js";
+
+/** @type {ReturnType<typeof webhookCallback> | null} */
+let cachedWebhookHandler = null;
+
+/**
+ * @param {any} env
+ */
+async function getWebhookHandler(env) {
+  if (cachedWebhookHandler) return cachedWebhookHandler;
+  const bot = await getBot(env);
+  cachedWebhookHandler = webhookCallback(bot, "cloudflare-mod", {
+    secretToken: env.TELEGRAM_WEBHOOK_SECRET,
+  });
+  return cachedWebhookHandler;
+}
+
+export default {
+  /**
+   * @param {Request} request
+   * @param {any} env
+   * @param {any} _ctx
+   */
+  async fetch(request, env, _ctx) {
+    const { pathname } = new URL(request.url);
+
+    if (request.method === "GET" && pathname === "/") {
+      return new Response("miti99bot ok", {
+        status: 200,
+        headers: { "content-type": "text/plain" },
+      });
+    }
+
+    if (request.method === "POST" && pathname === "/webhook") {
+      try {
+        const handler = await getWebhookHandler(env);
+        return await handler(request);
+      } catch (err) {
+        console.error("webhook handler failed", err);
+        return new Response("internal error", { status: 500 });
+      }
+    }
+
+    return new Response("not found", { status: 404 });
+  },
+};

@@ -1,0 +1,22 @@
+name = "miti99bot"
+main = "src/index.js"
+compatibility_date = "2025-10-01"
+
+# Enabled modules at runtime. Comma-separated. Must match static-map keys in src/modules/index.js.
+# Also duplicate this value into .env.deploy so scripts/register.js derives the same public command list.
+[vars]
+MODULES = "util,wordle,loldle,misc"
+
+# KV namespace holding all module state. Each module auto-prefixes its keys via createStore().
+# Create with:
+#   wrangler kv namespace create miti99bot-kv
+#   wrangler kv namespace create miti99bot-kv --preview
+# then paste the returned IDs below.
+[[kv_namespaces]]
+binding = "KV"
+id = "REPLACE_ME"
+preview_id = "REPLACE_ME"
+
+# Secrets (set via `wrangler secret put <name>`, NOT in this file):
+#   TELEGRAM_BOT_TOKEN       — bot token from @BotFather
+#   TELEGRAM_WEBHOOK_SECRET  — arbitrary high-entropy string, also set in .env.deploy
