@@ -1,8 +1,42 @@
 # miti99bot
 
-[My Telegram bot](https://t.me/miti99bot) — a plug-n-play bot on Cloudflare Workers.
+[My Telegram bot](https://t.me/miti99bot) — a plug-n-play bot framework for Cloudflare Workers.
 
 Modules are added or removed via a single `MODULES` env var. Each module registers its own commands with three visibility levels (public / protected / private). Data lives in Cloudflare KV behind a thin `KVStore` interface, so swapping the backend later is a one-file change.
+
+## Why
+
+- **Drop-in modules.** Write a single file, list the folder name in `MODULES`, redeploy. No registration boilerplate, no manual command wiring.
+- **Three visibility levels out of the box.** Public commands show in Telegram's `/` menu and `/help`; protected show only in `/help`; private are hidden slash-command easter eggs. One namespace, loud conflict detection.
+- **Storage is swappable.** Modules talk to a small `KVStore` interface — Cloudflare KV today, a different backend tomorrow, with a one-file change.
+- **Zero admin surface.** No in-Worker `/admin/*` routes, no admin secret. `setWebhook` + `setMyCommands` run at deploy time from a local node script.
+- **Tested.** 56 vitest unit tests cover registry, storage, dispatcher, help renderer, validators, and HTML escaping.
+
+## How a request flows
+
+```
+Telegram sends update
+        │
+        ▼
+POST /webhook  ◄── grammY validates X-Telegram-Bot-Api-Secret-Token (401 on miss)
+        │
+        ▼
+getBot(env) ──► first call only: installDispatcher(bot, env)
+        │                │
+        │                ├── loadModules(env.MODULES.split(","))
+        │                ├── per module: init({ db: createStore(name, env), env })
+        │                ├── build publicCommands / protectedCommands / privateCommands
+        │                │     + unified allCommands map (conflict check)
+        │                └── for each entry: bot.command(name, handler)
+        ▼
+bot.handleUpdate(update) ──► grammY routes /cmd → registered handler
+        │
+        ▼
+handler reads/writes via db.getJSON / db.putJSON (auto-prefixed as "module:key")
+        │
+        ▼
+ctx.reply(...) → response back to Telegram
+```
 
 ## Architecture snapshot
 
@@ -140,6 +174,8 @@ TL;DR:
 | `npm run register` exits `missing env: X` | Add `X` to `.env.deploy`. |
 | `--env-file` flag not recognized | Node < 20.6. Upgrade Node. |
 
-## Planning docs
+## Further reading
 
-Full implementation plan in `plans/260411-0853-telegram-bot-plugin-framework/` — 9 phase files plus researcher reports.
+- [`docs/architecture.md`](docs/architecture.md) — deeper dive: cold-start, module lifecycle, DB namespacing, deploy flow, design tradeoffs.
+- [`docs/adding-a-module.md`](docs/adding-a-module.md) — step-by-step guide to authoring a new module.
+- `plans/260411-0853-telegram-bot-plugin-framework/` — full phased implementation plan (9 phase files + researcher reports).
