@@ -29,6 +29,7 @@ src/
 │   ├── dispatcher.js        ── bot.command() for every visibility
 │   ├── validate-command.js  ── shared validators
 │   ├── util/                ── fully implemented: /info + /help
+│   ├── trading/             ── paper trading: crypto, VN stocks, forex, gold
 │   ├── wordle/ loldle/      ── stub modules proving the plugin system
 │   └── misc/                ── stub that exercises the DB (ping/mstats)
 └── util/
@@ -94,10 +95,11 @@ Cloudflare Workers bundle statically via wrangler. A dynamic import from a varia
 ```js
 // src/modules/index.js
 export const moduleRegistry = {
-  util:   () => import("./util/index.js"),
-  wordle: () => import("./wordle/index.js"),
-  loldle: () => import("./loldle/index.js"),
-  misc:   () => import("./misc/index.js"),
+  util:    () => import("./util/index.js"),
+  wordle:  () => import("./wordle/index.js"),
+  loldle:  () => import("./loldle/index.js"),
+  misc:    () => import("./misc/index.js"),
+  trading: () => import("./trading/index.js"),
 };
 ```
 
@@ -276,7 +278,7 @@ A previous design sketched a `POST /admin/setup` route inside the Worker, gated 
 
 ## 12. Testing philosophy
 
-Pure-logic unit tests only. No `workerd` pool, no Telegram fixtures, no integration-level tooling. 56 tests run in ~500ms.
+Pure-logic unit tests only. No `workerd` pool, no Telegram fixtures, no integration-level tooling. 110 tests run in ~500ms.
 
 Test seams:
 
@@ -287,10 +289,57 @@ Test seams:
 - **`dispatcher.test.js`** — every visibility registered via `bot.command()`, dispatcher does NOT install any `bot.on()` middleware, handler identity preserved.
 - **`help-command.test.js`** — module grouping, `(protected)` suffix, zero private-command leakage, HTML escaping of module names + descriptions, placeholder when no commands are visible.
 - **`escape-html.test.js`** — the four HTML entities, non-double-escaping, non-string coercion.
+- **`trading/symbols.test.js`** — registry size, case-insensitive lookup, currency set, grouped listing.
+- **`trading/format.test.js`** — VND dot-separator, USD comma-separator, crypto trailing-zero stripping, stock flooring, P&L formatting.
+- **`trading/portfolio.test.js`** — empty portfolio, KV round-trip, migration-safe load, add/deduct currency and assets, insufficient balance rejection.
+- **`trading/handlers.test.js`** — all 5 commands: topup/buy/sell/convert/stats with mocked price APIs, input validation, edge cases.
 
 Tests inject fakes (`fake-kv-namespace`, `fake-bot`, `fake-modules`) via parameter passing — no `vi.mock`, no path-resolution flakiness.
 
-## 13. Non-goals (for now)
+## 13. The trading module
+
+A paper-trading system where each Telegram user manages a virtual portfolio. Five public commands:
+
+| Command | Action |
+|---------|--------|
+| `/trade_topup <amount> [currency]` | Add fiat (VND default). Tracks cumulative invested via `totalvnd`. |
+| `/trade_buy <amount> <symbol>` | Buy at market price, deducting VND. Stocks must be integer quantities. |
+| `/trade_sell <amount> <symbol>` | Sell holdings back to VND at market price. |
+| `/trade_convert <amount> <from> <to>` | Convert between fiat currencies (VND, USD). |
+| `/trade_stats` | Portfolio breakdown with all assets valued in VND, plus P&L vs invested. |
+
+### Data model
+
+Per-user portfolio stored as a single KV object at key `user:<telegramId>`:
+
+```js
+{ currency: { VND, USD }, stock: {}, crypto: {}, others: {}, totalvnd: 0 }
+```
+
+### Price sources
+
+Three free APIs fetched in parallel, cached in KV for 60 seconds:
+
+- **CoinGecko** — crypto (BTC, ETH, SOL) + gold (PAX Gold as proxy), priced in VND.
+- **TCBS** — Vietnam stock market (TCB, VPB, FPT, VNM, HPG), close price × 1000.
+- **open.er-api.com** — forex (USD/VND rate).
+
+On partial API failure, available data is returned; on total failure, stale cache up to 5 minutes old is used before surfacing an error.
+
+### File layout
+
+```
+src/modules/trading/
+├── index.js          — module entry, wires handlers to commands
+├── symbols.js        — hardcoded symbol registry (9 assets, 2 currencies)
+├── format.js         — VND/USD/crypto/stock/P&L formatters
+├── portfolio.js      — per-user KV read/write, balance checks
+├── prices.js         — API fetching + 60s cache
+├── handlers.js       — topup/buy/sell/convert handlers
+└── stats-handler.js  — stats/P&L breakdown handler
+```
+
+## 14. Non-goals (for now)
 
 - Real game logic in `wordle` / `loldle` / `misc` — they're stubs that exercise the framework. Real implementations can land later.
 - A sandbox between modules. Same-origin trust model: all modules are first-party code.
@@ -299,7 +348,7 @@ Tests inject fakes (`fake-kv-namespace`, `fake-bot`, `fake-modules`) via paramet
 - A CI pipeline. Deploys are developer-driven in v1.
 - Internationalization. The bot replies in English; add i18n per-module if a module needs it.
 
-## 14. Further reading
+## 15. Further reading
 
 - The phased implementation plan: `plans/260411-0853-telegram-bot-plugin-framework/` — 9 phase files with detailed rationale, risk assessments, and todo lists.
 - Researcher reports: `plans/reports/researcher-260411-0853-*.md` — grammY on Cloudflare Workers, Cloudflare KV basics, wrangler config and secrets.
