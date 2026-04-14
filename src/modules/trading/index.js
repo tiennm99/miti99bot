@@ -25,20 +25,20 @@ const tradingModule = {
     {
       name: "trade_buy",
       visibility: "public",
-      description: "Buy crypto/stock/gold at market price",
+      description: "Buy VN stock at market price",
       handler: (ctx) => handleBuy(ctx, db),
     },
     {
       name: "trade_sell",
       visibility: "public",
-      description: "Sell holdings back to VND",
+      description: "Sell VN stock back to VND",
       handler: (ctx) => handleSell(ctx, db),
     },
     {
       name: "trade_convert",
       visibility: "public",
-      description: "Convert between currencies (bid/ask spread)",
-      handler: (ctx) => handleConvert(ctx, db),
+      description: "Currency exchange (coming soon)",
+      handler: (ctx) => handleConvert(ctx),
     },
     {
       name: "trade_stats",

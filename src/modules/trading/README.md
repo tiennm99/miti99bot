@@ -1,32 +1,26 @@
 # Trading Module
 
-Paper-trading system where each Telegram user manages a virtual portfolio.
+Paper-trading system where each Telegram user manages a virtual portfolio. Currently supports **VN stocks only** — crypto, gold, and currency exchange coming later.
 
 ## Commands
 
 | Command | Action |
 |---------|--------|
 | `/trade_topup <amount>` | Add VND to account. Tracks cumulative invested via `totalvnd`. |
-| `/trade_buy <amount> <symbol>` | Buy at market price, deducting VND. Stocks must be integer quantities. |
-| `/trade_sell <amount> <symbol>` | Sell holdings back to VND at market price. |
-| `/trade_convert <amount> <from> <to>` | Convert between currencies at real BIDV bid/ask rates. |
+| `/trade_buy <qty> <TICKER>` | Buy VN stock at market price, deducting VND. Integer quantities only. |
+| `/trade_sell <qty> <TICKER>` | Sell stock holdings back to VND at market price. |
+| `/trade_convert` | Currency exchange (coming soon). |
 | `/trade_stats` | Portfolio breakdown with all assets valued in VND, plus P&L vs invested. |
 
-## Supported Symbols
+## Symbol Resolution
 
-| Symbol | Category | Source | Label |
-|--------|----------|--------|-------|
-| BTC | crypto | CoinGecko | Bitcoin |
-| ETH | crypto | CoinGecko | Ethereum |
-| SOL | crypto | CoinGecko | Solana |
-| TCB | stock | TCBS | Techcombank |
-| VPB | stock | TCBS | VPBank |
-| FPT | stock | TCBS | FPT Corp |
-| VNM | stock | TCBS | Vinamilk |
-| HPG | stock | TCBS | Hoa Phat |
-| GOLD | others | CoinGecko (PAX Gold) | Gold (troy oz) |
+Symbols are **resolved dynamically** — no hardcoded registry. When a user buys a ticker:
 
-Currencies: VND, USD.
+1. Check KV cache (`sym:<TICKER>`) → if cached, use it
+2. Query TCBS API to verify the ticker exists and has price data
+3. Cache the resolution permanently in KV
+
+Any valid VN stock ticker on TCBS "just works" without code changes.
 
 ## Database
 
@@ -34,74 +28,55 @@ KV namespace prefix: `trading:`
 
 | Key | Type | Description |
 |-----|------|-------------|
-| `user:<telegramId>` | JSON | Per-user portfolio (balances + holdings) |
-| `prices:latest` | JSON | Cached merged prices from all APIs |
+| `user:<telegramId>` | JSON | Per-user portfolio |
+| `sym:<TICKER>` | JSON | Cached symbol resolution |
+| `forex:latest` | JSON | Cached BIDV forex rates |
 
 ### Schema: `user:<telegramId>`
 
 ```json
 {
-  "currency": { "VND": 5000000, "USD": 100 },
-  "stock": { "TCB": 10, "FPT": 5 },
-  "crypto": { "BTC": 0.005, "ETH": 1.2 },
-  "others": { "GOLD": 0.1 },
+  "currency": { "VND": 5000000 },
+  "assets": { "TCB": 10, "FPT": 5, "VNM": 100 },
   "totalvnd": 10000000
 }
 ```
 
-- `currency` — fiat balances (VND, USD)
-- `stock` / `crypto` / `others` — asset quantities keyed by symbol
+- `currency` — fiat balances (VND only for now)
+- `assets` — flat map of stock quantities keyed by ticker
 - `totalvnd` — cumulative VND value of all top-ups (cost basis for P&L)
-- VND is the sole settlement currency — buy/sell deducts/adds VND
-- Empty categories are `{}`, not absent — migration-safe loading fills missing keys
+- Migrates old 4-category format (`stock`/`crypto`/`others`) automatically on load
 
-### Schema: `prices:latest`
+### Schema: `sym:<TICKER>`
 
 ```json
-{
-  "ts": 1713100000000,
-  "crypto": { "BTC": 1500000000, "ETH": 50000000, "SOL": 3000000 },
-  "stock": { "TCB": 25000, "VPB": 18000, "FPT": 120000, "VNM": 70000, "HPG": 28000 },
-  "forex": { "USD": { "mid": 25400, "buy": 25200, "sell": 25600 } },
-  "others": { "GOLD": 72000000 }
-}
+{ "symbol": "TCB", "category": "stock", "label": "TCB" }
 ```
 
-- `ts` — Unix epoch milliseconds of last fetch
-- All prices in VND per unit
-- Cache TTL: 60 seconds (stale fallback up to 5 minutes)
+Cached permanently after first successful TCBS lookup.
 
-## Price Sources
+## Price Source
 
-Three free APIs fetched in parallel, cached in KV for 60 seconds:
+| API | Purpose | Auth |
+|-----|---------|------|
+| TCBS `/stock-insight/v1/stock/bars-long-term` | VN stock close price (× 1000) | None |
 
-| API | Purpose | Auth | Rate Limit |
-|-----|---------|------|-----------|
-| CoinGecko `/api/v3/simple/price` | Crypto + gold prices in VND | None | 30 calls/min (free) |
-| TCBS `/stock-insight/v1/stock/bars-long-term` | Vietnam stock close prices (× 1000) | None | Unofficial |
-| BIDV `/ServicesBIDV/ExchangeDetailServlet` | USD/VND buy/sell rates | None | Unofficial |
-
-On partial API failure, available data is returned. On total failure, stale cache up to 5 minutes old is used before surfacing an error.
+Prices are fetched on demand per symbol (not batch-cached), since any ticker can be queried dynamically.
 
 ## File Layout
 
 ```
 src/modules/trading/
 ├── index.js          — module entry, wires handlers to commands
-├── symbols.js        — hardcoded symbol registry (9 assets, 2 currencies)
-├── format.js         — VND/USD/crypto/stock/P&L formatters
-├── portfolio.js      — per-user KV read/write, balance checks
-├── prices.js         — API fetching + 60s cache
+├── symbols.js        — dynamic symbol resolution via TCBS + KV cache
+├── format.js         — VND/stock number formatters
+├── portfolio.js      — per-user KV read/write, flat assets map
+├── prices.js         — TCBS stock price fetch + BIDV forex (for future use)
 ├── handlers.js       — topup/buy/sell/convert handlers
 └── stats-handler.js  — stats/P&L breakdown handler
 ```
 
-## Adding a Symbol
+## Future
 
-Add one line to `symbols.js`:
-
-```js
-NEWSYM: { category: "crypto", apiId: "coingecko-id", label: "New Coin" },
-```
-
-For stocks, `apiId` is the TCBS ticker. For crypto/gold, `apiId` is the CoinGecko ID.
+- Crypto (CoinGecko), gold (PAX Gold), currency exchange (BIDV bid/ask rates)
+- Dynamic symbol resolution will extend to CoinGecko search for crypto
