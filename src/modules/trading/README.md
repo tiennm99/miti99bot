@@ -28,16 +28,48 @@ Paper-trading system where each Telegram user manages a virtual portfolio.
 
 Currencies: VND, USD.
 
-## Data Model
+## Database
 
-Per-user portfolio stored as a single KV object at key `user:<telegramId>`:
+KV namespace prefix: `trading:`
 
-```js
-{ currency: { VND, USD }, stock: {}, crypto: {}, others: {}, totalvnd: 0 }
+| Key | Type | Description |
+|-----|------|-------------|
+| `user:<telegramId>` | JSON | Per-user portfolio (balances + holdings) |
+| `prices:latest` | JSON | Cached merged prices from all APIs |
+
+### Schema: `user:<telegramId>`
+
+```json
+{
+  "currency": { "VND": 5000000, "USD": 100 },
+  "stock": { "TCB": 10, "FPT": 5 },
+  "crypto": { "BTC": 0.005, "ETH": 1.2 },
+  "others": { "GOLD": 0.1 },
+  "totalvnd": 10000000
+}
 ```
 
-- `totalvnd` tracks cumulative VND value of all top-ups (cost basis for P&L)
+- `currency` — fiat balances (VND, USD)
+- `stock` / `crypto` / `others` — asset quantities keyed by symbol
+- `totalvnd` — cumulative VND value of all top-ups (cost basis for P&L)
 - VND is the sole settlement currency — buy/sell deducts/adds VND
+- Empty categories are `{}`, not absent — migration-safe loading fills missing keys
+
+### Schema: `prices:latest`
+
+```json
+{
+  "ts": 1713100000000,
+  "crypto": { "BTC": 1500000000, "ETH": 50000000, "SOL": 3000000 },
+  "stock": { "TCB": 25000, "VPB": 18000, "FPT": 120000, "VNM": 70000, "HPG": 28000 },
+  "forex": { "USD": 25400 },
+  "others": { "GOLD": 72000000 }
+}
+```
+
+- `ts` — Unix epoch milliseconds of last fetch
+- All prices in VND per unit
+- Cache TTL: 60 seconds (stale fallback up to 5 minutes)
 
 ## Price Sources
 
