@@ -289,55 +289,14 @@ Test seams:
 - **`dispatcher.test.js`** — every visibility registered via `bot.command()`, dispatcher does NOT install any `bot.on()` middleware, handler identity preserved.
 - **`help-command.test.js`** — module grouping, `(protected)` suffix, zero private-command leakage, HTML escaping of module names + descriptions, placeholder when no commands are visible.
 - **`escape-html.test.js`** — the four HTML entities, non-double-escaping, non-string coercion.
-- **`trading/symbols.test.js`** — registry size, case-insensitive lookup, currency set, grouped listing.
-- **`trading/format.test.js`** — VND dot-separator, USD comma-separator, crypto trailing-zero stripping, stock flooring, P&L formatting.
-- **`trading/portfolio.test.js`** — empty portfolio, KV round-trip, migration-safe load, add/deduct currency and assets, insufficient balance rejection.
-- **`trading/handlers.test.js`** — all 5 commands: topup/buy/sell/convert/stats with mocked price APIs, input validation, edge cases.
+
+Each module adds its own tests under `tests/modules/<name>/`. See module READMEs for coverage details.
 
 Tests inject fakes (`fake-kv-namespace`, `fake-bot`, `fake-modules`) via parameter passing — no `vi.mock`, no path-resolution flakiness.
 
-## 13. The trading module
+## 13. Module-specific documentation
 
-A paper-trading system where each Telegram user manages a virtual portfolio. Five public commands:
-
-| Command | Action |
-|---------|--------|
-| `/trade_topup <amount> [currency]` | Add fiat (VND default). Tracks cumulative invested via `totalvnd`. |
-| `/trade_buy <amount> <symbol>` | Buy at market price, deducting VND. Stocks must be integer quantities. |
-| `/trade_sell <amount> <symbol>` | Sell holdings back to VND at market price. |
-| `/trade_convert <amount> <from> <to>` | Convert between fiat currencies (VND, USD). |
-| `/trade_stats` | Portfolio breakdown with all assets valued in VND, plus P&L vs invested. |
-
-### Data model
-
-Per-user portfolio stored as a single KV object at key `user:<telegramId>`:
-
-```js
-{ currency: { VND, USD }, stock: {}, crypto: {}, others: {}, totalvnd: 0 }
-```
-
-### Price sources
-
-Three free APIs fetched in parallel, cached in KV for 60 seconds:
-
-- **CoinGecko** — crypto (BTC, ETH, SOL) + gold (PAX Gold as proxy), priced in VND.
-- **TCBS** — Vietnam stock market (TCB, VPB, FPT, VNM, HPG), close price × 1000.
-- **open.er-api.com** — forex (USD/VND rate).
-
-On partial API failure, available data is returned; on total failure, stale cache up to 5 minutes old is used before surfacing an error.
-
-### File layout
-
-```
-src/modules/trading/
-├── index.js          — module entry, wires handlers to commands
-├── symbols.js        — hardcoded symbol registry (9 assets, 2 currencies)
-├── format.js         — VND/USD/crypto/stock/P&L formatters
-├── portfolio.js      — per-user KV read/write, balance checks
-├── prices.js         — API fetching + 60s cache
-├── handlers.js       — topup/buy/sell/convert handlers
-└── stats-handler.js  — stats/P&L breakdown handler
-```
+Each module maintains its own `README.md` with commands, data model, and implementation details. See `src/modules/<name>/README.md` for module-specific docs.
 
 ## 14. Non-goals (for now)
 
