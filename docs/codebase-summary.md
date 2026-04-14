@@ -35,14 +35,6 @@ Telegram update → POST /webhook → grammY secret validation
 → ctx.reply() → response to Telegram
 ```
 
-### Trading Module Price Fetch
-```
-User sends /trade_buy → handler calls getPrice(db, symbol)
-→ getPrices(db) checks KV cache (key: "prices:latest")
-→ if stale (>60s): fetch CoinGecko + TCBS + ER-API in parallel
-→ merge results, cache in KV → return price in VND
-```
-
 ### Deploy Pipeline
 ```
 npm run deploy → wrangler deploy (upload to CF)
@@ -59,13 +51,9 @@ npm run deploy → wrangler deploy (upload to CF)
 | `vitest` | Test runner (dev) | ^2.1.0 |
 | `wrangler` | Cloudflare Workers CLI (dev) | ^3.90.0 |
 
-## External APIs (Trading Module)
+## Module Documentation
 
-| API | Purpose | Auth | Rate Limit |
-|-----|---------|------|-----------|
-| CoinGecko `/api/v3/simple/price` | Crypto + gold prices in VND | None | 30 calls/min (free) |
-| TCBS `/stock-insight/v1/stock/bars-long-term` | Vietnam stock close prices | None | Unofficial |
-| open.er-api.com `/v6/latest/USD` | USD/VND forex rate | None | 1,500/month (free) |
+Each module maintains its own `README.md` with commands, data model, and implementation details. See `src/modules/<name>/README.md`.
 
 ## Test Coverage
 
