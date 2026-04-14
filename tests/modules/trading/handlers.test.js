@@ -62,12 +62,12 @@ describe("trading/handlers", () => {
       expect(ctx.replies[0]).toContain("5.000.000 VND");
     });
 
-    it("tracks totalvnd", async () => {
+    it("tracks meta.invested", async () => {
       const ctx = makeCtx("1000000");
       await handleTopup(ctx, db);
       const { getPortfolio } = await import("../../../src/modules/trading/portfolio.js");
       const p = await getPortfolio(db, 42);
-      expect(p.totalvnd).toBe(1000000);
+      expect(p.meta.invested).toBe(1000000);
       expect(p.currency.VND).toBe(1000000);
     });
 
@@ -89,7 +89,7 @@ describe("trading/handlers", () => {
       const { emptyPortfolio } = await import("../../../src/modules/trading/portfolio.js");
       const p = emptyPortfolio();
       p.currency.VND = 5000000;
-      p.totalvnd = 5000000;
+      p.meta.invested = 5000000;
       await savePortfolio(db, 42, p);
 
       const ctx = makeCtx("10 TCB");
@@ -169,7 +169,7 @@ describe("trading/handlers", () => {
       const p = emptyPortfolio();
       p.currency.VND = 5000000;
       p.assets.TCB = 10;
-      p.totalvnd = 10000000;
+      p.meta.invested = 10000000;
       await savePortfolio(db, 42, p);
 
       const ctx = makeCtx("");

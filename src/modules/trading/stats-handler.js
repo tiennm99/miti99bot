@@ -44,7 +44,7 @@ export async function handleStats(ctx, db) {
   }
 
   lines.push(`\nTotal value: ${formatVND(totalValue)}`);
-  lines.push(`Invested: ${formatVND(p.totalvnd)}`);
-  lines.push(`P&L: ${formatPnL(totalValue, p.totalvnd)}`);
+  lines.push(`Invested: ${formatVND(p.meta.invested)}`);
+  lines.push(`P&L: ${formatPnL(totalValue, p.meta.invested)}`);
   await ctx.reply(lines.join("\n"));
 }
