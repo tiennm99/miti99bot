@@ -10,7 +10,7 @@ Modules are added or removed via a single `MODULES` env var. Each module registe
 - **Three visibility levels out of the box.** Public commands show in Telegram's `/` menu and `/help`; protected show only in `/help`; private are hidden slash-command easter eggs. One namespace, loud conflict detection.
 - **Storage is swappable.** Modules talk to a small `KVStore` interface — Cloudflare KV today, a different backend tomorrow, with a one-file change.
 - **Zero admin surface.** No in-Worker `/admin/*` routes, no admin secret. `setWebhook` + `setMyCommands` run at deploy time from a local node script.
-- **Tested.** 56 vitest unit tests cover registry, storage, dispatcher, help renderer, validators, and HTML escaping.
+- **Tested.** 110 vitest unit tests cover registry, storage, dispatcher, help renderer, validators, HTML escaping, and the trading module.
 
 ## How a request flows
 
@@ -54,6 +54,7 @@ src/
 │   ├── dispatcher.js    # wires every command via bot.command()
 │   ├── validate-command.js
 │   ├── util/            # /info, /help (fully implemented)
+│   ├── trading/         # fake paper trading — crypto, stocks, forex, gold
 │   ├── wordle/          # stub — proves plugin system
 │   ├── loldle/          # stub
 │   └── misc/            # stub
