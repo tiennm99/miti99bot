@@ -6,10 +6,10 @@ Paper-trading system where each Telegram user manages a virtual portfolio.
 
 | Command | Action |
 |---------|--------|
-| `/trade_topup <amount> [currency]` | Add fiat (VND default). Tracks cumulative invested via `totalvnd`. |
+| `/trade_topup <amount>` | Add VND to account. Tracks cumulative invested via `totalvnd`. |
 | `/trade_buy <amount> <symbol>` | Buy at market price, deducting VND. Stocks must be integer quantities. |
 | `/trade_sell <amount> <symbol>` | Sell holdings back to VND at market price. |
-| `/trade_convert <amount> <from> <to>` | Convert between fiat currencies (VND, USD). |
+| `/trade_convert <amount> <from> <to>` | Convert between currencies with bid/ask spread (0.5%). |
 | `/trade_stats` | Portfolio breakdown with all assets valued in VND, plus P&L vs invested. |
 
 ## Supported Symbols

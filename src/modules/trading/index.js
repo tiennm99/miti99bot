@@ -19,7 +19,7 @@ const tradingModule = {
     {
       name: "trade_topup",
       visibility: "public",
-      description: "Top up fiat to your trading account",
+      description: "Top up VND to your trading account",
       handler: (ctx) => handleTopup(ctx, db),
     },
     {
@@ -37,7 +37,7 @@ const tradingModule = {
     {
       name: "trade_convert",
       visibility: "public",
-      description: "Convert between fiat currencies",
+      description: "Convert between currencies (bid/ask spread)",
       handler: (ctx) => handleConvert(ctx, db),
     },
     {

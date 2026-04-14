@@ -68,22 +68,19 @@ describe("trading/handlers", () => {
 
   describe("handleTopup", () => {
     it("tops up VND", async () => {
-      const ctx = makeCtx("5000000 VND");
+      const ctx = makeCtx("5000000");
       await handleTopup(ctx, db);
       expect(ctx.reply).toHaveBeenCalledOnce();
       expect(ctx.replies[0]).toContain("5.000.000 VND");
     });
 
-    it("tops up USD and tracks VND equivalent in totalvnd", async () => {
-      const ctx = makeCtx("100 USD");
-      await handleTopup(ctx, db);
-      expect(ctx.replies[0]).toContain("$100.00");
-    });
-
-    it("defaults to VND when currency omitted", async () => {
+    it("tracks totalvnd", async () => {
       const ctx = makeCtx("1000000");
       await handleTopup(ctx, db);
-      expect(ctx.replies[0]).toContain("VND");
+      const { getPortfolio } = await import("../../../src/modules/trading/portfolio.js");
+      const p = await getPortfolio(db, 42);
+      expect(p.totalvnd).toBe(1000000);
+      expect(p.currency.VND).toBe(1000000);
     });
 
     it("rejects missing args", async () => {
@@ -93,15 +90,9 @@ describe("trading/handlers", () => {
     });
 
     it("rejects negative amount", async () => {
-      const ctx = makeCtx("-100 VND");
+      const ctx = makeCtx("-100");
       await handleTopup(ctx, db);
       expect(ctx.replies[0]).toContain("positive");
-    });
-
-    it("rejects unsupported currency", async () => {
-      const ctx = makeCtx("100 EUR");
-      await handleTopup(ctx, db);
-      expect(ctx.replies[0]).toContain("Unsupported");
     });
   });
 
@@ -166,8 +157,10 @@ describe("trading/handlers", () => {
   });
 
   describe("handleConvert", () => {
-    it("converts USD to VND", async () => {
-      const { emptyPortfolio } = await import("../../../src/modules/trading/portfolio.js");
+    it("converts USD to VND at bid rate (less than mid)", async () => {
+      const { emptyPortfolio, getPortfolio } = await import(
+        "../../../src/modules/trading/portfolio.js"
+      );
       const p = emptyPortfolio();
       p.currency.USD = 100;
       await savePortfolio(db, 42, p);
@@ -175,7 +168,28 @@ describe("trading/handlers", () => {
       const ctx = makeCtx("50 USD VND");
       await handleConvert(ctx, db);
       expect(ctx.replies[0]).toContain("Converted");
-      expect(ctx.replies[0]).toContain("VND");
+      // bid rate = 25400 * 0.995 = 25273 VND/USD → 50 * 25273 = 1,263,650
+      const loaded = await getPortfolio(db, 42);
+      expect(loaded.currency.VND).toBeLessThan(50 * 25400); // less than mid rate
+      expect(loaded.currency.VND).toBeGreaterThan(0);
+      expect(ctx.replies[0]).toContain("spread");
+    });
+
+    it("converts VND to USD at ask rate (costs more VND)", async () => {
+      const { emptyPortfolio, getPortfolio } = await import(
+        "../../../src/modules/trading/portfolio.js"
+      );
+      const p = emptyPortfolio();
+      p.currency.VND = 30000000;
+      await savePortfolio(db, 42, p);
+
+      const ctx = makeCtx("1000000 VND USD");
+      await handleConvert(ctx, db);
+      expect(ctx.replies[0]).toContain("Converted");
+      // ask rate = 25400 * 1.005 = 25527 VND/USD → 1M / 25527 ≈ 39.17 USD
+      const loaded = await getPortfolio(db, 42);
+      expect(loaded.currency.USD).toBeLessThan(1000000 / 25400); // less USD than mid
+      expect(loaded.currency.USD).toBeGreaterThan(0);
     });
 
     it("rejects same currency conversion", async () => {
