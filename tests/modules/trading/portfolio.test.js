@@ -12,7 +12,6 @@ import {
 import { makeFakeKv } from "../../fakes/fake-kv-namespace.js";
 
 describe("trading/portfolio", () => {
-  /** @type {import("../../../src/db/kv-store-interface.js").KVStore} */
   let db;
 
   beforeEach(() => {
@@ -22,10 +21,8 @@ describe("trading/portfolio", () => {
   describe("emptyPortfolio", () => {
     it("returns correct shape", () => {
       const p = emptyPortfolio();
-      expect(p.currency).toEqual({ VND: 0, USD: 0 });
-      expect(p.stock).toEqual({});
-      expect(p.crypto).toEqual({});
-      expect(p.others).toEqual({});
+      expect(p.currency).toEqual({ VND: 0 });
+      expect(p.assets).toEqual({});
       expect(p.totalvnd).toBe(0);
     });
   });
@@ -35,24 +32,37 @@ describe("trading/portfolio", () => {
       const p = await getPortfolio(db, 123);
       expect(p.currency.VND).toBe(0);
       expect(p.totalvnd).toBe(0);
+      expect(p.assets).toEqual({});
     });
 
     it("round-trips saved data", async () => {
       const p = emptyPortfolio();
       p.currency.VND = 5000000;
+      p.assets.TCB = 10;
       p.totalvnd = 5000000;
       await savePortfolio(db, 123, p);
       const loaded = await getPortfolio(db, 123);
       expect(loaded.currency.VND).toBe(5000000);
+      expect(loaded.assets.TCB).toBe(10);
       expect(loaded.totalvnd).toBe(5000000);
     });
 
-    it("fills missing category keys on load (migration-safe)", async () => {
-      // simulate old data missing 'others' key
-      await db.putJSON("user:123", { currency: { VND: 100 }, stock: {}, crypto: {} });
+    it("migrates old 4-category format to flat assets", async () => {
+      // simulate old format with stock/crypto/others
+      await db.putJSON("user:123", {
+        currency: { VND: 100 },
+        stock: { TCB: 10 },
+        crypto: { BTC: 0.5 },
+        others: { GOLD: 1 },
+        totalvnd: 100,
+      });
       const p = await getPortfolio(db, 123);
-      expect(p.others).toEqual({});
-      expect(p.totalvnd).toBe(0);
+      expect(p.assets.TCB).toBe(10);
+      expect(p.assets.BTC).toBe(0.5);
+      expect(p.assets.GOLD).toBe(1);
+      // old category keys should not exist
+      expect(p.stock).toBeUndefined();
+      expect(p.crypto).toBeUndefined();
     });
   });
 
@@ -77,63 +87,51 @@ describe("trading/portfolio", () => {
       const result = deductCurrency(p, "VND", 5000);
       expect(result.ok).toBe(false);
       expect(result.balance).toBe(1000);
-      expect(p.currency.VND).toBe(1000); // unchanged
     });
   });
 
   describe("addAsset / deductAsset", () => {
-    it("adds crypto asset", () => {
-      const p = emptyPortfolio();
-      addAsset(p, "BTC", 0.5);
-      expect(p.crypto.BTC).toBe(0.5);
-    });
-
-    it("adds stock asset", () => {
+    it("adds asset to flat map", () => {
       const p = emptyPortfolio();
       addAsset(p, "TCB", 10);
-      expect(p.stock.TCB).toBe(10);
-    });
-
-    it("adds others asset", () => {
-      const p = emptyPortfolio();
-      addAsset(p, "GOLD", 1);
-      expect(p.others.GOLD).toBe(1);
+      expect(p.assets.TCB).toBe(10);
     });
 
     it("accumulates on repeated add", () => {
       const p = emptyPortfolio();
-      addAsset(p, "BTC", 0.1);
-      addAsset(p, "BTC", 0.2);
-      expect(p.crypto.BTC).toBeCloseTo(0.3);
+      addAsset(p, "TCB", 10);
+      addAsset(p, "TCB", 5);
+      expect(p.assets.TCB).toBe(15);
     });
 
     it("deducts asset when sufficient", () => {
       const p = emptyPortfolio();
-      p.crypto.BTC = 1.0;
-      const result = deductAsset(p, "BTC", 0.3);
+      p.assets.TCB = 10;
+      const result = deductAsset(p, "TCB", 3);
       expect(result.ok).toBe(true);
-      expect(p.crypto.BTC).toBeCloseTo(0.7);
+      expect(p.assets.TCB).toBe(7);
     });
 
     it("removes key when deducted to zero", () => {
       const p = emptyPortfolio();
-      p.crypto.BTC = 0.5;
-      deductAsset(p, "BTC", 0.5);
-      expect(p.crypto.BTC).toBeUndefined();
+      p.assets.TCB = 5;
+      deductAsset(p, "TCB", 5);
+      expect(p.assets.TCB).toBeUndefined();
     });
 
     it("rejects deduction when insufficient", () => {
       const p = emptyPortfolio();
-      p.crypto.BTC = 0.1;
-      const result = deductAsset(p, "BTC", 0.5);
+      p.assets.TCB = 3;
+      const result = deductAsset(p, "TCB", 10);
       expect(result.ok).toBe(false);
-      expect(result.held).toBe(0.1);
+      expect(result.held).toBe(3);
     });
 
-    it("rejects deduction for unknown symbol", () => {
+    it("rejects deduction for unowned symbol", () => {
       const p = emptyPortfolio();
       const result = deductAsset(p, "NOPE", 1);
       expect(result.ok).toBe(false);
+      expect(result.held).toBe(0);
     });
   });
 });

@@ -1,46 +1,59 @@
-import { describe, expect, it } from "vitest";
-import {
-  CURRENCIES,
-  SYMBOLS,
-  getSymbol,
-  listSymbols,
-} from "../../../src/modules/trading/symbols.js";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { createStore } from "../../../src/db/create-store.js";
+import { comingSoonMessage, resolveSymbol } from "../../../src/modules/trading/symbols.js";
+import { makeFakeKv } from "../../fakes/fake-kv-namespace.js";
+
+/** Stub global.fetch to return TCBS-like response */
+function stubFetch(hasData = true) {
+  global.fetch = vi.fn(() =>
+    Promise.resolve({
+      ok: true,
+      json: () => Promise.resolve(hasData ? { data: [{ close: 25 }] } : { data: [] }),
+    }),
+  );
+}
 
 describe("trading/symbols", () => {
-  it("SYMBOLS has 9 entries across 3 categories", () => {
-    expect(Object.keys(SYMBOLS)).toHaveLength(9);
-    const cats = new Set(Object.values(SYMBOLS).map((s) => s.category));
-    expect(cats).toEqual(new Set(["crypto", "stock", "others"]));
+  let db;
+
+  beforeEach(() => {
+    db = createStore("trading", { KV: makeFakeKv() });
+    vi.restoreAllMocks();
   });
 
-  it("getSymbol is case-insensitive", () => {
-    const btc = getSymbol("btc");
-    expect(btc).toBeDefined();
-    expect(btc.symbol).toBe("BTC");
-    expect(btc.category).toBe("crypto");
-
-    expect(getSymbol("Tcb").symbol).toBe("TCB");
+  it("resolves a valid VN stock ticker via TCBS", async () => {
+    stubFetch();
+    const result = await resolveSymbol(db, "TCB");
+    expect(result).toEqual({ symbol: "TCB", category: "stock", label: "TCB" });
+    expect(global.fetch).toHaveBeenCalledOnce();
   });
 
-  it("getSymbol returns undefined for unknown symbols", () => {
-    expect(getSymbol("NOPE")).toBeUndefined();
-    expect(getSymbol("")).toBeUndefined();
-    expect(getSymbol(null)).toBeUndefined();
+  it("caches resolved symbol in KV", async () => {
+    stubFetch();
+    await resolveSymbol(db, "TCB");
+    // second call should use cache, not fetch
+    await resolveSymbol(db, "TCB");
+    expect(global.fetch).toHaveBeenCalledOnce();
   });
 
-  it("CURRENCIES contains VND and USD", () => {
-    expect(CURRENCIES.has("VND")).toBe(true);
-    expect(CURRENCIES.has("USD")).toBe(true);
-    expect(CURRENCIES.has("EUR")).toBe(false);
+  it("is case-insensitive", async () => {
+    stubFetch();
+    const result = await resolveSymbol(db, "tcb");
+    expect(result.symbol).toBe("TCB");
   });
 
-  it("listSymbols returns grouped output", () => {
-    const out = listSymbols();
-    expect(out).toContain("Crypto:");
-    expect(out).toContain("BTC — Bitcoin");
-    expect(out).toContain("Stocks:");
-    expect(out).toContain("TCB — Techcombank");
-    expect(out).toContain("Others:");
-    expect(out).toContain("GOLD — Gold");
+  it("returns null for invalid ticker", async () => {
+    stubFetch(false);
+    const result = await resolveSymbol(db, "NOPE");
+    expect(result).toBeNull();
+  });
+
+  it("returns null for empty input", async () => {
+    const result = await resolveSymbol(db, "");
+    expect(result).toBeNull();
+  });
+
+  it("comingSoonMessage returns string", () => {
+    expect(comingSoonMessage()).toContain("coming soon");
   });
 });

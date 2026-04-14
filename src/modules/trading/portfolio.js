@@ -1,27 +1,26 @@
 /**
  * @file Portfolio CRUD — per-user KV read/write and balance operations.
  * All mutations are in-memory; caller must savePortfolio() to persist.
+ *
+ * Schema: { currency: { VND, USD }, assets: { SYMBOL: qty }, totalvnd }
+ * Assets are stored in a flat map — category is derived from symbol resolution.
  */
-
-import { getSymbol } from "./symbols.js";
 
 /**
  * @typedef {Object} Portfolio
  * @property {{ [currency: string]: number }} currency
- * @property {{ [symbol: string]: number }} stock
- * @property {{ [symbol: string]: number }} crypto
- * @property {{ [symbol: string]: number }} others
+ * @property {{ [symbol: string]: number }} assets
  * @property {number} totalvnd
  */
 
 /** @returns {Portfolio} */
 export function emptyPortfolio() {
-  return { currency: { VND: 0, USD: 0 }, stock: {}, crypto: {}, others: {}, totalvnd: 0 };
+  return { currency: { VND: 0 }, assets: {}, totalvnd: 0 };
 }
 
 /**
  * Load user portfolio from KV, or return empty if first-time user.
- * Ensures all category keys exist (migration-safe).
+ * Migrates old 4-category format to flat assets map.
  * @param {import("../../db/kv-store-interface.js").KVStore} db
  * @param {number|string} userId
  * @returns {Promise<Portfolio>}
@@ -29,14 +28,22 @@ export function emptyPortfolio() {
 export async function getPortfolio(db, userId) {
   const raw = await db.getJSON(`user:${userId}`);
   if (!raw) return emptyPortfolio();
-  // ensure all expected keys exist
-  const p = emptyPortfolio();
-  p.currency = { ...p.currency, ...raw.currency };
-  p.stock = { ...raw.stock };
-  p.crypto = { ...raw.crypto };
-  p.others = { ...raw.others };
-  p.totalvnd = raw.totalvnd ?? 0;
-  return p;
+
+  // migrate old format: merge stock/crypto/others into flat assets
+  if (raw.stock || raw.crypto || raw.others) {
+    const assets = { ...raw.stock, ...raw.crypto, ...raw.others, ...raw.assets };
+    return {
+      currency: { VND: 0, ...raw.currency },
+      assets,
+      totalvnd: raw.totalvnd ?? 0,
+    };
+  }
+
+  return {
+    currency: { VND: 0, ...raw.currency },
+    assets: raw.assets ?? {},
+    totalvnd: raw.totalvnd ?? 0,
+  };
 }
 
 /**
@@ -74,16 +81,13 @@ export function deductCurrency(p, currency, amount) {
 }
 
 /**
- * Add asset (stock/crypto/others) to portfolio.
+ * Add asset to flat assets map.
  * @param {Portfolio} p
  * @param {string} symbol
  * @param {number} qty
  */
 export function addAsset(p, symbol, qty) {
-  const info = getSymbol(symbol);
-  if (!info) return;
-  const cat = info.category;
-  p[cat][symbol] = (p[cat][symbol] || 0) + qty;
+  p.assets[symbol] = (p.assets[symbol] || 0) + qty;
 }
 
 /**
@@ -95,13 +99,10 @@ export function addAsset(p, symbol, qty) {
  * @returns {{ ok: boolean, held: number }}
  */
 export function deductAsset(p, symbol, qty) {
-  const info = getSymbol(symbol);
-  if (!info) return { ok: false, held: 0 };
-  const cat = info.category;
-  const held = p[cat][symbol] || 0;
+  const held = p.assets[symbol] || 0;
   if (held < qty) return { ok: false, held };
   const remaining = held - qty;
-  if (remaining === 0) delete p[cat][symbol];
-  else p[cat][symbol] = remaining;
+  if (remaining === 0) delete p.assets[symbol];
+  else p.assets[symbol] = remaining;
   return { ok: true, held: remaining };
 }

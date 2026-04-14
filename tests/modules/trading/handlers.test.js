@@ -10,7 +10,6 @@ import { savePortfolio } from "../../../src/modules/trading/portfolio.js";
 import { handleStats } from "../../../src/modules/trading/stats-handler.js";
 import { makeFakeKv } from "../../fakes/fake-kv-namespace.js";
 
-/** Build a fake grammY context with .match, .from, and .reply spy */
 function makeCtx(match = "", userId = 42) {
   const replies = [];
   return {
@@ -21,27 +20,13 @@ function makeCtx(match = "", userId = 42) {
   };
 }
 
-/** Stub global.fetch to return canned price data */
+/** Stub fetch — TCBS returns stock data, BIDV returns forex */
 function stubFetch() {
   global.fetch = vi.fn((url) => {
-    if (url.includes("coingecko")) {
-      return Promise.resolve({
-        ok: true,
-        json: () =>
-          Promise.resolve({
-            bitcoin: { vnd: 1500000000 },
-            ethereum: { vnd: 50000000 },
-            solana: { vnd: 3000000 },
-            "pax-gold": { vnd: 72000000 },
-          }),
-      });
-    }
     if (url.includes("tcbs")) {
-      const ticker = url.match(/ticker=(\w+)/)?.[1];
-      const prices = { TCB: 25, VPB: 18, FPT: 120, VNM: 70, HPG: 28 };
       return Promise.resolve({
         ok: true,
-        json: () => Promise.resolve({ data: [{ close: prices[ticker] || 25 }] }),
+        json: () => Promise.resolve({ data: [{ close: 25 }] }),
       });
     }
     if (url.includes("bidv")) {
@@ -49,10 +34,7 @@ function stubFetch() {
         ok: true,
         json: () =>
           Promise.resolve({
-            data: [
-              { currency: "USD", muaCk: "25,200", ban: "25,600" },
-              { currency: "EUR", muaCk: "28,000", ban: "28,500" },
-            ],
+            data: [{ currency: "USD", muaCk: "25,200", ban: "25,600" }],
           }),
       });
     }
@@ -103,30 +85,34 @@ describe("trading/handlers", () => {
   });
 
   describe("handleBuy", () => {
-    it("buys crypto with sufficient VND", async () => {
-      // seed VND balance
+    it("buys stock with sufficient VND", async () => {
       const { emptyPortfolio } = await import("../../../src/modules/trading/portfolio.js");
       const p = emptyPortfolio();
-      p.currency.VND = 20000000000;
-      p.totalvnd = 20000000000;
+      p.currency.VND = 5000000;
+      p.totalvnd = 5000000;
       await savePortfolio(db, 42, p);
 
-      const ctx = makeCtx("0.01 BTC");
+      const ctx = makeCtx("10 TCB");
       await handleBuy(ctx, db);
       expect(ctx.replies[0]).toContain("Bought");
-      expect(ctx.replies[0]).toContain("BTC");
+      expect(ctx.replies[0]).toContain("TCB");
     });
 
     it("rejects buy with insufficient VND", async () => {
-      const ctx = makeCtx("1 BTC");
+      const ctx = makeCtx("10 TCB");
       await handleBuy(ctx, db);
       expect(ctx.replies[0]).toContain("Insufficient VND");
     });
 
-    it("rejects unknown symbol", async () => {
-      const ctx = makeCtx("1 NOPE");
+    it("rejects unknown ticker", async () => {
+      // stub TCBS to return empty data for unknown ticker
+      global.fetch = vi.fn(() =>
+        Promise.resolve({ ok: true, json: () => Promise.resolve({ data: [] }) }),
+      );
+      const ctx = makeCtx("10 NOPE");
       await handleBuy(ctx, db);
-      expect(ctx.replies[0]).toContain("Unknown symbol");
+      expect(ctx.replies[0]).toContain("Unknown stock ticker");
+      expect(ctx.replies[0]).toContain("coming soon");
     });
 
     it("rejects fractional stock quantity", async () => {
@@ -143,70 +129,30 @@ describe("trading/handlers", () => {
   });
 
   describe("handleSell", () => {
-    it("sells crypto holding", async () => {
+    it("sells stock holding", async () => {
       const { emptyPortfolio } = await import("../../../src/modules/trading/portfolio.js");
       const p = emptyPortfolio();
-      p.crypto.BTC = 0.5;
+      p.assets.TCB = 50;
       await savePortfolio(db, 42, p);
 
-      const ctx = makeCtx("0.1 BTC");
+      const ctx = makeCtx("10 TCB");
       await handleSell(ctx, db);
       expect(ctx.replies[0]).toContain("Sold");
-      expect(ctx.replies[0]).toContain("BTC");
+      expect(ctx.replies[0]).toContain("TCB");
     });
 
     it("rejects sell with insufficient holdings", async () => {
-      const ctx = makeCtx("1 BTC");
+      const ctx = makeCtx("10 TCB");
       await handleSell(ctx, db);
-      expect(ctx.replies[0]).toContain("Insufficient BTC");
+      expect(ctx.replies[0]).toContain("Insufficient TCB");
     });
   });
 
   describe("handleConvert", () => {
-    it("converts USD to VND at buy rate (bank buys USD at lower price)", async () => {
-      const { emptyPortfolio, getPortfolio } = await import(
-        "../../../src/modules/trading/portfolio.js"
-      );
-      const p = emptyPortfolio();
-      p.currency.USD = 100;
-      await savePortfolio(db, 42, p);
-
-      const ctx = makeCtx("50 USD VND");
-      await handleConvert(ctx, db);
-      expect(ctx.replies[0]).toContain("Converted");
-      // buy rate = 25,200 → 50 * 25200 = 1,260,000 VND
-      const loaded = await getPortfolio(db, 42);
-      expect(loaded.currency.VND).toBe(50 * 25200);
-      expect(ctx.replies[0]).toContain("buy:");
-      expect(ctx.replies[0]).toContain("sell:");
-    });
-
-    it("converts VND to USD at sell rate (bank sells USD at higher price)", async () => {
-      const { emptyPortfolio, getPortfolio } = await import(
-        "../../../src/modules/trading/portfolio.js"
-      );
-      const p = emptyPortfolio();
-      p.currency.VND = 30000000;
-      await savePortfolio(db, 42, p);
-
-      const ctx = makeCtx("1000000 VND USD");
-      await handleConvert(ctx, db);
-      expect(ctx.replies[0]).toContain("Converted");
-      // sell rate = 25,600 → 1M / 25600 ≈ 39.0625 USD
-      const loaded = await getPortfolio(db, 42);
-      expect(loaded.currency.USD).toBeCloseTo(1000000 / 25600, 2);
-    });
-
-    it("rejects same currency conversion", async () => {
-      const ctx = makeCtx("100 VND VND");
-      await handleConvert(ctx, db);
-      expect(ctx.replies[0]).toContain("same currency");
-    });
-
-    it("rejects insufficient balance", async () => {
+    it("shows coming soon message", async () => {
       const ctx = makeCtx("100 USD VND");
-      await handleConvert(ctx, db);
-      expect(ctx.replies[0]).toContain("Insufficient USD");
+      await handleConvert(ctx);
+      expect(ctx.replies[0]).toContain("coming soon");
     });
   });
 
@@ -218,17 +164,17 @@ describe("trading/handlers", () => {
       expect(ctx.replies[0]).toContain("Total value:");
     });
 
-    it("shows portfolio with assets", async () => {
+    it("shows portfolio with stock assets", async () => {
       const { emptyPortfolio } = await import("../../../src/modules/trading/portfolio.js");
       const p = emptyPortfolio();
       p.currency.VND = 5000000;
-      p.crypto.BTC = 0.01;
-      p.totalvnd = 20000000;
+      p.assets.TCB = 10;
+      p.totalvnd = 10000000;
       await savePortfolio(db, 42, p);
 
       const ctx = makeCtx("");
       await handleStats(ctx, db);
-      expect(ctx.replies[0]).toContain("BTC");
+      expect(ctx.replies[0]).toContain("TCB");
       expect(ctx.replies[0]).toContain("P&L:");
     });
   });
