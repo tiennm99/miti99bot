@@ -29,7 +29,7 @@ src/
 │   ├── dispatcher.js        ── bot.command() for every visibility
 │   ├── validate-command.js  ── shared validators
 │   ├── util/                ── fully implemented: /info + /help
-│   ├── trading/             ── paper trading: crypto, VN stocks, forex, gold
+│   ├── trading/             ── paper trading: VN stocks (dynamic symbol resolution)
 │   ├── wordle/ loldle/      ── stub modules proving the plugin system
 │   └── misc/                ── stub that exercises the DB (ping/mstats)
 └── util/
@@ -278,7 +278,7 @@ A previous design sketched a `POST /admin/setup` route inside the Worker, gated 
 
 ## 12. Testing philosophy
 
-Pure-logic unit tests only. No `workerd` pool, no Telegram fixtures, no integration-level tooling. 110 tests run in ~500ms.
+Pure-logic unit tests only. No `workerd` pool, no Telegram fixtures, no integration-level tooling. 105 tests run in ~500ms.
 
 Test seams:
 

@@ -20,7 +20,7 @@ Telegram bot on Cloudflare Workers with a plug-n-play module system. grammY hand
 | Module | Status | Commands | Description |
 |--------|--------|----------|-------------|
 | `util` | Complete | `/info`, `/help` | Bot info and command help renderer |
-| `trading` | Complete | `/trade_topup`, `/trade_buy`, `/trade_sell`, `/trade_convert`, `/trade_stats` | Paper trading with crypto, VN stocks, forex, gold |
+| `trading` | Complete | `/trade_topup`, `/trade_buy`, `/trade_sell`, `/trade_convert`, `/trade_stats` | Paper trading — VN stocks with dynamic symbol resolution. Crypto/gold/forex coming soon. |
 | `misc` | Stub | `/ping`, `/mstats`, `/fortytwo` | Health check + DB demo |
 | `wordle` | Stub | `/wordle`, `/wstats`, `/konami` | Placeholder for word game |
 | `loldle` | Stub | `/loldle`, `/ggwp` | Placeholder for LoL game |
@@ -57,11 +57,11 @@ Each module maintains its own `README.md` with commands, data model, and impleme
 
 ## Test Coverage
 
-110 tests across 11 test files:
+105 tests across 11 test files:
 
 | Area | Tests | What's Covered |
 |------|-------|---------------|
 | DB layer | 19 | KV store, prefixing, JSON helpers, pagination |
 | Module framework | 33 | Registry, dispatcher, validators, help renderer |
 | Utilities | 4 | HTML escaping |
-| Trading module | 54 | Symbols, formatters, portfolio CRUD, all 5 command handlers |
+| Trading module | 49 | Dynamic symbol resolution, formatters, flat portfolio CRUD, command handlers |
