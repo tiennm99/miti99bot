@@ -18,7 +18,7 @@
 
 /** @returns {Portfolio} */
 export function emptyPortfolio() {
-  return { currency: { VND: 0 }, assets: {}, meta: { invested: 0 } };
+  return { currency: { VND: 0 }, assets: {}, meta: { invested: 0, createdAt: Date.now() } };
 }
 
 /**
@@ -40,11 +40,12 @@ export async function getPortfolio(db, userId) {
 
   // migrate: totalvnd → meta.invested
   const invested = raw.meta?.invested ?? raw.totalvnd ?? 0;
+  const createdAt = raw.meta?.createdAt ?? Date.now();
 
   return {
     currency: { VND: 0, ...raw.currency },
     assets,
-    meta: { invested },
+    meta: { invested, createdAt },
   };
 }
 
