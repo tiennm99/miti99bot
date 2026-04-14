@@ -33,7 +33,7 @@ Run `npm run format` before committing.
 - **Files:** lowercase, hyphens for multi-word (`stats-handler.js`, `fake-kv-namespace.js`)
 - **Directories:** lowercase, single word preferred (`trading/`, `util/`)
 - **Functions/variables:** camelCase
-- **Constants:** UPPER_SNAKE_CASE for frozen config objects (`SYMBOLS`, `CURRENCIES`)
+- **Constants:** UPPER_SNAKE_CASE for frozen config objects (e.g. `CURRENCIES`)
 - **Command names:** lowercase + digits + underscore, 1-32 chars, no leading slash
 
 ## Module Conventions
