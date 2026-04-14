@@ -6,7 +6,7 @@ Paper-trading system where each Telegram user manages a virtual portfolio. Curre
 
 | Command | Action |
 |---------|--------|
-| `/trade_topup <amount>` | Add VND to account. Tracks cumulative invested via `totalvnd`. |
+| `/trade_topup <amount>` | Add VND to account. Tracks cumulative invested in `meta.invested`. |
 | `/trade_buy <qty> <TICKER>` | Buy VN stock at market price, deducting VND. Integer quantities only. |
 | `/trade_sell <qty> <TICKER>` | Sell stock holdings back to VND at market price. |
 | `/trade_convert` | Currency exchange (coming soon). |
@@ -38,14 +38,14 @@ KV namespace prefix: `trading:`
 {
   "currency": { "VND": 5000000 },
   "assets": { "TCB": 10, "FPT": 5, "VNM": 100 },
-  "totalvnd": 10000000
+  "meta": { "invested": 10000000 }
 }
 ```
 
 - `currency` — fiat balances (VND only for now)
 - `assets` — flat map of stock quantities keyed by ticker
-- `totalvnd` — cumulative VND value of all top-ups (cost basis for P&L)
-- Migrates old 4-category format (`stock`/`crypto`/`others`) automatically on load
+- `meta.invested` — cumulative VND value of all top-ups (cost basis for P&L)
+- Migrates old formats automatically on load (`totalvnd` → `meta.invested`, `stock`/`crypto`/`others` → `assets`)
 
 ### Schema: `sym:<TICKER>`
 

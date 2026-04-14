@@ -39,7 +39,7 @@ export async function handleTopup(ctx, db) {
 
   const p = await getPortfolio(db, uid(ctx));
   addCurrency(p, "VND", amount);
-  p.totalvnd += amount;
+  p.meta.invested += amount;
   await savePortfolio(db, uid(ctx), p);
   await ctx.reply(`Topped up ${formatVND(amount)}.\nBalance: ${formatVND(p.currency.VND)}`);
 }

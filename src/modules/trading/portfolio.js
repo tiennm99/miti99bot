@@ -2,20 +2,23 @@
  * @file Portfolio CRUD — per-user KV read/write and balance operations.
  * All mutations are in-memory; caller must savePortfolio() to persist.
  *
- * Schema: { currency: { VND, USD }, assets: { SYMBOL: qty }, totalvnd }
+ * Schema: { currency: { VND }, assets: { SYMBOL: qty }, meta: { invested } }
  * Assets are stored in a flat map — category is derived from symbol resolution.
  */
 
 /**
+ * @typedef {Object} PortfolioMeta
+ * @property {number} invested — cumulative VND value of all top-ups (cost basis for P&L)
+ *
  * @typedef {Object} Portfolio
  * @property {{ [currency: string]: number }} currency
  * @property {{ [symbol: string]: number }} assets
- * @property {number} totalvnd
+ * @property {PortfolioMeta} meta
  */
 
 /** @returns {Portfolio} */
 export function emptyPortfolio() {
-  return { currency: { VND: 0 }, assets: {}, totalvnd: 0 };
+  return { currency: { VND: 0 }, assets: {}, meta: { invested: 0 } };
 }
 
 /**
@@ -29,20 +32,19 @@ export async function getPortfolio(db, userId) {
   const raw = await db.getJSON(`user:${userId}`);
   if (!raw) return emptyPortfolio();
 
-  // migrate old format: merge stock/crypto/others into flat assets
-  if (raw.stock || raw.crypto || raw.others) {
-    const assets = { ...raw.stock, ...raw.crypto, ...raw.others, ...raw.assets };
-    return {
-      currency: { VND: 0, ...raw.currency },
-      assets,
-      totalvnd: raw.totalvnd ?? 0,
-    };
-  }
+  // migrate: merge old stock/crypto/others into flat assets
+  const assets =
+    raw.stock || raw.crypto || raw.others
+      ? { ...raw.stock, ...raw.crypto, ...raw.others, ...raw.assets }
+      : (raw.assets ?? {});
+
+  // migrate: totalvnd → meta.invested
+  const invested = raw.meta?.invested ?? raw.totalvnd ?? 0;
 
   return {
     currency: { VND: 0, ...raw.currency },
-    assets: raw.assets ?? {},
-    totalvnd: raw.totalvnd ?? 0,
+    assets,
+    meta: { invested },
   };
 }
 

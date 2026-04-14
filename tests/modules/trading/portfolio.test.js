@@ -23,7 +23,7 @@ describe("trading/portfolio", () => {
       const p = emptyPortfolio();
       expect(p.currency).toEqual({ VND: 0 });
       expect(p.assets).toEqual({});
-      expect(p.totalvnd).toBe(0);
+      expect(p.meta.invested).toBe(0);
     });
   });
 
@@ -31,7 +31,7 @@ describe("trading/portfolio", () => {
     it("returns empty portfolio for new user", async () => {
       const p = await getPortfolio(db, 123);
       expect(p.currency.VND).toBe(0);
-      expect(p.totalvnd).toBe(0);
+      expect(p.meta.invested).toBe(0);
       expect(p.assets).toEqual({});
     });
 
@@ -39,12 +39,12 @@ describe("trading/portfolio", () => {
       const p = emptyPortfolio();
       p.currency.VND = 5000000;
       p.assets.TCB = 10;
-      p.totalvnd = 5000000;
+      p.meta.invested = 5000000;
       await savePortfolio(db, 123, p);
       const loaded = await getPortfolio(db, 123);
       expect(loaded.currency.VND).toBe(5000000);
       expect(loaded.assets.TCB).toBe(10);
-      expect(loaded.totalvnd).toBe(5000000);
+      expect(loaded.meta.invested).toBe(5000000);
     });
 
     it("migrates old 4-category format to flat assets", async () => {
@@ -54,7 +54,7 @@ describe("trading/portfolio", () => {
         stock: { TCB: 10 },
         crypto: { BTC: 0.5 },
         others: { GOLD: 1 },
-        totalvnd: 100,
+        totalvnd: 100, // old format — should be migrated to meta.invested
       });
       const p = await getPortfolio(db, 123);
       expect(p.assets.TCB).toBe(10);
