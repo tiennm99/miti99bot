@@ -13,4 +13,5 @@ export const moduleRegistry = {
   wordle: () => import("./wordle/index.js"),
   loldle: () => import("./loldle/index.js"),
   misc: () => import("./misc/index.js"),
+  trading: () => import("./trading/index.js"),
 };
