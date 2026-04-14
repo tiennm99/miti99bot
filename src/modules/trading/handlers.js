@@ -15,6 +15,9 @@ import {
 import { getForexRate, getPrice } from "./prices.js";
 import { CURRENCIES, getSymbol, listSymbols } from "./symbols.js";
 
+/** Bid/ask spread for forex conversion (0.5% each side of mid rate) */
+const FOREX_SPREAD = 0.005;
+
 function uid(ctx) {
   return ctx.from?.id;
 }
@@ -27,31 +30,20 @@ function usageReply(ctx, usage) {
   return ctx.reply(`Usage: ${usage}`);
 }
 
-/** /trade_topup <amount> [currency=VND] */
+/** /trade_topup <amount> — add VND to account */
 export async function handleTopup(ctx, db) {
   const args = parseArgs(ctx);
-  if (args.length < 1) return usageReply(ctx, "/trade_topup <amount> [VND|USD]");
+  if (args.length < 1)
+    return usageReply(ctx, "/trade_topup <amount>\nExample: /trade_topup 5000000");
   const amount = Number(args[0]);
   if (!Number.isFinite(amount) || amount <= 0)
     return ctx.reply("Amount must be a positive number.");
-  const currency = (args[1] || "VND").toUpperCase();
-  if (!CURRENCIES.has(currency))
-    return ctx.reply(`Unsupported currency. Use: ${[...CURRENCIES].join(", ")}`);
 
   const p = await getPortfolio(db, uid(ctx));
-  addCurrency(p, currency, amount);
-  if (currency === "VND") {
-    p.totalvnd += amount;
-  } else {
-    const rate = await getForexRate(db, currency);
-    if (rate == null) return ctx.reply("Could not fetch forex rate. Try again later.");
-    p.totalvnd += amount * rate;
-  }
+  addCurrency(p, "VND", amount);
+  p.totalvnd += amount;
   await savePortfolio(db, uid(ctx), p);
-  const bal = p.currency[currency];
-  await ctx.reply(
-    `Topped up ${formatCurrency(amount, currency)}.\nBalance: ${formatCurrency(bal, currency)}`,
-  );
+  await ctx.reply(`Topped up ${formatVND(amount)}.\nBalance: ${formatVND(p.currency.VND)}`);
 }
 
 /** /trade_buy <amount> <symbol> */
@@ -126,7 +118,7 @@ export async function handleSell(ctx, db) {
   );
 }
 
-/** /trade_convert <amount> <from> <to> */
+/** /trade_convert <amount> <from> <to> — with bid/ask spread */
 export async function handleConvert(ctx, db) {
   const args = parseArgs(ctx);
   if (args.length < 3)
@@ -143,22 +135,38 @@ export async function handleConvert(ctx, db) {
     return ctx.reply(`Supported currencies: ${[...CURRENCIES].join(", ")}`);
   if (from === to) return ctx.reply("Cannot convert to the same currency.");
 
-  let fromRate;
-  let toRate;
+  let midRate;
   try {
-    [fromRate, toRate] = await Promise.all([getForexRate(db, from), getForexRate(db, to)]);
+    midRate = await getForexRate(db, "USD");
   } catch {
     return ctx.reply("Could not fetch forex rate. Try again later.");
   }
-  if (fromRate == null || toRate == null)
-    return ctx.reply("Forex rate unavailable. Try again later.");
+  if (midRate == null) return ctx.reply("Forex rate unavailable. Try again later.");
+
+  // Buying foreign currency costs more (ask), selling it back gives less (bid)
+  const buyRate = midRate * (1 + FOREX_SPREAD); // VND per USD when buying USD
+  const sellRate = midRate * (1 - FOREX_SPREAD); // VND per USD when selling USD
 
   const p = await getPortfolio(db, uid(ctx));
   const result = deductCurrency(p, from, amount);
   if (!result.ok)
     return ctx.reply(`Insufficient ${from}. Balance: ${formatCurrency(result.balance, from)}`);
-  const converted = (amount * fromRate) / toRate;
+
+  let converted;
+  let rateUsed;
+  if (from === "VND" && to === "USD") {
+    // buying USD with VND — pay ask price
+    converted = amount / buyRate;
+    rateUsed = buyRate;
+  } else {
+    // selling USD for VND — receive bid price
+    converted = amount * sellRate;
+    rateUsed = sellRate;
+  }
+
   addCurrency(p, to, converted);
   await savePortfolio(db, uid(ctx), p);
-  await ctx.reply(`Converted ${formatCurrency(amount, from)} → ${formatCurrency(converted, to)}`);
+  await ctx.reply(
+    `Converted ${formatCurrency(amount, from)} → ${formatCurrency(converted, to)}\nRate: ${formatVND(rateUsed)}/USD (spread: ${(FOREX_SPREAD * 100).toFixed(1)}%)`,
+  );
 }
