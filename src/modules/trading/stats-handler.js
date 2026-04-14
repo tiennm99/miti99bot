@@ -23,7 +23,7 @@ export async function handleStats(ctx, db) {
   const currLines = [];
   for (const [cur, bal] of Object.entries(p.currency)) {
     if (bal === 0) continue;
-    const rate = cur === "VND" ? 1 : (prices.forex?.[cur] ?? 0);
+    const rate = cur === "VND" ? 1 : (prices.forex?.[cur]?.mid ?? 0);
     const vndVal = bal * rate;
     totalValue += vndVal;
     currLines.push(

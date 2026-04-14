@@ -54,14 +54,21 @@ async function fetchStocks() {
   return stock;
 }
 
-/** Forex rates via open.er-api.com — VND per 1 USD */
+/** Forex rates via BIDV public API — returns real buy/sell rates */
 async function fetchForex() {
-  const res = await fetch("https://open.er-api.com/v6/latest/USD");
-  if (!res.ok) throw new Error(`Forex API ${res.status}`);
-  const data = await res.json();
-  const vndRate = data?.rates?.VND;
-  if (vndRate == null) throw new Error("Forex missing VND rate");
-  return { USD: vndRate };
+  const res = await fetch("https://www.bidv.com.vn/ServicesBIDV/ExchangeDetailServlet");
+  if (!res.ok) throw new Error(`BIDV API ${res.status}`);
+  const json = await res.json();
+  const usd = json?.data?.find((r) => r.currency === "USD");
+  if (!usd) throw new Error("BIDV missing USD rate");
+  // muaCk = bank buy (transfer), ban = bank sell — parse "26,141" → 26141
+  const parse = (s) => Number.parseFloat(String(s).replace(/,/g, ""));
+  const buy = parse(usd.muaCk);
+  const sell = parse(usd.ban);
+  if (!Number.isFinite(buy) || !Number.isFinite(sell)) {
+    throw new Error("BIDV invalid USD rate");
+  }
+  return { USD: { mid: (buy + sell) / 2, buy, sell } };
 }
 
 /**
@@ -119,13 +126,28 @@ export async function getPrice(db, symbol) {
 }
 
 /**
- * VND equivalent of 1 unit of currency.
+ * Mid-rate VND equivalent of 1 unit of currency (for stats display).
  * @param {import("../../db/kv-store-interface.js").KVStore} db
  * @param {string} currency — "VND" or "USD"
- * @returns {Promise<number>}
+ * @returns {Promise<number|null>}
  */
 export async function getForexRate(db, currency) {
   if (currency === "VND") return 1;
   const prices = await getPrices(db);
-  return prices.forex?.[currency] ?? null;
+  return prices.forex?.[currency]?.mid ?? null;
+}
+
+/**
+ * Buy/sell forex rates for a currency.
+ * buy = bank buys USD from you (you sell USD → get VND), sell = bank sells USD to you (you buy USD → pay VND).
+ * @param {import("../../db/kv-store-interface.js").KVStore} db
+ * @param {string} currency
+ * @returns {Promise<{ buy: number, sell: number }|null>}
+ */
+export async function getForexBidAsk(db, currency) {
+  if (currency === "VND") return null;
+  const prices = await getPrices(db);
+  const rate = prices.forex?.[currency];
+  if (!rate?.buy || !rate?.sell) return null;
+  return { buy: rate.buy, sell: rate.sell };
 }

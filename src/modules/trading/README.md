@@ -9,7 +9,7 @@ Paper-trading system where each Telegram user manages a virtual portfolio.
 | `/trade_topup <amount>` | Add VND to account. Tracks cumulative invested via `totalvnd`. |
 | `/trade_buy <amount> <symbol>` | Buy at market price, deducting VND. Stocks must be integer quantities. |
 | `/trade_sell <amount> <symbol>` | Sell holdings back to VND at market price. |
-| `/trade_convert <amount> <from> <to>` | Convert between currencies with bid/ask spread (0.5%). |
+| `/trade_convert <amount> <from> <to>` | Convert between currencies at real BIDV bid/ask rates. |
 | `/trade_stats` | Portfolio breakdown with all assets valued in VND, plus P&L vs invested. |
 
 ## Supported Symbols
@@ -62,7 +62,7 @@ KV namespace prefix: `trading:`
   "ts": 1713100000000,
   "crypto": { "BTC": 1500000000, "ETH": 50000000, "SOL": 3000000 },
   "stock": { "TCB": 25000, "VPB": 18000, "FPT": 120000, "VNM": 70000, "HPG": 28000 },
-  "forex": { "USD": 25400 },
+  "forex": { "USD": { "mid": 25400, "buy": 25200, "sell": 25600 } },
   "others": { "GOLD": 72000000 }
 }
 ```
@@ -79,7 +79,7 @@ Three free APIs fetched in parallel, cached in KV for 60 seconds:
 |-----|---------|------|-----------|
 | CoinGecko `/api/v3/simple/price` | Crypto + gold prices in VND | None | 30 calls/min (free) |
 | TCBS `/stock-insight/v1/stock/bars-long-term` | Vietnam stock close prices (× 1000) | None | Unofficial |
-| open.er-api.com `/v6/latest/USD` | USD/VND forex rate | None | 1,500/month (free) |
+| BIDV `/ServicesBIDV/ExchangeDetailServlet` | USD/VND buy/sell rates | None | Unofficial |
 
 On partial API failure, available data is returned. On total failure, stale cache up to 5 minutes old is used before surfacing an error.
 

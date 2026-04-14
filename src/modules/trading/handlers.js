@@ -12,11 +12,8 @@ import {
   getPortfolio,
   savePortfolio,
 } from "./portfolio.js";
-import { getForexRate, getPrice } from "./prices.js";
+import { getForexBidAsk, getPrice } from "./prices.js";
 import { CURRENCIES, getSymbol, listSymbols } from "./symbols.js";
-
-/** Bid/ask spread for forex conversion (0.5% each side of mid rate) */
-const FOREX_SPREAD = 0.005;
 
 function uid(ctx) {
   return ctx.from?.id;
@@ -135,38 +132,36 @@ export async function handleConvert(ctx, db) {
     return ctx.reply(`Supported currencies: ${[...CURRENCIES].join(", ")}`);
   if (from === to) return ctx.reply("Cannot convert to the same currency.");
 
-  let midRate;
+  let rates;
   try {
-    midRate = await getForexRate(db, "USD");
+    rates = await getForexBidAsk(db, "USD");
   } catch {
     return ctx.reply("Could not fetch forex rate. Try again later.");
   }
-  if (midRate == null) return ctx.reply("Forex rate unavailable. Try again later.");
-
-  // Buying foreign currency costs more (ask), selling it back gives less (bid)
-  const buyRate = midRate * (1 + FOREX_SPREAD); // VND per USD when buying USD
-  const sellRate = midRate * (1 - FOREX_SPREAD); // VND per USD when selling USD
+  if (!rates) return ctx.reply("Forex rate unavailable. Try again later.");
 
   const p = await getPortfolio(db, uid(ctx));
   const result = deductCurrency(p, from, amount);
   if (!result.ok)
     return ctx.reply(`Insufficient ${from}. Balance: ${formatCurrency(result.balance, from)}`);
 
+  // buy = bank buys USD (you sell USD → VND), sell = bank sells USD (you buy USD → pay VND)
   let converted;
   let rateUsed;
   if (from === "VND" && to === "USD") {
-    // buying USD with VND — pay ask price
-    converted = amount / buyRate;
-    rateUsed = buyRate;
+    // you're buying USD from bank → bank sells at higher price
+    converted = amount / rates.sell;
+    rateUsed = rates.sell;
   } else {
-    // selling USD for VND — receive bid price
-    converted = amount * sellRate;
-    rateUsed = sellRate;
+    // you're selling USD to bank → bank buys at lower price
+    converted = amount * rates.buy;
+    rateUsed = rates.buy;
   }
 
   addCurrency(p, to, converted);
   await savePortfolio(db, uid(ctx), p);
+  const spread = (((rates.sell - rates.buy) / rates.buy) * 100).toFixed(2);
   await ctx.reply(
-    `Converted ${formatCurrency(amount, from)} → ${formatCurrency(converted, to)}\nRate: ${formatVND(rateUsed)}/USD (spread: ${(FOREX_SPREAD * 100).toFixed(1)}%)`,
+    `Converted ${formatCurrency(amount, from)} → ${formatCurrency(converted, to)}\nRate: ${formatVND(rateUsed)}/USD (buy: ${formatVND(rates.buy)}, sell: ${formatVND(rates.sell)}, spread: ${spread}%)`,
   );
 }

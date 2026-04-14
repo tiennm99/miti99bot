@@ -44,10 +44,16 @@ function stubFetch() {
         json: () => Promise.resolve({ data: [{ close: prices[ticker] || 25 }] }),
       });
     }
-    if (url.includes("er-api")) {
+    if (url.includes("bidv")) {
       return Promise.resolve({
         ok: true,
-        json: () => Promise.resolve({ rates: { VND: 25400 } }),
+        json: () =>
+          Promise.resolve({
+            data: [
+              { currency: "USD", muaCk: "25,200", ban: "25,600" },
+              { currency: "EUR", muaCk: "28,000", ban: "28,500" },
+            ],
+          }),
       });
     }
     return Promise.reject(new Error(`unexpected fetch: ${url}`));
@@ -157,7 +163,7 @@ describe("trading/handlers", () => {
   });
 
   describe("handleConvert", () => {
-    it("converts USD to VND at bid rate (less than mid)", async () => {
+    it("converts USD to VND at buy rate (bank buys USD at lower price)", async () => {
       const { emptyPortfolio, getPortfolio } = await import(
         "../../../src/modules/trading/portfolio.js"
       );
@@ -168,14 +174,14 @@ describe("trading/handlers", () => {
       const ctx = makeCtx("50 USD VND");
       await handleConvert(ctx, db);
       expect(ctx.replies[0]).toContain("Converted");
-      // bid rate = 25400 * 0.995 = 25273 VND/USD → 50 * 25273 = 1,263,650
+      // buy rate = 25,200 → 50 * 25200 = 1,260,000 VND
       const loaded = await getPortfolio(db, 42);
-      expect(loaded.currency.VND).toBeLessThan(50 * 25400); // less than mid rate
-      expect(loaded.currency.VND).toBeGreaterThan(0);
-      expect(ctx.replies[0]).toContain("spread");
+      expect(loaded.currency.VND).toBe(50 * 25200);
+      expect(ctx.replies[0]).toContain("buy:");
+      expect(ctx.replies[0]).toContain("sell:");
     });
 
-    it("converts VND to USD at ask rate (costs more VND)", async () => {
+    it("converts VND to USD at sell rate (bank sells USD at higher price)", async () => {
       const { emptyPortfolio, getPortfolio } = await import(
         "../../../src/modules/trading/portfolio.js"
       );
@@ -186,10 +192,9 @@ describe("trading/handlers", () => {
       const ctx = makeCtx("1000000 VND USD");
       await handleConvert(ctx, db);
       expect(ctx.replies[0]).toContain("Converted");
-      // ask rate = 25400 * 1.005 = 25527 VND/USD → 1M / 25527 ≈ 39.17 USD
+      // sell rate = 25,600 → 1M / 25600 ≈ 39.0625 USD
       const loaded = await getPortfolio(db, 42);
-      expect(loaded.currency.USD).toBeLessThan(1000000 / 25400); // less USD than mid
-      expect(loaded.currency.USD).toBeGreaterThan(0);
+      expect(loaded.currency.USD).toBeCloseTo(1000000 / 25600, 2);
     });
 
     it("rejects same currency conversion", async () => {
