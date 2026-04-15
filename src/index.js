@@ -13,7 +13,8 @@
  */
 
 import { webhookCallback } from "grammy";
-import { getBot } from "./bot.js";
+import { getBot, getRegistry } from "./bot.js";
+import { dispatchScheduled } from "./modules/cron-dispatcher.js";
 
 /** @type {ReturnType<typeof webhookCallback> | null} */
 let cachedWebhookHandler = null;
@@ -31,6 +32,24 @@ async function getWebhookHandler(env) {
 }
 
 export default {
+  /**
+   * Cloudflare Cron Trigger handler.
+   * Dispatches the scheduled event to all module cron handlers whose
+   * schedule matches event.cron.
+   *
+   * @param {any} event — ScheduledEvent ({ cron: string, scheduledTime: number })
+   * @param {any} env
+   * @param {{ waitUntil: (p: Promise<any>) => void }} ctx
+   */
+  async scheduled(event, env, ctx) {
+    try {
+      const registry = await getRegistry(env);
+      dispatchScheduled(event, env, ctx, registry);
+    } catch (err) {
+      console.error("scheduled handler failed", err);
+    }
+  },
+
   /**
    * @param {Request} request
    * @param {any} env
