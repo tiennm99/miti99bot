@@ -17,13 +17,13 @@ Telegram bot on Cloudflare Workers with a plug-n-play module system. grammY hand
 
 ## Active Modules
 
-| Module | Status | Commands | Description |
-|--------|--------|----------|-------------|
-| `util` | Complete | `/info`, `/help` | Bot info and command help renderer |
-| `trading` | Complete | `/trade_topup`, `/trade_buy`, `/trade_sell`, `/trade_convert`, `/trade_stats` | Paper trading — VN stocks with dynamic symbol resolution. Crypto/gold/forex coming soon. |
-| `misc` | Stub | `/ping`, `/mstats`, `/fortytwo` | Health check + DB demo |
-| `wordle` | Stub | `/wordle`, `/wstats`, `/konami` | Placeholder for word game |
-| `loldle` | Stub | `/loldle`, `/ggwp` | Placeholder for LoL game |
+| Module | Status | Commands | Storage | Crons | Description |
+|--------|--------|----------|---------|-------|-------------|
+| `util` | Complete | `/info`, `/help` | — | — | Bot info and command help renderer |
+| `trading` | Complete | `/trade_topup`, `/trade_buy`, `/trade_sell`, `/trade_convert`, `/trade_stats`, `/history` | D1 (trades) | Daily 5PM trim | Paper trading — VN stocks with dynamic symbol resolution. Crypto/gold/forex coming soon. |
+| `misc` | Stub | `/ping`, `/mstats`, `/fortytwo` | KV | — | Health check + DB demo |
+| `wordle` | Stub | `/wordle`, `/wstats`, `/konami` | — | — | Placeholder for word game |
+| `loldle` | Stub | `/loldle`, `/ggwp` | — | — | Placeholder for LoL game |
 
 ## Key Data Flows
 
@@ -31,13 +31,26 @@ Telegram bot on Cloudflare Workers with a plug-n-play module system. grammY hand
 ```
 Telegram update → POST /webhook → grammY secret validation
 → getBot(env) → dispatcher routes /cmd → module handler
-→ handler reads/writes KV via db.getJSON/putJSON
+→ handler reads/writes KV via db.getJSON/putJSON (or D1 via sql.all/run)
 → ctx.reply() → response to Telegram
+```
+
+### Scheduled Job (Cron)
+```
+Cloudflare timer fires (e.g., "0 17 * * *")
+→ scheduled(event, env, ctx) handler
+→ getRegistry(env) → load + init modules
+→ dispatchScheduled(event, env, ctx, registry)
+→ filter matching crons by event.cron
+→ for each: handler reads/writes D1 via sql.all/run (or KV via db)
+→ ctx.waitUntil(promise) keeps handler alive
 ```
 
 ### Deploy Pipeline
 ```
-npm run deploy → wrangler deploy (upload to CF)
+npm run deploy
+→ wrangler deploy (upload to CF, set env vars and bindings)
+→ npm run db:migrate (apply any new migrations to D1)
 → scripts/register.js → buildRegistry with stub KV
 → POST setWebhook + POST setMyCommands to Telegram API
 ```
@@ -57,11 +70,12 @@ Each module maintains its own `README.md` with commands, data model, and impleme
 
 ## Test Coverage
 
-105 tests across 11 test files:
+105+ tests across 11+ test files:
 
 | Area | Tests | What's Covered |
 |------|-------|---------------|
-| DB layer | 19 | KV store, prefixing, JSON helpers, pagination |
-| Module framework | 33 | Registry, dispatcher, validators, help renderer |
+| DB layer (KV) | 19 | KV store, prefixing, JSON helpers, pagination |
+| DB layer (D1) | — | Fake D1 in-memory implementation (fake-d1.js) |
+| Module framework | 33 | Registry, dispatcher, validators, help renderer, cron validation |
 | Utilities | 4 | HTML escaping |
-| Trading module | 49 | Dynamic symbol resolution, formatters, flat portfolio CRUD, command handlers |
+| Trading module | 49 | Dynamic symbol resolution, formatters, flat portfolio CRUD, command handlers, history/retention |

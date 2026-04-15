@@ -8,9 +8,10 @@ Modules are added or removed via a single `MODULES` env var. Each module registe
 
 - **Drop-in modules.** Write a single file, list the folder name in `MODULES`, redeploy. No registration boilerplate, no manual command wiring.
 - **Three visibility levels out of the box.** Public commands show in Telegram's `/` menu and `/help`; protected show only in `/help`; private are hidden slash-command easter eggs. One namespace, loud conflict detection.
-- **Storage is swappable.** Modules talk to a small `KVStore` interface — Cloudflare KV today, a different backend tomorrow, with a one-file change.
+- **Dual storage backends.** Modules talk to a small `KVStore` interface (Cloudflare KV for simple state) or `SqlStore` interface (D1 for relational data, scans, leaderboards). Swappable with one-file changes.
+- **Scheduled jobs.** Modules declare cron-based cleanup, stats refresh, or maintenance tasks — registered via `wrangler.toml` and dispatched automatically.
 - **Zero admin surface.** No in-Worker `/admin/*` routes, no admin secret. `setWebhook` + `setMyCommands` run at deploy time from a local node script.
-- **Tested.** 105 vitest unit tests cover registry, storage, dispatcher, help renderer, validators, HTML escaping, and the trading module.
+- **Tested.** 105+ vitest unit tests cover registry, storage, dispatcher, cron validation, help renderer, validators, HTML escaping, and the trading module.
 
 ## How a request flows
 
@@ -42,27 +43,44 @@ ctx.reply(...) → response back to Telegram
 
 ```
 src/
-├── index.js             # fetch handler: POST /webhook + GET / health
-├── bot.js               # memoized grammY Bot, lazy dispatcher install
+├── index.js             # fetch + scheduled handlers: POST /webhook + cron triggers
+├── bot.js               # memoized grammY Bot, lazy dispatcher + registry install
+├── types.js             # JSDoc typedefs (central: Env, Module, Command, Cron, etc.)
 ├── db/
-│   ├── kv-store-interface.js   # JSDoc typedefs (the contract)
-│   ├── cf-kv-store.js          # Cloudflare KV implementation
-│   └── create-store.js         # per-module prefixing factory
+│   ├── kv-store-interface.js    # KVStore contract (JSDoc)
+│   ├── cf-kv-store.js           # Cloudflare KV implementation
+│   ├── create-store.js          # KV per-module prefixing factory
+│   ├── sql-store-interface.js   # SqlStore contract (JSDoc)
+│   ├── cf-sql-store.js          # Cloudflare D1 implementation
+│   └── create-sql-store.js      # D1 per-module prefixing factory
 ├── modules/
-│   ├── index.js         # static import map — register new modules here
-│   ├── registry.js      # load, validate, build command tables
-│   ├── dispatcher.js    # wires every command via bot.command()
-│   ├── validate-command.js
-│   ├── util/            # /info, /help (fully implemented)
-│   ├── trading/         # paper trading — VN stocks (dynamic symbol resolution)
-│   ├── wordle/          # stub — proves plugin system
-│   ├── loldle/          # stub
-│   └── misc/            # stub
+│   ├── index.js             # static import map — register new modules here
+│   ├── registry.js          # load, validate, build command + cron tables
+│   ├── dispatcher.js        # wires every command via bot.command()
+│   ├── cron-dispatcher.js   # dispatches cron handlers by schedule match
+│   ├── validate-command.js  # command contract validator
+│   ├── validate-cron.js     # cron contract validator
+│   ├── util/                # /info, /help (fully implemented)
+│   ├── trading/             # paper trading — VN stocks (D1 storage, daily cron)
+│   │   └── migrations/
+│   │       └── 0001_trades.sql
+│   ├── wordle/              # stub — proves plugin system
+│   ├── loldle/              # stub
+│   └── misc/                # stub (KV storage)
 └── util/
     └── escape-html.js
+
 scripts/
-├── register.js          # post-deploy: setWebhook + setMyCommands
-└── stub-kv.js
+├── register.js              # post-deploy: setWebhook + setMyCommands
+├── migrate.js               # discover + apply D1 migrations
+└── stub-kv.js               # no-op KV binding for deploy-time registry build
+
+tests/
+└── fakes/
+    ├── fake-kv-namespace.js
+    ├── fake-d1.js           # in-memory SQL for testing
+    ├── fake-bot.js
+    └── fake-modules.js
 ```
 
 ## Command visibility
@@ -121,12 +139,13 @@ Command names must match `^[a-z0-9_]{1,32}$` (Telegram's slash-command limit). C
 ## Local dev
 
 ```bash
-npm run dev      # wrangler dev — runs the Worker at http://localhost:8787
-npm run lint     # biome check
-npm test         # vitest
+npm run dev         # wrangler dev — runs the Worker at http://localhost:8787
+npm run lint        # biome check + eslint
+npm test            # vitest
+npm run db:migrate  # apply D1 migrations (--local for local dev, --dry-run to preview)
 ```
 
-The local `wrangler dev` server exposes `GET /` (health) and `POST /webhook`. For end-to-end testing you'd ngrok/cloudflared the local port and point a test bot's `setWebhook` at it — but pure unit tests (`npm test`) cover the logic seams without Telegram.
+The local `wrangler dev` server exposes `GET /` (health), `POST /webhook` (Telegram), and `/__scheduled?cron=...` (cron simulation). For end-to-end testing you'd ngrok/cloudflared the local port and point a test bot's `setWebhook` at it — but pure unit tests (`npm test`) cover the logic seams without Telegram.
 
 ## Deploy
 
@@ -136,17 +155,19 @@ Single command, idempotent:
 npm run deploy
 ```
 
-That runs `wrangler deploy` followed by `scripts/register.js`, which calls Telegram's `setWebhook` + `setMyCommands` using values from `.env.deploy`.
+That runs `wrangler deploy`, applies D1 migrations, then `scripts/register.js`, which calls Telegram's `setWebhook` + `setMyCommands` using values from `.env.deploy`.
 
 First-time deploy flow:
 
-1. Run `wrangler deploy` once to learn the `*.workers.dev` URL printed at the end.
-2. Paste it into `.env.deploy` as `WORKER_URL`.
-3. Preview the register payloads without calling Telegram:
+1. Create D1 database: `npx wrangler d1 create miti99bot-db` and paste ID into `wrangler.toml`.
+2. Run `wrangler deploy` once to learn the `*.workers.dev` URL printed at the end.
+3. Paste it into `.env.deploy` as `WORKER_URL`.
+4. Apply migrations: `npm run db:migrate`.
+5. Preview the register payloads without calling Telegram:
    ```bash
    npm run register:dry
    ```
-4. Run the real thing:
+6. Run the real deploy:
    ```bash
    npm run deploy
    ```
@@ -177,6 +198,10 @@ TL;DR:
 
 ## Further reading
 
-- [`docs/architecture.md`](docs/architecture.md) — deeper dive: cold-start, module lifecycle, DB namespacing, deploy flow, design tradeoffs.
-- [`docs/adding-a-module.md`](docs/adding-a-module.md) — step-by-step guide to authoring a new module.
-- `plans/260411-0853-telegram-bot-plugin-framework/` — full phased implementation plan (9 phase files + researcher reports).
+- [`docs/architecture.md`](docs/architecture.md) — deeper dive: cold-start, module lifecycle, KV + D1 storage, cron dispatch, deploy flow, design tradeoffs.
+- [`docs/adding-a-module.md`](docs/adding-a-module.md) — step-by-step guide to authoring a new module (commands, KV storage, D1 + migrations, crons).
+- [`docs/using-d1.md`](docs/using-d1.md) — when to use D1, writing migrations, SQL API reference, worked examples.
+- [`docs/using-cron.md`](docs/using-cron.md) — scheduling syntax, handler signature, wrangler.toml registration, local testing, worked examples.
+- [`docs/deployment-guide.md`](docs/deployment-guide.md) — D1 + KV setup, migration, secret rotation, rollback.
+- `plans/260415-1010-d1-cron-infra/` — phased implementation plan for D1 + cron support (6 phases + reports).
+- `plans/260411-0853-telegram-bot-plugin-framework/` — original plugin framework implementation plan (9 phases + reports).

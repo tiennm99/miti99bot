@@ -20,6 +20,25 @@ Enforced by `npm run lint` / `npm run format`:
 
 Run `npm run format` before committing.
 
+## JSDoc & Type Definitions
+
+- **Central typedefs location:** `src/types.js` — all module-level typedefs live here (Env, Module, Command, Cron, ModuleContext, SqlStore, KVStore, Trade, Portfolio, etc.).
+- **When to add JSDoc:** Required on exported functions, types, and public module interfaces. Optional on internal helpers (< 5 lines, obviously self-documenting).
+- **Validation:** ESLint (`eslint src`) enforces valid JSDoc syntax. Run `npm run lint` to check.
+- **No TypeScript:** JSDoc + `.js` files only. Full type info available to editor tooling without a build step.
+- **Example:**
+  ```js
+  /**
+   * Validate a trade before insertion.
+   *
+   * @param {Trade} trade
+   * @returns {boolean}
+   */
+  function isValidTrade(trade) {
+    return trade.qty > 0 && trade.priceVnd > 0;
+  }
+  ```
+
 ## File Organization
 
 - **Max 200 lines per code file.** Split into focused submodules when approaching the limit.
@@ -44,14 +63,17 @@ Every module default export must have:
 export default {
   name: "modname",     // === folder name === import map key
   commands: [...],     // validated at load time
-  init: async ({ db, env }) => { ... },  // optional
+  init: async ({ db, sql, env }) => { ... },  // optional
+  crons: [...],        // optional scheduled jobs
 };
 ```
 
-- Store module-level `db` reference in a closure variable, set during `init`
-- Never access `env.KV` directly — always use the prefixed `db` from `init`
-- Handlers receive grammY `ctx` — use `ctx.match` for command arguments, `ctx.from.id` for user identity
+- Store module-level `db` and `sql` references in closure variables, set during `init`
+- Never access `env.KV` or `env.DB` directly — always use the prefixed `db` (KV) or `sql` (D1) from `init`
+- `sql` is `null` when `env.DB` is not bound — always guard with `if (!sql) return`
+- Command handlers receive grammY `ctx` — use `ctx.match` for command arguments, `ctx.from.id` for user identity
 - Reply with `ctx.reply(text)` — plain text or Telegram HTML
+- Cron handlers receive `(event, { db, sql, env })` — same context as `init`
 
 ## Error Handling
 
