@@ -12,28 +12,40 @@
  *  - `resetRegistry()` exists for tests.
  */
 
+import { createSqlStore } from "../db/create-sql-store.js";
 import { createStore } from "../db/create-store.js";
 import { moduleRegistry as defaultModuleRegistry } from "./index.js";
 import { validateCommand } from "./validate-command.js";
+import { validateCron } from "./validate-cron.js";
 
 /**
  * @typedef {import("./validate-command.js").ModuleCommand} ModuleCommand
  *
- * @typedef {Object} BotModule
+ * @typedef {import("./validate-cron.js").ModuleCron} ModuleCron
+ *
+ * @typedef {object} BotModule
  * @property {string} name
  * @property {ModuleCommand[]} commands
- * @property {({ db, env }: { db: any, env: any }) => Promise<void>|void} [init]
+ * @property {ModuleCron[]} [crons]
+ * @property {(ctx: { db: any, sql: any, env: any }) => Promise<void>} [init]
  *
- * @typedef {Object} RegistryEntry
+ * @typedef {object} RegistryEntry
  * @property {BotModule} module
  * @property {ModuleCommand} cmd
  * @property {"public"|"protected"|"private"} [visibility]
  *
- * @typedef {Object} Registry
+ * @typedef {object} CronEntry
+ * @property {BotModule} module
+ * @property {string} schedule
+ * @property {string} name
+ * @property {ModuleCron["handler"]} handler
+ *
+ * @typedef {object} Registry
  * @property {Map<string, RegistryEntry>} publicCommands
  * @property {Map<string, RegistryEntry>} protectedCommands
  * @property {Map<string, RegistryEntry>} privateCommands
  * @property {Map<string, RegistryEntry>} allCommands
+ * @property {CronEntry[]} crons — flat list of all validated cron entries across modules.
  * @property {BotModule[]} modules — ordered per env.MODULES for /help rendering.
  */
 
@@ -97,6 +109,21 @@ export async function loadModules(env, importMap = defaultModuleRegistry) {
     }
     for (const cmd of mod.commands) validateCommand(cmd, name);
 
+    // Validate crons if present (optional field).
+    if (mod.crons !== undefined) {
+      if (!Array.isArray(mod.crons)) {
+        throw new Error(`module "${name}" crons must be an array`);
+      }
+      const cronNames = new Set();
+      for (const cron of mod.crons) {
+        validateCron(cron, name);
+        if (cronNames.has(cron.name)) {
+          throw new Error(`module "${name}" has duplicate cron name "${cron.name}"`);
+        }
+        cronNames.add(cron.name);
+      }
+    }
+
     modules.push(mod);
   }
 
@@ -122,11 +149,13 @@ export async function buildRegistry(env, importMap) {
   const privateCommands = new Map();
   /** @type {Map<string, RegistryEntry>} */
   const allCommands = new Map();
+  /** @type {CronEntry[]} */
+  const crons = [];
 
   for (const mod of modules) {
     if (typeof mod.init === "function") {
       try {
-        await mod.init({ db: createStore(mod.name, env), env });
+        await mod.init({ db: createStore(mod.name, env), sql: createSqlStore(mod.name, env), env });
       } catch (err) {
         throw new Error(
           `module "${mod.name}" init failed: ${err instanceof Error ? err.message : String(err)}`,
@@ -149,6 +178,18 @@ export async function buildRegistry(env, importMap) {
       else if (cmd.visibility === "protected") protectedCommands.set(cmd.name, entry);
       else privateCommands.set(cmd.name, entry);
     }
+
+    // Collect cron entries (validated during loadModules).
+    if (Array.isArray(mod.crons)) {
+      for (const cron of mod.crons) {
+        crons.push({
+          module: mod,
+          schedule: cron.schedule,
+          name: cron.name,
+          handler: cron.handler,
+        });
+      }
+    }
   }
 
   const registry = {
@@ -156,6 +197,7 @@ export async function buildRegistry(env, importMap) {
     protectedCommands,
     privateCommands,
     allCommands,
+    crons,
     modules,
   };
   currentRegistry = registry;

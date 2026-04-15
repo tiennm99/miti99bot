@@ -3,7 +3,7 @@
  *
  * wrangler bundles statically — dynamic `import(variablePath)` defeats
  * tree-shaking and can fail at bundle time. So we enumerate every module here
- * as a lazy loader, and {@link loadModules} filters the list at runtime
+ * as a lazy loader, and loadModules filters the list at runtime
  * against `env.MODULES` (comma-separated). Adding a new module is a two-step
  * edit: create the folder, then add one line here.
  */

@@ -10,26 +10,26 @@
  */
 
 /**
- * @typedef {Object} KVStorePutOptions
+ * @typedef {object} KVStorePutOptions
  * @property {number} [expirationTtl] seconds — value auto-deletes after this many seconds.
  */
 
 /**
- * @typedef {Object} KVStoreListOptions
+ * @typedef {object} KVStoreListOptions
  * @property {string} [prefix] additional prefix (appended AFTER the module namespace).
  * @property {number} [limit]
  * @property {string} [cursor] pagination cursor from a previous list() call.
  */
 
 /**
- * @typedef {Object} KVStoreListResult
+ * @typedef {object} KVStoreListResult
  * @property {string[]} keys — module namespace already stripped.
  * @property {string} [cursor] — present if more pages available.
  * @property {boolean} done — true when list_complete.
  */
 
 /**
- * @typedef {Object} KVStore
+ * @typedef {object} KVStore
  * @property {(key: string) => Promise<string|null>} get
  * @property {(key: string, value: string, opts?: KVStorePutOptions) => Promise<void>} put
  * @property {(key: string) => Promise<void>} delete

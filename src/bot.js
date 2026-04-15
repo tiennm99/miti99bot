@@ -9,11 +9,28 @@
 
 import { Bot } from "grammy";
 import { installDispatcher } from "./modules/dispatcher.js";
+import { getCurrentRegistry } from "./modules/registry.js";
 
 /** @type {Bot | null} */
 let botInstance = null;
 /** @type {Promise<Bot> | null} */
 let botInitPromise = null;
+
+/**
+ * Returns the memoized registry, building it (and the bot) if needed.
+ * Shares the same instance used by the fetch handler so scheduled() and
+ * fetch() operate on identical registry state within a warm instance.
+ *
+ * @param {any} env
+ * @returns {Promise<import("./modules/registry.js").Registry>}
+ */
+export async function getRegistry(env) {
+  // If the bot is already initialised the registry was built as a side effect.
+  if (botInstance) return getCurrentRegistry();
+  // Otherwise bootstrap via getBot (which calls buildRegistry internally).
+  await getBot(env);
+  return getCurrentRegistry();
+}
 
 /**
  * Fail fast if any required env var is missing — better a 500 on first webhook

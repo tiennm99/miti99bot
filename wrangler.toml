@@ -17,6 +17,24 @@ binding = "KV"
 id = "REPLACE_ME"
 preview_id = "REPLACE_ME"
 
+# D1 database for module persistent storage. Each module prefixes its tables
+# with `{moduleName}_` (e.g. `trading_trades`). Migrations are applied via
+# `npm run db:migrate` (chained into `npm run deploy`).
+# Create with: npx wrangler d1 create miti99bot-db
+# then replace REPLACE_ME_D1_UUID below with the returned database_id.
+[[d1_databases]]
+binding = "DB"
+database_name = "miti99bot-db"
+database_id = "REPLACE_ME_D1_UUID"
+
+# Cron Triggers — union of all schedules declared by modules.
+# When adding a module with cron entries, append its schedule(s) here.
+# See docs/adding-a-module.md for the full module author workflow.
+# Local testing: curl "http://localhost:8787/__scheduled?cron=0+1+*+*+*"
+# (requires `wrangler dev --test-scheduled`)
+[triggers]
+crons = ["0 17 * * *"]
+
 # Secrets (set via `wrangler secret put <name>`, NOT in this file):
 #   TELEGRAM_BOT_TOKEN       — bot token from @BotFather
 #   TELEGRAM_WEBHOOK_SECRET  — arbitrary high-entropy string, also set in .env.deploy

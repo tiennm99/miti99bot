@@ -9,10 +9,11 @@
   },
   "scripts": {
     "dev": "wrangler dev",
-    "deploy": "wrangler deploy && npm run register",
+    "deploy": "wrangler deploy && npm run db:migrate && npm run register",
+    "db:migrate": "node scripts/migrate.js",
     "register": "node --env-file=.env.deploy scripts/register.js",
     "register:dry": "node --env-file=.env.deploy scripts/register.js --dry-run",
-    "lint": "biome check src tests scripts",
+    "lint": "biome check src tests scripts && eslint src",
     "format": "biome format --write src tests scripts",
     "test": "vitest run"
   },
@@ -21,6 +22,8 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.0",
+    "eslint": "^10.2.0",
+    "eslint-plugin-jsdoc": "^62.9.0",
     "vitest": "^2.1.0",
     "wrangler": "^3.90.0"
   }

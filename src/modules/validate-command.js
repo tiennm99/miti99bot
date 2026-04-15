@@ -17,7 +17,7 @@ export const COMMAND_NAME_RE = /^[a-z0-9_]{1,32}$/;
 export const MAX_DESCRIPTION_LENGTH = 256;
 
 /**
- * @typedef {Object} ModuleCommand
+ * @typedef {object} ModuleCommand
  * @property {string} name — without leading slash; matches COMMAND_NAME_RE.
  * @property {"public"|"protected"|"private"} visibility
  * @property {string} description — ≤256 chars; required for all visibilities.
