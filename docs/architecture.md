@@ -68,23 +68,31 @@ Every module is a single default export with this shape:
 
 ```js
 export default {
-  name: "wordle",                      // must match folder + import map key
-  init: async ({ db, env }) => { ... }, // optional, called once at build time
+  name: "wordle",                              // must match folder + import map key
+  init: async ({ db, sql, env }) => { ... },   // optional, called once at build time
   commands: [
     {
-      name: "wordle",                  // ^[a-z0-9_]{1,32}$, no leading slash
-      visibility: "public",            // "public" | "protected" | "private"
-      description: "Play wordle",      // required, ≤256 chars
-      handler: async (ctx) => { ... }, // grammY context
+      name: "wordle",                          // ^[a-z0-9_]{1,32}$, no leading slash
+      visibility: "public",                    // "public" | "protected" | "private"
+      description: "Play wordle",              // required, ≤256 chars
+      handler: async (ctx) => { ... },        // grammY context
     },
     // ...
+  ],
+  crons: [                                     // optional scheduled jobs
+    {
+      schedule: "0 2 * * *",                   // cron expression
+      name: "cleanup",                         // unique within module
+      handler: async (event, ctx) => { ... }, // receives { db, sql, env }
+    },
   ],
 };
 ```
 
 - The command name regex is **uniform** across all visibility levels. A private command is still a slash command (`/konami`) — it is simply absent from Telegram's `/` menu and from `/help` output. It is NOT a hidden text-match easter egg.
 - `description` is required for **all** visibilities. Private descriptions never reach Telegram; they exist so the registry remains self-documenting for debugging.
-- `init({ db, env })` is the one place where a module should do setup work. The `db` parameter is a `KVStore` whose keys are automatically prefixed with `<moduleName>:`. `env` is the raw worker env (read-only by convention).
+- `init({ db, sql, env })` is the one place where a module should do setup work. The `db` parameter is a `KVStore` whose keys are automatically prefixed with `<moduleName>:`. The `sql` parameter is a `SqlStore` (or `null` if `env.DB` is not bound) — for relational data. `env` is the raw worker env (read-only by convention).
+- `crons` is optional. Each entry declares a scheduled job; the schedule MUST also be registered in `wrangler.toml` `[triggers] crons`.
 
 Validation runs per-command at registry load, and cross-module conflict detection runs at the same step. Any violation throws — deployment fails loudly before any request is served.
 
@@ -149,9 +157,13 @@ Every command — public, protected, **and private** — is registered via `bot.
 
 There is no custom text-match middleware, no `bot.on("message:text", ...)` handler, no private-command-specific path. One routing path for all three visibilities. This is what reduced the original two-path design (slash + text-match) to one during the revision pass.
 
-## 8. Storage: the KVStore interface
+## 8. Storage: KVStore and SqlStore
 
-Modules NEVER touch `env.KV` directly. They get a `KVStore` from `createStore(moduleName, env)`:
+Modules NEVER touch `env.KV` or `env.DB` directly. They receive prefixed stores from the module context.
+
+### KVStore (key-value, fast reads/writes)
+
+For simple state and blobs, use `db` (a `KVStore`):
 
 ```js
 // In a module's init:
@@ -175,7 +187,7 @@ getJSON(key)                          // → any | null (swallows corrupt JSON)
 putJSON(key, value, { expirationTtl? })
 ```
 
-### Prefix mechanics
+#### Prefix mechanics
 
 `createStore("wordle", env)` returns a wrapped store where every key is rewritten:
 
@@ -189,15 +201,40 @@ list({prefix:"games:"})──►  list({prefix:"wordle:games:"})  (then strips "
 
 Two stores for different modules cannot read each other's data unless they reconstruct prefixes by hand — a code-review boundary, not a cryptographic one.
 
-### Why `getJSON`/`putJSON` are in the interface
+### SqlStore (relational, scans, append-only history)
 
-Every planned module stores structured state (game state, user stats, timestamps). Without helpers, every module would repeat `JSON.parse(await store.get(k))` and `store.put(k, JSON.stringify(v))`. That's genuine DRY.
+For complex queries, aggregates, or audit logs, use `sql` (a `SqlStore`):
 
-`getJSON` is deliberately forgiving: if the stored value is not valid JSON (a corrupt record, a partial write, manual tampering), it logs a warning and returns `null`. A single bad record must not crash the handler.
+```js
+// In a module's init:
+init: async ({ sql }) => {
+  sqlStore = sql;  // null if env.DB not bound
+},
 
-### Swapping the backend
+// In a handler or cron:
+const trades = await sqlStore.all(
+  "SELECT * FROM trading_trades WHERE user_id = ? ORDER BY ts DESC LIMIT 10",
+  userId
+);
+```
 
-To replace Cloudflare KV with a different store (e.g. Upstash Redis, D1, Postgres):
+The interface (full JSDoc in `src/db/sql-store-interface.js`):
+
+```js
+run(query, ...binds)      // INSERT/UPDATE/DELETE — returns { changes, last_row_id }
+all(query, ...binds)      // SELECT all rows → array of objects
+first(query, ...binds)    // SELECT first row → object | null
+prepare(query, ...binds)  // Prepared statement for batch operations
+batch(statements)         // Execute multiple statements in one round-trip
+```
+
+All tables must follow the naming convention `{moduleName}_{table}` (e.g., `trading_trades`).
+
+Tables are created via migrations in `src/modules/<name>/migrations/*.sql`. The migration runner (`scripts/migrate.js`) applies them on deploy and tracks them in `_migrations` table.
+
+### Swapping the backends
+
+To replace Cloudflare KV with a different store (e.g. Upstash Redis, Postgres):
 
 1. Create a new `src/db/<name>-store.js` that implements the `KVStore` interface.
 2. Change the one `new CFKVStore(env.KV)` line in `src/db/create-store.js` to construct your new adapter.
@@ -205,7 +242,15 @@ To replace Cloudflare KV with a different store (e.g. Upstash Redis, D1, Postgre
 
 That's the full change. No module code moves.
 
-## 9. The webhook entry point
+To replace D1 with a different SQL backend:
+
+1. Create a new `src/db/<name>-sql-store.js` that implements the `SqlStore` interface.
+2. Change the one `new CFSqlStore(env.DB)` line in `src/db/create-sql-store.js` to construct your new adapter.
+3. Update `wrangler.toml` bindings.
+
+## 9. HTTP and Scheduled Entry Points
+
+### Webhook (HTTP)
 
 ```js
 // src/index.js — simplified
@@ -221,12 +266,48 @@ export default {
     }
     return new Response("not found", { status: 404 });
   },
+
+  async scheduled(event, env, ctx) {
+    // Cloudflare cron trigger
+    const registry = await getRegistry(env);
+    dispatchScheduled(event, env, ctx, registry);
+  },
 };
 ```
 
-`getWebhookHandler` is itself memoized — it constructs `webhookCallback(bot, "cloudflare-mod", { secretToken: env.TELEGRAM_WEBHOOK_SECRET })` once and reuses it.
+`getWebhookHandler` is memoized and constructs `webhookCallback(bot, "cloudflare-mod", { secretToken: env.TELEGRAM_WEBHOOK_SECRET })` once. grammY's `webhookCallback` validates the `X-Telegram-Bot-Api-Secret-Token` header on every request, so a missing or mismatched secret returns `401` before the update reaches any handler.
 
-grammY's `webhookCallback` validates the `X-Telegram-Bot-Api-Secret-Token` header on every request, so a missing or mismatched secret returns `401` before the update reaches any handler. There is no manual header parsing in this codebase.
+### Scheduled (Cron)
+
+Cloudflare fires cron triggers specified in `wrangler.toml` `[triggers] crons`. The `scheduled(event, env, ctx)` handler receives:
+
+- `event.cron` — the schedule string (e.g., "0 17 * * *")
+- `event.scheduledTime` — Unix timestamp (ms) when the trigger fired
+- `ctx.waitUntil(promise)` — keeps the handler alive until promise resolves
+
+Flow:
+
+```
+Cloudflare cron trigger
+        │
+        ▼
+scheduled(event, env, ctx)
+        │
+        ├── getRegistry(env) — build registry (same as HTTP)
+        │      └── load + init all modules
+        │
+        └── dispatchScheduled(event, env, ctx, registry)
+                   │
+                   ├── filter registry.crons by event.cron match
+                   │
+                   └── for each matching cron:
+                       ├── createStore(moduleName, env)  — KV store
+                       ├── createSqlStore(moduleName, env) — D1 store
+                       └── ctx.waitUntil(handler(event, { db, sql, env }))
+                               └── wrapped in try/catch for isolation
+```
+
+Each handler fires independently. If one fails, others still run.
 
 ## 10. Deploy flow and the register script
 

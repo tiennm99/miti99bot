@@ -3,13 +3,38 @@
 ## Prerequisites
 
 - Node.js ≥ 20.6
-- Cloudflare account with Workers + KV enabled
+- Cloudflare account with Workers + KV + D1 enabled
 - Telegram bot token from [@BotFather](https://t.me/BotFather)
 - `wrangler` CLI authenticated: `npx wrangler login`
 
 ## Environment Setup
 
-### 1. Cloudflare KV Namespaces
+### 1. Cloudflare D1 Database (Optional but Recommended)
+
+If your modules need relational data or append-only history, set up a D1 database:
+
+```bash
+npx wrangler d1 create miti99bot-db
+```
+
+Copy the database ID from the output, then add it to `wrangler.toml`:
+
+```toml
+[[d1_databases]]
+binding = "DB"
+database_name = "miti99bot-db"
+database_id = "<paste-id-here>"
+```
+
+After this, run migrations to set up tables:
+
+```bash
+npm run db:migrate
+```
+
+The migration runner discovers all `src/modules/*/migrations/*.sql` files and applies them.
+
+### 2. Cloudflare KV Namespaces
 
 ```bash
 npx wrangler kv namespace create miti99bot-kv
@@ -25,7 +50,7 @@ id = "<production-id>"
 preview_id = "<preview-id>"
 ```
 
-### 2. Worker Secrets
+### 3. Worker Secrets
 
 ```bash
 npx wrangler secret put TELEGRAM_BOT_TOKEN
@@ -34,7 +59,7 @@ npx wrangler secret put TELEGRAM_WEBHOOK_SECRET
 
 `TELEGRAM_WEBHOOK_SECRET` — any high-entropy string (e.g. `openssl rand -hex 32`). grammY validates it on every webhook update via `X-Telegram-Bot-Api-Secret-Token`.
 
-### 3. Local Dev Config
+### 4. Local Dev Config
 
 ```bash
 cp .dev.vars.example .dev.vars    # for wrangler dev
@@ -49,11 +74,23 @@ Both are gitignored. Fill in matching token + secret values.
 
 ## Deploy
 
+### Cron Configuration (if using scheduled jobs)
+
+If any of your modules declare crons, they MUST also be registered in `wrangler.toml`:
+
+```toml
+[triggers]
+crons = ["0 17 * * *", "0 2 * * *"]  # list all cron schedules used by modules
+```
+
+The schedule string must exactly match what modules declare. For details on cron expressions and examples, see [`docs/using-cron.md`](./using-cron.md).
+
 ### First Time
 
 ```bash
 npx wrangler deploy                # learn the *.workers.dev URL
 # paste URL into .env.deploy as WORKER_URL
+npm run db:migrate                 # apply any migrations to D1
 npm run register:dry               # preview payloads
 npm run deploy                     # deploy + register webhook + commands
 ```
@@ -64,7 +101,7 @@ npm run deploy                     # deploy + register webhook + commands
 npm run deploy
 ```
 
-This runs `wrangler deploy` then `scripts/register.js` (setWebhook + setMyCommands).
+This runs `wrangler deploy`, `npm run db:migrate`, then `scripts/register.js` (setWebhook + setMyCommands).
 
 ### What the Register Script Does
 

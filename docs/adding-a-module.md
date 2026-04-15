@@ -143,9 +143,77 @@ Each command is:
 
 Private commands are still slash commands — users type `/mycmd`. They're simply absent from Telegram's `/` popup and from `/help` output.
 
+## Optional: D1 Storage
+
+If your module needs a SQL database for relational queries, scans, or append-only history, add an `init` hook that receives `sql`:
+
+```js
+/** @type {import("../../db/sql-store-interface.js").SqlStore | null} */
+let sql = null;
+
+const myModule = {
+  name: "mymod",
+  init: async ({ db, sql: sqlStore, env }) => {
+    db = store;
+    sql = sqlStore;  // null when env.DB is not configured
+  },
+  commands: [ /* ... */ ],
+};
+```
+
+Create migration files in `src/modules/<name>/migrations/`:
+
+```
+src/modules/mymod/migrations/
+├── 0001_initial.sql
+├── 0002_add_index.sql
+└── ...
+```
+
+Run migrations at deploy time:
+
+```bash
+npm run db:migrate           # production
+npm run db:migrate -- --local # local dev
+npm run db:migrate -- --dry-run # preview
+```
+
+For full details on D1 usage, table naming, and the SQL API, see [`docs/using-d1.md`](./using-d1.md).
+
+## Optional: Scheduled Jobs
+
+If your module needs to run maintenance tasks (cleanup, stats refresh) on a schedule, add a `crons` array:
+
+```js
+const myModule = {
+  name: "mymod",
+  init: async ({ db, sql, env }) => { /* ... */ },
+  commands: [ /* ... */ ],
+  crons: [
+    {
+      schedule: "0 2 * * *",  // 2 AM UTC daily
+      name: "daily-cleanup",
+      handler: async (event, { db, sql, env }) => {
+        // handler receives same context as init
+        await sql.run("DELETE FROM mymod_old WHERE created < ?", oldTimestamp);
+      },
+    },
+  ],
+};
+```
+
+**Important:** Every cron schedule declared in a module MUST also be registered in `wrangler.toml`:
+
+```toml
+[triggers]
+crons = ["0 2 * * *"]  # matches module declaration
+```
+
+For full details on cron syntax, local testing, and worked examples, see [`docs/using-cron.md`](./using-cron.md).
+
 ## Testing your module
 
-Add a test in `tests/modules/<name>.test.js` or extend an existing suite. The `tests/fakes/` directory provides `fake-kv-namespace.js`, `fake-bot.js`, and `fake-modules.js` for hermetic unit tests that don't touch Cloudflare or Telegram.
+Add a test in `tests/modules/<name>.test.js` or extend an existing suite. The `tests/fakes/` directory provides `fake-kv-namespace.js`, `fake-bot.js`, `fake-d1.js`, and `fake-modules.js` for hermetic unit tests that don't touch Cloudflare or Telegram.
 
 Run:
 
@@ -163,4 +231,4 @@ This prints the `setMyCommands` payload your module will push to Telegram — a 
 
 ## Full example
 
-See `src/modules/misc/index.js` — it's a minimal module that uses the DB (`putJSON` / `getJSON` via `/ping` + `/mstats`) and registers one command at each visibility level. Copy it as a starting point for your own module.
+See `src/modules/misc/index.js` — it's a minimal module that uses the DB (`putJSON` / `getJSON` via `/ping` + `/mstats`) and registers one command at each visibility level. Copy it as a starting point for your own module. See `src/modules/trading/` for a full example with D1 storage and scheduled crons.

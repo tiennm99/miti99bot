@@ -6,12 +6,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```bash
 npm run dev          # local dev server (wrangler dev) at http://localhost:8787
-npm run lint         # biome check src tests scripts
+npm run lint         # biome check src tests scripts + eslint src
 npm run format       # biome format --write
 npm test             # vitest run (all tests)
 npx vitest run tests/modules/trading/format.test.js   # single test file
 npx vitest run -t "formats with dot"                  # single test by name
-npm run deploy       # wrangler deploy + register webhook/commands with Telegram
+npm run db:migrate   # apply migrations to D1 (prod)
+npm run db:migrate -- --local                         # apply to local dev D1
+npm run db:migrate -- --dry-run                       # preview without applying
+npm run deploy       # wrangler deploy + db:migrate + register webhook/commands
 npm run register:dry # preview setWebhook + setMyCommands payloads without calling Telegram
 ```
 
@@ -39,18 +42,26 @@ grammY Telegram bot on Cloudflare Workers. Modules are plug-n-play: each module 
 
 ```js
 {
-  name: "mymod",                          // must match folder + import map key
-  init: async ({ db, env }) => { ... },   // optional — db is prefixed KVStore
+  name: "mymod",                              // must match folder + import map key
+  init: async ({ db, sql, env }) => { ... },  // optional — db: KVStore, sql: SqlStore|null
   commands: [{
-    name: "mycmd",                        // ^[a-z0-9_]{1,32}$, no leading slash
-    visibility: "public",                 // "public" | "protected" | "private"
-    description: "Does a thing",          // required for all visibilities
-    handler: async (ctx) => { ... },      // grammY context
+    name: "mycmd",                            // ^[a-z0-9_]{1,32}$, no leading slash
+    visibility: "public",                     // "public" | "protected" | "private"
+    description: "Does a thing",              // required for all visibilities
+    handler: async (ctx) => { ... },          // grammY context
+  }],
+  crons: [{                                   // optional scheduled jobs
+    schedule: "0 17 * * *",                   // cron expression
+    name: "daily-cleanup",                    // unique within module
+    handler: async (event, ctx) => { ... },   // receives { db, sql, env }
   }],
 }
 ```
 
-Command names must be globally unique across ALL modules and visibilities. Conflicts throw at load time.
+- Command names must be globally unique across ALL modules and visibilities. Conflicts throw at load time.
+- Cron schedules declared here MUST also be registered in `wrangler.toml` `[triggers] crons`.
+- For D1 setup (migrations, table naming), see [`docs/using-d1.md`](docs/using-d1.md).
+- For cron syntax and testing, see [`docs/using-cron.md`](docs/using-cron.md).
 
 ## Testing
 
