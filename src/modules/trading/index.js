@@ -4,16 +4,33 @@
  */
 
 import { handleBuy, handleConvert, handleSell, handleTopup } from "./handlers.js";
+import { createHistoryHandler, recordTrade } from "./history.js";
+import { trimTradesHandler } from "./retention.js";
 import { handleStats } from "./stats-handler.js";
 
 /** @type {import("../../db/kv-store-interface.js").KVStore | null} */
 let db = null;
 
+/** @type {import("../../db/sql-store-interface.js").SqlStore | null} */
+let sql = null;
+
+/**
+ * Build an onTrade callback bound to the current sql store and userId.
+ *
+ * @param {number} userId
+ * @returns {(trade: {symbol:string, side:"buy"|"sell", qty:number, priceVnd:number}) => Promise<void>}
+ */
+function makeOnTrade(userId) {
+  return ({ symbol, side, qty, priceVnd }) =>
+    recordTrade(sql, { userId, symbol, side, qty, priceVnd });
+}
+
 /** @type {import("../registry.js").BotModule} */
 const tradingModule = {
   name: "trading",
-  init: async ({ db: store }) => {
+  init: async ({ db: store, sql: sqlStore }) => {
     db = store;
+    sql = sqlStore ?? null;
   },
   commands: [
     {
@@ -26,13 +43,13 @@ const tradingModule = {
       name: "trade_buy",
       visibility: "public",
       description: "Buy VN stock at market price",
-      handler: (ctx) => handleBuy(ctx, db),
+      handler: (ctx) => handleBuy(ctx, db, makeOnTrade(ctx.from?.id)),
     },
     {
       name: "trade_sell",
       visibility: "public",
       description: "Sell VN stock back to VND",
-      handler: (ctx) => handleSell(ctx, db),
+      handler: (ctx) => handleSell(ctx, db, makeOnTrade(ctx.from?.id)),
     },
     {
       name: "trade_convert",
@@ -45,6 +62,20 @@ const tradingModule = {
       visibility: "public",
       description: "Show portfolio summary with P&L",
       handler: (ctx) => handleStats(ctx, db),
+    },
+    {
+      name: "history",
+      visibility: "public",
+      description: "Show your last N trades (default 10, max 50)",
+      // handler is created lazily so it picks up the sql value set in init().
+      handler: (ctx) => createHistoryHandler(sql)(ctx),
+    },
+  ],
+  crons: [
+    {
+      schedule: "0 17 * * *",
+      name: "trim-trades",
+      handler: (event, ctx) => trimTradesHandler(event, ctx),
     },
   ],
 };

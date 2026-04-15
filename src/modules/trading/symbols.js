@@ -7,7 +7,7 @@
 const COMING_SOON = "Crypto, gold & currency exchange coming soon!";
 
 /**
- * @typedef {Object} ResolvedSymbol
+ * @typedef {object} ResolvedSymbol
  * @property {string} symbol — uppercase ticker
  * @property {string} category — "stock" (only supported category for now)
  * @property {string} label — company name
