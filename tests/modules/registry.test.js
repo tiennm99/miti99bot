@@ -129,6 +129,72 @@ describe("registry", () => {
     });
   });
 
+  describe("cron collection", () => {
+    const makeCron = (name, schedule = "0 1 * * *") => ({
+      name,
+      schedule,
+      handler: async () => {},
+    });
+
+    it("registry.crons is empty when no modules declare crons", async () => {
+      const map = makeFakeImportMap({ a: makeModule("a", [makeCommand("foo", "public")]) });
+      const reg = await buildRegistry(makeEnv("a"), map);
+      expect(reg.crons).toEqual([]);
+    });
+
+    it("collects crons from modules that declare them", async () => {
+      const modWithCron = {
+        ...makeModule("a", [makeCommand("foo", "public")]),
+        crons: [makeCron("nightly")],
+      };
+      const map = makeFakeImportMap({ a: modWithCron });
+      const reg = await buildRegistry(makeEnv("a"), map);
+      expect(reg.crons).toHaveLength(1);
+      expect(reg.crons[0].name).toBe("nightly");
+      expect(reg.crons[0].schedule).toBe("0 1 * * *");
+      expect(reg.crons[0].module.name).toBe("a");
+    });
+
+    it("fan-out: two modules with same schedule both appear in registry.crons", async () => {
+      const modA = {
+        ...makeModule("a", [makeCommand("ca", "public")]),
+        crons: [makeCron("tick", "*/5 * * * *")],
+      };
+      const modB = {
+        ...makeModule("b", [makeCommand("cb", "public")]),
+        crons: [makeCron("tick", "*/5 * * * *")],
+      };
+      const map = makeFakeImportMap({ a: modA, b: modB });
+      const reg = await buildRegistry(makeEnv("a,b"), map);
+      expect(reg.crons).toHaveLength(2);
+      expect(reg.crons.map((c) => c.module.name).sort()).toEqual(["a", "b"]);
+    });
+
+    it("throws on duplicate cron name within the same module", async () => {
+      const mod = {
+        ...makeModule("a", [makeCommand("foo", "public")]),
+        crons: [makeCron("dup"), makeCron("dup")],
+      };
+      const map = makeFakeImportMap({ a: mod });
+      await expect(buildRegistry(makeEnv("a"), map)).rejects.toThrow(/duplicate cron name "dup"/);
+    });
+
+    it("throws when crons is not an array", async () => {
+      const mod = { ...makeModule("a", [makeCommand("foo", "public")]), crons: "bad" };
+      const map = makeFakeImportMap({ a: mod });
+      await expect(buildRegistry(makeEnv("a"), map)).rejects.toThrow(/crons must be an array/);
+    });
+
+    it("throws when a cron entry fails validation", async () => {
+      const mod = {
+        ...makeModule("a", [makeCommand("foo", "public")]),
+        crons: [{ name: "bad!", schedule: "0 1 * * *", handler: async () => {} }],
+      };
+      const map = makeFakeImportMap({ a: mod });
+      await expect(buildRegistry(makeEnv("a"), map)).rejects.toThrow(/name must match/);
+    });
+  });
+
   describe("getCurrentRegistry / resetRegistry", () => {
     it("getCurrentRegistry throws before build", () => {
       expect(() => getCurrentRegistry()).toThrow(/not built/);
