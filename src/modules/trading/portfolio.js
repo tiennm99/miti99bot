@@ -7,10 +7,10 @@
  */
 
 /**
- * @typedef {Object} PortfolioMeta
+ * @typedef {object} PortfolioMeta
  * @property {number} invested — cumulative VND value of all top-ups (cost basis for P&L)
  *
- * @typedef {Object} Portfolio
+ * @typedef {object} Portfolio
  * @property {{ [currency: string]: number }} currency
  * @property {{ [symbol: string]: number }} assets
  * @property {PortfolioMeta} meta

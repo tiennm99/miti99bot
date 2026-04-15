@@ -44,8 +44,14 @@ export async function handleTopup(ctx, db) {
   await ctx.reply(`Topped up ${formatVND(amount)}.\nBalance: ${formatVND(p.currency.VND)}`);
 }
 
-/** /trade_buy <amount> <symbol> — buy VN stock at market price */
-export async function handleBuy(ctx, db) {
+/**
+ * /trade_buy <amount> <symbol> — buy VN stock at market price.
+ *
+ * @param {any} ctx — grammY context.
+ * @param {import("../../db/kv-store-interface.js").KVStore} db
+ * @param {((trade: {symbol:string, side:"buy"|"sell", qty:number, priceVnd:number}) => Promise<void>) | null} [onTrade]
+ */
+export async function handleBuy(ctx, db, onTrade = null) {
   const args = parseArgs(ctx);
   if (args.length < 2)
     return usageReply(ctx, "/trade_buy <qty> <TICKER>\nExample: /trade_buy 100 TCB");
@@ -76,13 +82,20 @@ export async function handleBuy(ctx, db) {
   }
   addAsset(p, info.symbol, amount);
   await savePortfolio(db, uid(ctx), p);
+  if (onTrade) await onTrade({ symbol: info.symbol, side: "buy", qty: amount, priceVnd: price });
   await ctx.reply(
     `Bought ${formatStock(amount)} ${info.symbol} @ ${formatVND(price)}\nCost: ${formatVND(cost)}`,
   );
 }
 
-/** /trade_sell <amount> <symbol> — sell VN stock back to VND */
-export async function handleSell(ctx, db) {
+/**
+ * /trade_sell <amount> <symbol> — sell VN stock back to VND.
+ *
+ * @param {any} ctx — grammY context.
+ * @param {import("../../db/kv-store-interface.js").KVStore} db
+ * @param {((trade: {symbol:string, side:"buy"|"sell", qty:number, priceVnd:number}) => Promise<void>) | null} [onTrade]
+ */
+export async function handleSell(ctx, db, onTrade = null) {
   const args = parseArgs(ctx);
   if (args.length < 2)
     return usageReply(ctx, "/trade_sell <qty> <TICKER>\nExample: /trade_sell 100 TCB");
@@ -107,6 +120,7 @@ export async function handleSell(ctx, db) {
   const revenue = amount * price;
   addCurrency(p, "VND", revenue);
   await savePortfolio(db, uid(ctx), p);
+  if (onTrade) await onTrade({ symbol, side: "sell", qty: amount, priceVnd: price });
   await ctx.reply(
     `Sold ${formatStock(amount)} ${symbol} @ ${formatVND(price)}\nRevenue: ${formatVND(revenue)}`,
   );
