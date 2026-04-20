@@ -3625,9 +3625,7 @@ export default [
         },
         "gender": "male",
         "attackType": "close",
-        "region": "runeterra",
-        "lane": "top,jungle",
-        "releaseDate": 2026
+        "region": "runeterra"
     },
     {
         "id": "Zac",
