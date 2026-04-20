@@ -24,7 +24,7 @@ describe("installDispatcher", () => {
     const env = { MODULES: "util,wordle,loldle,misc", KV: makeFakeKv() };
     const reg = await installDispatcher(bot, env);
 
-    // Expect 11 total commands (5 public + 3 protected + 3 private).
+    // Expect 11 total commands (7 public + 2 protected + 2 private).
     expect(bot.commandCalls).toHaveLength(11);
     expect(reg.allCommands.size).toBe(11);
 
@@ -34,7 +34,6 @@ describe("installDispatcher", () => {
 
     // Assert private commands ARE registered (the whole point of unified routing).
     expect(registeredNames).toContain("konami");
-    expect(registeredNames).toContain("ggwp");
     expect(registeredNames).toContain("fortytwo");
   });
 
