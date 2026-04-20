@@ -24,9 +24,9 @@ describe("installDispatcher", () => {
     const env = { MODULES: "util,wordle,loldle,misc", KV: makeFakeKv() };
     const reg = await installDispatcher(bot, env);
 
-    // Expect 11 total commands (7 public + 2 protected + 2 private).
-    expect(bot.commandCalls).toHaveLength(11);
-    expect(reg.allCommands.size).toBe(11);
+    // Expect 12 total commands (8 public + 2 protected + 2 private).
+    expect(bot.commandCalls).toHaveLength(12);
+    expect(reg.allCommands.size).toBe(12);
 
     const registeredNames = bot.commandCalls.map((c) => c.name).sort();
     const expected = [...reg.allCommands.keys()].sort();
