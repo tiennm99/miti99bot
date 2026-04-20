@@ -56,25 +56,46 @@ export default {
    * @param {any} _ctx
    */
   async fetch(request, env, _ctx) {
+    const start = Date.now();
     const { pathname } = new URL(request.url);
+    const method = request.method;
 
-    if (request.method === "GET" && pathname === "/") {
-      return new Response("miti99bot ok", {
-        status: 200,
-        headers: { "content-type": "text/plain" },
-      });
-    }
+    const response = await route(request, env, pathname);
 
-    if (request.method === "POST" && pathname === "/webhook") {
-      try {
-        const handler = await getWebhookHandler(env);
-        return await handler(request);
-      } catch (err) {
-        console.error("webhook handler failed", err);
-        return new Response("internal error", { status: 500 });
-      }
-    }
-
-    return new Response("not found", { status: 404 });
+    // Structured request log for Workers Observability dashboard.
+    console.log(JSON.stringify({
+      msg: "req",
+      method,
+      path: pathname,
+      status: response.status,
+      ms: Date.now() - start,
+    }));
+    return response;
   },
 };
+
+/**
+ * @param {Request} request
+ * @param {any} env
+ * @param {string} pathname
+ */
+async function route(request, env, pathname) {
+  if (request.method === "GET" && pathname === "/") {
+    return new Response("miti99bot ok", {
+      status: 200,
+      headers: { "content-type": "text/plain" },
+    });
+  }
+
+  if (request.method === "POST" && pathname === "/webhook") {
+    try {
+      const handler = await getWebhookHandler(env);
+      return await handler(request);
+    } catch (err) {
+      console.error("webhook handler failed", err);
+      return new Response("internal error", { status: 500 });
+    }
+  }
+
+  return new Response("not found", { status: 404 });
+}
