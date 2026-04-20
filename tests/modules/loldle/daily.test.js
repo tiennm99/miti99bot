@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { pickDaily, todayUtc } from "../../../src/modules/loldle/daily.js";
+import { pickDaily, pickRandom, todayUtc } from "../../../src/modules/loldle/daily.js";
 
-describe("daily", () => {
+describe("picker", () => {
   it("todayUtc returns YYYY-MM-DD", () => {
     expect(todayUtc(new Date("2026-04-20T23:30:00Z"))).toBe("2026-04-20");
     expect(todayUtc(new Date("2026-01-01T00:00:00Z"))).toBe("2026-01-01");
@@ -23,7 +23,18 @@ describe("daily", () => {
     expect(picks.size).toBeGreaterThan(5);
   });
 
-  it("throws on empty list", () => {
+  it("pickDaily throws on empty list", () => {
     expect(() => pickDaily([], "x")).toThrow();
+  });
+
+  it("pickRandom honors injected rng", () => {
+    const champions = [{ id: "A" }, { id: "B" }, { id: "C" }, { id: "D" }];
+    expect(pickRandom(champions, () => 0).id).toBe("A");
+    expect(pickRandom(champions, () => 0.999).id).toBe("D");
+    expect(pickRandom(champions, () => 0.5).id).toBe("C");
+  });
+
+  it("pickRandom throws on empty list", () => {
+    expect(() => pickRandom([])).toThrow();
   });
 });

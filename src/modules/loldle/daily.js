@@ -1,6 +1,5 @@
 /**
- * @file Daily puzzle seeding — deterministic per UTC date.
- * Uses djb2 hash of YYYY-MM-DD to pick champion index.
+ * @file Champion pickers — deterministic daily seeding and fresh-random.
  */
 
 /** UTC date string YYYY-MM-DD. */
@@ -18,16 +17,32 @@ function hash(str) {
 }
 
 /**
- * Pick today's target champion deterministically.
+ * Deterministic pick seeded by date (or any string).
  * @template T
  * @param {T[]} champions
- * @param {string} [seed] — defaults to today's UTC date
+ * @param {string} [seed]
  * @returns {T}
  */
 export function pickDaily(champions, seed) {
-  if (!Array.isArray(champions) || champions.length === 0) {
-    throw new Error("pickDaily: champions array is empty");
-  }
+  assertNonEmpty(champions);
   const s = seed ?? todayUtc();
   return champions[hash(s) % champions.length];
+}
+
+/**
+ * Uniformly random pick. `rng` defaults to Math.random — override for tests.
+ * @template T
+ * @param {T[]} champions
+ * @param {() => number} [rng]
+ * @returns {T}
+ */
+export function pickRandom(champions, rng = Math.random) {
+  assertNonEmpty(champions);
+  return champions[Math.floor(rng() * champions.length)];
+}
+
+function assertNonEmpty(arr) {
+  if (!Array.isArray(arr) || arr.length === 0) {
+    throw new Error("picker: champions array is empty");
+  }
 }
