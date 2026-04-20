@@ -18,7 +18,7 @@ import { compareChampions } from "./compare.js";
 import { pickRandom } from "./daily.js";
 import { findChampion } from "./lookup.js";
 import { renderBoard, renderGuess } from "./render.js";
-import { loadGame, loadStats, MAX_GUESSES, recordResult, saveGame } from "./state.js";
+import { MAX_GUESSES, loadGame, loadStats, recordResult, saveGame } from "./state.js";
 
 /** @type {Array<Record<string, any>>} */
 const champions = championsData;
@@ -59,7 +59,13 @@ async function getOrInitGame(db, subject) {
 
 async function startFreshGame(db, subject) {
   const target = pickRandom(champions);
-  const fresh = { target: target.id, guesses: [], solved: false, startedAt: Date.now() };
+  const fresh = {
+    target: target.id,
+    guesses: [],
+    solved: false,
+    giveup: false,
+    startedAt: Date.now(),
+  };
   await saveGame(db, subject, fresh);
   return fresh;
 }
@@ -94,6 +100,13 @@ export async function handleLoldle(ctx, db) {
   if (!guess) return ctx.reply(`Champion not found: "${arg}".`);
 
   const target = champions.find((c) => c.id === game.target);
+  // champions.json can be refreshed between rounds — an active target may disappear.
+  if (!target) {
+    await startFreshGame(db, subject);
+    return ctx.reply(
+      "Champion data was updated since this round started. Starting a fresh round — try again.",
+    );
+  }
   const results = compareChampions(guess, target);
   game.guesses.push({ champion: guess.name, results });
   const won = guess.id === target.id;
@@ -129,6 +142,7 @@ export async function handleNew(ctx, db) {
   if (prior && !isFinished(prior)) {
     await recordResult(db, subject, false);
     const prev = champions.find((c) => c.id === prior.target);
+    // prev may be undefined if champion data was refreshed — fall back to the id we stored.
     prelude = `🏳️ Previous round abandoned (auto-giveup). Answer was ${prev?.name ?? prior.target}.\n\n`;
   }
 
@@ -150,6 +164,9 @@ export async function handleGiveup(ctx, db) {
   await saveGame(db, subject, game);
   await recordResult(db, subject, false);
   const target = champions.find((c) => c.id === game.target);
+  if (!target) {
+    return ctx.reply(`🏳️ Answer was ${game.target}. /loldle_new for another.`);
+  }
   return ctx.reply(`🏳️ Answer was ${target.name} — ${target.title}. /loldle_new for another.`);
 }
 

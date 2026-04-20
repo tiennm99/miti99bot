@@ -63,13 +63,15 @@ export default {
     const response = await route(request, env, pathname);
 
     // Structured request log for Workers Observability dashboard.
-    console.log(JSON.stringify({
-      msg: "req",
-      method,
-      path: pathname,
-      status: response.status,
-      ms: Date.now() - start,
-    }));
+    console.log(
+      JSON.stringify({
+        msg: "req",
+        method,
+        path: pathname,
+        status: response.status,
+        ms: Date.now() - start,
+      }),
+    );
     return response;
   },
 };

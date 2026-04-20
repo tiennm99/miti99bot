@@ -1,6 +1,10 @@
 /**
  * @file /trade_stats handler — portfolio summary with P&L breakdown.
- * Fetches live stock prices for each held asset.
+ *
+ * Price fetches are issued in parallel with Promise.allSettled so a portfolio
+ * holding N stocks only waits for the slowest fetch, not the sum. Without this
+ * 10+ symbols would serially stack TCBS latency and can blow Cloudflare's
+ * subrequest budget.
  */
 
 import { formatPnL, formatStock, formatVND } from "./format.js";
@@ -9,30 +13,29 @@ import { getStockPrice } from "./prices.js";
 
 /** /trade_stats — show full portfolio valued in VND with P&L */
 export async function handleStats(ctx, db) {
-  const p = await getPortfolio(db, ctx.from?.id);
+  const id = ctx.from?.id;
+  if (id == null) {
+    return ctx.reply("Cannot identify user — /trade_stats needs a sender.");
+  }
+  const p = await getPortfolio(db, id);
 
   const lines = ["📊 Portfolio Summary\n"];
   let totalValue = 0;
 
-  // VND balance
   const vnd = p.currency.VND || 0;
   if (vnd > 0) {
     totalValue += vnd;
     lines.push(`VND: ${formatVND(vnd)}`);
   }
 
-  // stock assets
-  const assetEntries = Object.entries(p.assets);
-  if (assetEntries.length > 0) {
+  const held = Object.entries(p.assets).filter(([, qty]) => qty !== 0);
+  if (held.length > 0) {
     lines.push("\nStocks:");
-    for (const [sym, qty] of assetEntries) {
-      if (qty === 0) continue;
-      let price;
-      try {
-        price = await getStockPrice(sym);
-      } catch {
-        price = null;
-      }
+    const prices = await Promise.allSettled(held.map(([sym]) => getStockPrice(sym)));
+    for (let i = 0; i < held.length; i++) {
+      const [sym, qty] = held[i];
+      const settled = prices[i];
+      const price = settled.status === "fulfilled" ? settled.value : null;
       if (price == null) {
         lines.push(`  ${sym} x${formatStock(qty)} (no price)`);
         continue;

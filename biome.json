@@ -28,6 +28,14 @@
     }
   },
   "files": {
-    "ignore": ["node_modules", ".wrangler", "dist", "coverage"]
+    "ignore": [
+      "node_modules",
+      ".wrangler",
+      "dist",
+      "coverage",
+      "src/modules/loldle/champions.json",
+      "src/modules/loldle/champions-data.js",
+      "src/modules/wordle/words-data.js"
+    ]
   }
 }

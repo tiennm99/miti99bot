@@ -28,8 +28,20 @@ function usageReply(ctx, usage) {
   return ctx.reply(`Usage: ${usage}`);
 }
 
+// channel posts / inline queries may lack ctx.from — per-user state would collide under key "user:undefined".
+function requireUid(ctx) {
+  const id = uid(ctx);
+  if (id == null) {
+    ctx.reply("Cannot identify user — trading only works in private or group chats with a sender.");
+    return null;
+  }
+  return id;
+}
+
 /** /trade_topup <amount> — add VND to account */
 export async function handleTopup(ctx, db) {
+  const id = requireUid(ctx);
+  if (id == null) return;
   const args = parseArgs(ctx);
   if (args.length < 1)
     return usageReply(ctx, "/trade_topup <amount>\nExample: /trade_topup 5000000");
@@ -37,10 +49,10 @@ export async function handleTopup(ctx, db) {
   if (!Number.isFinite(amount) || amount <= 0)
     return ctx.reply("Amount must be a positive number.");
 
-  const p = await getPortfolio(db, uid(ctx));
+  const p = await getPortfolio(db, id);
   addCurrency(p, "VND", amount);
   p.meta.invested += amount;
-  await savePortfolio(db, uid(ctx), p);
+  await savePortfolio(db, id, p);
   await ctx.reply(`Topped up ${formatVND(amount)}.\nBalance: ${formatVND(p.currency.VND)}`);
 }
 
@@ -52,6 +64,8 @@ export async function handleTopup(ctx, db) {
  * @param {((trade: {symbol:string, side:"buy"|"sell", qty:number, priceVnd:number}) => Promise<void>) | null} [onTrade]
  */
 export async function handleBuy(ctx, db, onTrade = null) {
+  const id = requireUid(ctx);
+  if (id == null) return;
   const args = parseArgs(ctx);
   if (args.length < 2)
     return usageReply(ctx, "/trade_buy <qty> <TICKER>\nExample: /trade_buy 100 TCB");
@@ -73,7 +87,7 @@ export async function handleBuy(ctx, db, onTrade = null) {
   if (price == null) return ctx.reply(`No price available for ${info.symbol}.`);
 
   const cost = amount * price;
-  const p = await getPortfolio(db, uid(ctx));
+  const p = await getPortfolio(db, id);
   const result = deductCurrency(p, "VND", cost);
   if (!result.ok) {
     return ctx.reply(
@@ -81,7 +95,7 @@ export async function handleBuy(ctx, db, onTrade = null) {
     );
   }
   addAsset(p, info.symbol, amount);
-  await savePortfolio(db, uid(ctx), p);
+  await savePortfolio(db, id, p);
   if (onTrade) await onTrade({ symbol: info.symbol, side: "buy", qty: amount, priceVnd: price });
   await ctx.reply(
     `Bought ${formatStock(amount)} ${info.symbol} @ ${formatVND(price)}\nCost: ${formatVND(cost)}`,
@@ -96,6 +110,8 @@ export async function handleBuy(ctx, db, onTrade = null) {
  * @param {((trade: {symbol:string, side:"buy"|"sell", qty:number, priceVnd:number}) => Promise<void>) | null} [onTrade]
  */
 export async function handleSell(ctx, db, onTrade = null) {
+  const id = requireUid(ctx);
+  if (id == null) return;
   const args = parseArgs(ctx);
   if (args.length < 2)
     return usageReply(ctx, "/trade_sell <qty> <TICKER>\nExample: /trade_sell 100 TCB");
@@ -105,7 +121,7 @@ export async function handleSell(ctx, db, onTrade = null) {
   if (!Number.isInteger(amount)) return ctx.reply("Stock quantities must be whole numbers.");
 
   const symbol = args[1].toUpperCase();
-  const p = await getPortfolio(db, uid(ctx));
+  const p = await getPortfolio(db, id);
   const result = deductAsset(p, symbol, amount);
   if (!result.ok) return ctx.reply(`Insufficient ${symbol}. You have: ${formatStock(result.held)}`);
 
@@ -119,7 +135,7 @@ export async function handleSell(ctx, db, onTrade = null) {
 
   const revenue = amount * price;
   addCurrency(p, "VND", revenue);
-  await savePortfolio(db, uid(ctx), p);
+  await savePortfolio(db, id, p);
   if (onTrade) await onTrade({ symbol, side: "sell", qty: amount, priceVnd: price });
   await ctx.reply(
     `Sold ${formatStock(amount)} ${symbol} @ ${formatVND(price)}\nRevenue: ${formatVND(revenue)}`,
