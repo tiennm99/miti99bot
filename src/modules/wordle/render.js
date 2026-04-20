@@ -15,9 +15,22 @@
 
 const MARKER = { correct: "🟩", partial: "🟨", wrong: "⬜" };
 
+// In a Telegram <pre> block, color-square emoji render at ~2 monospace cells
+// wide, while ASCII letters render at 1 cell — so a plain "A B C" row never
+// lines up under the markers. Fullwidth Latin (U+FF21..U+FF3A) is East Asian
+// Width = Fullwidth, which renders at exactly 2 cells per character and
+// matches the emoji column width 1-to-1.
+const FULLWIDTH_OFFSET = 0xff21 - 0x41; // 'A' (0x41) → 'Ａ' (0xFF21)
+
+function toFullwidthUpper(ch) {
+  const code = ch.toUpperCase().charCodeAt(0);
+  if (code >= 0x41 && code <= 0x5a) return String.fromCharCode(code + FULLWIDTH_OFFSET);
+  return ch;
+}
+
 function rowPair(results) {
   const markers = results.map((r) => MARKER[r.result] ?? "⬜").join("");
-  const letters = results.map((r) => ` ${r.letter.toUpperCase()} `).join("");
+  const letters = results.map((r) => toFullwidthUpper(r.letter)).join("");
   return `${markers}\n${letters}`;
 }
 
