@@ -24,6 +24,10 @@ import wordsData from "./words-data.js";
 const words = wordsData;
 const wordSet = makeWordSet(words);
 
+// All replies use HTML parse mode so renderGuess/renderBoard <pre> blocks
+// render as a monospace code box; emoji markers then align with letter columns.
+const HTML = { parse_mode: "HTML" };
+
 /**
  * @param {import("grammy").Context} ctx
  * @returns {number|null}
@@ -86,8 +90,8 @@ export async function handleWordle(ctx, db) {
       ? `🎉 Solved in ${game.guesses.length}/${MAX_GUESSES}. /wordle_new for another.`
       : game.giveup
         ? `🏳️ Gave up. Answer was ${game.target.toUpperCase()}. /wordle_new for another.`
-        : `Guess ${game.guesses.length}/${MAX_GUESSES}. Use \`/wordle <word>\`.`;
-    return ctx.reply(`${header}\n\n${renderBoard(game.guesses)}`);
+        : `Guess ${game.guesses.length}/${MAX_GUESSES}. Use <code>/wordle &lt;word&gt;</code>.`;
+    return ctx.reply(`${header}\n\n${renderBoard(game.guesses)}`, HTML);
   }
 
   if (isFinished(game)) {
@@ -110,15 +114,17 @@ export async function handleWordle(ctx, db) {
     const s = await recordResult(db, subject, true);
     return ctx.reply(
       `${reply}\n\n🎉 Solved in ${game.guesses.length}/${MAX_GUESSES}! Streak: ${s.streak}. /wordle_new for another.`,
+      HTML,
     );
   }
   if (game.guesses.length >= MAX_GUESSES) {
     await recordResult(db, subject, false);
     return ctx.reply(
       `${reply}\n\n❌ Out of guesses. Answer was ${game.target.toUpperCase()}. /wordle_new to retry.`,
+      HTML,
     );
   }
-  return ctx.reply(`${reply}\n\nGuess ${game.guesses.length}/${MAX_GUESSES}.`);
+  return ctx.reply(`${reply}\n\nGuess ${game.guesses.length}/${MAX_GUESSES}.`, HTML);
 }
 
 /**
@@ -137,7 +143,10 @@ export async function handleNew(ctx, db) {
   }
 
   await startFreshGame(db, subject);
-  return ctx.reply(`${prelude}🆕 New round started. Use \`/wordle <word>\` to guess.`);
+  return ctx.reply(
+    `${prelude}🆕 New round started. Use <code>/wordle &lt;word&gt;</code> to guess.`,
+    HTML,
+  );
 }
 
 /**
