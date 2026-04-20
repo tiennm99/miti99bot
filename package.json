@@ -9,8 +9,9 @@
   },
   "scripts": {
     "dev": "wrangler dev",
-    "build": "npm run build:loldle-data",
+    "build": "npm run build:loldle-data && npm run build:wordle-data",
     "build:loldle-data": "node scripts/build-loldle-data.js",
+    "build:wordle-data": "node scripts/build-wordle-data.js",
     "deploy": "npm run build && wrangler deploy && npm run db:migrate && npm run register",
     "db:migrate": "node scripts/migrate.js",
     "register": "node --env-file-if-exists=.env.deploy scripts/register.js",

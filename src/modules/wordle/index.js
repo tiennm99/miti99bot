@@ -1,10 +1,13 @@
 /**
- * @file wordle module stub — proves the plugin system end-to-end.
+ * @file Wordle module — classic 5-letter word guessing game.
  *
- * One public, one protected, one private (hidden) slash command. Real game
- * logic is out of scope for v1; this exercises the loader, visibility levels,
- * registry, dispatcher, help renderer, and namespaced DB.
+ * Word list sourced from:
+ *   https://gist.github.com/dracos/dd0668f281e685bad51479e5acaadb93
+ * (Anna Eilering (dracos) — combined Wordle dictionary of allowed guesses.)
+ * Synced via scripts/build-wordle-data.js into ./words-data.js.
  */
+
+import { handleGiveup, handleNew, handleStats, handleWordle } from "./handlers.js";
 
 /** @type {import("../../db/kv-store-interface.js").KVStore | null} */
 let db = null;
@@ -19,28 +22,26 @@ const wordleModule = {
     {
       name: "wordle",
       visibility: "public",
-      description: "Play wordle (stub)",
-      handler: async (ctx) => {
-        await ctx.reply("Wordle stub — real game TBD.");
-      },
+      description: "Classic wordle — guess the 5-letter word",
+      handler: (ctx) => handleWordle(ctx, db),
     },
     {
-      name: "wstats",
-      visibility: "protected",
-      description: "Wordle stats",
-      handler: async (ctx) => {
-        const stats = (await db?.getJSON("stats")) ?? null;
-        const played = stats?.gamesPlayed ?? 0;
-        await ctx.reply(`games played: ${played}`);
-      },
+      name: "wordle_new",
+      visibility: "public",
+      description: "Start a new round (auto-gives-up any in-progress one)",
+      handler: (ctx) => handleNew(ctx, db),
     },
     {
-      name: "konami",
-      visibility: "private",
-      description: "Easter egg — retro code",
-      handler: async (ctx) => {
-        await ctx.reply("⬆⬆⬇⬇⬅➡⬅➡BA — secret wordle mode unlocked (stub)");
-      },
+      name: "wordle_giveup",
+      visibility: "public",
+      description: "Reveal the current wordle answer",
+      handler: (ctx) => handleGiveup(ctx, db),
+    },
+    {
+      name: "wordle_stats",
+      visibility: "public",
+      description: "Show your wordle stats (wins, streak)",
+      handler: (ctx) => handleStats(ctx, db),
     },
   ],
 };
