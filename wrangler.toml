@@ -35,6 +35,22 @@ database_id = "261b54e7-0fdb-4fe7-8ed9-2e8a8bcf459c"
 [triggers]
 crons = ["0 17 * * *"]
 
+# Workers Observability — captures console.* logs, request metadata, and
+# invocation traces in the Cloudflare dashboard (Observability → Logs).
+# 200k events/day included on free plan. `head_sampling_rate = 1` keeps
+# all invocations; drop to 0.1 for 10% sampling if volume grows.
+[observability]
+enabled = true
+head_sampling_rate = 1
+
+[observability.logs]
+enabled = true
+invocation_logs = true
+
+[observability.traces]
+enabled = true
+head_sampling_rate = 1
+
 # Secrets (set via `wrangler secret put <name>`, NOT in this file):
 #   TELEGRAM_BOT_TOKEN       — bot token from @BotFather
 #   TELEGRAM_WEBHOOK_SECRET  — arbitrary high-entropy string, also set in .env.deploy
