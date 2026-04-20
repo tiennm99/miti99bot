@@ -15,7 +15,7 @@ const STALE_LIMIT_MS = 300_000;
  */
 export async function fetchStockPrice(ticker) {
   const to = Math.floor(Date.now() / 1000);
-  const url = `https://apipubaws.tcbs.com.vn/stock-insight/v1/stock/bars-long-term?ticker=${ticker}&type=stock&resolution=D&countBack=1&to=${to}`;
+  const url = `https://apipubaws.tcbs.com.vn/stock-insight/v1/stock/bars-long-term?ticker=${encodeURIComponent(ticker)}&type=stock&resolution=D&countBack=1&to=${to}`;
   const res = await fetch(url);
   if (!res.ok) return null;
   const json = await res.json();

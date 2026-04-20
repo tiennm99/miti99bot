@@ -53,7 +53,13 @@ async function getOrInitGame(db, subject) {
 
 async function startFreshGame(db, subject) {
   const target = pickRandom(words);
-  const fresh = { target, guesses: [], solved: false, startedAt: Date.now() };
+  const fresh = {
+    target,
+    guesses: [],
+    solved: false,
+    giveup: false,
+    startedAt: Date.now(),
+  };
   await saveGame(db, subject, fresh);
   return fresh;
 }

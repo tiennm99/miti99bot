@@ -30,7 +30,8 @@ src/
 │   ├── validate-command.js  ── shared validators
 │   ├── util/                ── fully implemented: /info + /help
 │   ├── trading/             ── paper trading: VN stocks (dynamic symbol resolution)
-│   ├── wordle/ loldle/      ── stub modules proving the plugin system
+│   ├── wordle/              ── 5-letter guessing game (KV storage)
+│   ├── loldle/              ── classic-mode LoL champion guesser (KV storage)
 │   └── misc/                ── stub that exercises the DB (ping/mstats)
 └── util/
     └── escape-html.js
@@ -359,7 +360,7 @@ A previous design sketched a `POST /admin/setup` route inside the Worker, gated 
 
 ## 12. Testing philosophy
 
-Pure-logic unit tests only. No `workerd` pool, no Telegram fixtures, no integration-level tooling. 105 tests run in ~500ms.
+Pure-logic unit tests only. No `workerd` pool, no Telegram fixtures, no integration-level tooling. 200 tests run in ~2s.
 
 Test seams:
 
@@ -381,7 +382,7 @@ Each module maintains its own `README.md` with commands, data model, and impleme
 
 ## 14. Non-goals (for now)
 
-- Real game logic in `wordle` / `loldle` / `misc` — they're stubs that exercise the framework. Real implementations can land later.
+- Real game logic in `misc` — it's a stub that exercises the DB. Real game modules (`wordle`, `loldle`, `trading`) are live; `misc` stays a framework sanity check.
 - A sandbox between modules. Same-origin trust model: all modules are first-party code.
 - Per-user rate limiting. Cloudflare's own rate limiting is available as a higher layer if needed.
 - `nodejs_compat` flag. Not needed — grammY + this codebase use only Web APIs.

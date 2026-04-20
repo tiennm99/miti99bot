@@ -11,7 +11,7 @@ Modules are added or removed via a single `MODULES` env var. Each module registe
 - **Dual storage backends.** Modules talk to a small `KVStore` interface (Cloudflare KV for simple state) or `SqlStore` interface (D1 for relational data, scans, leaderboards). Swappable with one-file changes.
 - **Scheduled jobs.** Modules declare cron-based cleanup, stats refresh, or maintenance tasks — registered via `wrangler.toml` and dispatched automatically.
 - **Zero admin surface.** No in-Worker `/admin/*` routes, no admin secret. `setWebhook` + `setMyCommands` run at deploy time from a local node script.
-- **Tested.** 105+ vitest unit tests cover registry, storage, dispatcher, cron validation, help renderer, validators, HTML escaping, and the trading module.
+- **Tested.** 200+ vitest unit tests cover registry, storage, dispatcher, cron validation, help renderer, validators, HTML escaping, and the trading / loldle / wordle modules.
 
 ## How a request flows
 
@@ -64,8 +64,8 @@ src/
 │   ├── trading/             # paper trading — VN stocks (D1 storage, daily cron)
 │   │   └── migrations/
 │   │       └── 0001_trades.sql
-│   ├── wordle/              # stub — proves plugin system
-│   ├── loldle/              # stub
+│   ├── wordle/              # 5-letter guessing game (KV storage, 14k-word dict)
+│   ├── loldle/              # classic-mode LoL champion guessing (KV storage)
 │   └── misc/                # stub (KV storage)
 └── util/
     └── escape-html.js

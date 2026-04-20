@@ -59,10 +59,7 @@ describe("compareChampions", () => {
   });
 
   it("multi-value identical sets are correct even if order/case differ", () => {
-    const r = compareChampions(
-      { ...akali, genre: "assassin" },
-      { ...akali, genre: "Assassin" },
-    );
+    const r = compareChampions({ ...akali, genre: "assassin" }, { ...akali, genre: "Assassin" });
     expect(byKey(r, "genre").result).toBe("correct");
   });
 

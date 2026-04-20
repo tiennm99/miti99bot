@@ -28,8 +28,11 @@ export function makeWordSet(words) {
 
 /**
  * Validate a guess against the dictionary.
- *   null — input empty, wrong length, or not in dictionary (for "not a word")
- * Returns a discriminated result so the caller can tell *why* validation failed.
+ *
+ * Returns a discriminated result so the caller can tell *why* validation failed:
+ *   - "empty"   — input was blank or stripped to nothing.
+ *   - "length"  — normalized word is not WORD_LENGTH letters.
+ *   - "unknown" — right length, but not in the dictionary.
  *
  * @param {Set<string>} wordSet
  * @param {string} input

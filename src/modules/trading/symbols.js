@@ -30,7 +30,7 @@ export async function resolveSymbol(db, ticker) {
 
   // query TCBS to verify this is a real VN stock
   const to = Math.floor(Date.now() / 1000);
-  const url = `https://apipubaws.tcbs.com.vn/stock-insight/v1/stock/bars-long-term?ticker=${symbol}&type=stock&resolution=D&countBack=1&to=${to}`;
+  const url = `https://apipubaws.tcbs.com.vn/stock-insight/v1/stock/bars-long-term?ticker=${encodeURIComponent(symbol)}&type=stock&resolution=D&countBack=1&to=${to}`;
   const res = await fetch(url);
   if (!res.ok) return null;
   const json = await res.json();
