@@ -9,10 +9,11 @@
   },
   "scripts": {
     "dev": "wrangler dev",
-    "deploy": "wrangler deploy && npm run db:migrate && npm run register",
+    "build:loldle-data": "node scripts/build-loldle-data.js",
+    "deploy": "npm run build:loldle-data && wrangler deploy && npm run db:migrate && npm run register",
     "db:migrate": "node scripts/migrate.js",
-    "register": "node --env-file=.env.deploy scripts/register.js",
-    "register:dry": "node --env-file=.env.deploy scripts/register.js --dry-run",
+    "register": "node --env-file-if-exists=.env.deploy scripts/register.js",
+    "register:dry": "node --env-file-if-exists=.env.deploy scripts/register.js --dry-run",
     "lint": "biome check src tests scripts && eslint src",
     "format": "biome format --write src tests scripts",
     "test": "vitest run"

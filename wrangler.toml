@@ -14,8 +14,8 @@ MODULES = "util,wordle,loldle,misc,trading"
 # then paste the returned IDs below.
 [[kv_namespaces]]
 binding = "KV"
-id = "REPLACE_ME"
-preview_id = "REPLACE_ME"
+id = "f7f190fcb2fa42eb84a05542911334b0"
+preview_id = "0ad72e1c34174f8cadf828e62db099a8"
 
 # D1 database for module persistent storage. Each module prefixes its tables
 # with `{moduleName}_` (e.g. `trading_trades`). Migrations are applied via
@@ -25,7 +25,7 @@ preview_id = "REPLACE_ME"
 [[d1_databases]]
 binding = "DB"
 database_name = "miti99bot-db"
-database_id = "REPLACE_ME_D1_UUID"
+database_id = "261b54e7-0fdb-4fe7-8ed9-2e8a8bcf459c"
 
 # Cron Triggers — union of all schedules declared by modules.
 # When adding a module with cron entries, append its schedule(s) here.

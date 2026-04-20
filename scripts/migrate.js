@@ -2,7 +2,7 @@
 /**
  * @file migrate — custom D1 migration runner for per-module SQL files.
  *
- * Discovers all `src/modules/*/ migrations; /*.sql` files, sorts them
+ * Discovers all SQL files under `src/modules/<name>/migrations/`, sorts them
  * deterministically (by `{moduleName}/{filename}`), then applies each NEW
  * migration via `wrangler d1 execute miti99bot-db --remote --file=<path>`.
  *
