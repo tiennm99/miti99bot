@@ -1,8 +1,10 @@
 /**
- * @file Symbol resolution — dynamically resolves stock tickers via TCBS API.
+ * @file Symbol resolution — dynamically resolves stock tickers via KBS.
  * Resolved symbols are cached in KV permanently to avoid repeated lookups.
  * Currently only supports VN stocks. Crypto, gold, forex coming later.
  */
+
+import { fetchStockPrice } from "./prices.js";
 
 const COMING_SOON = "Crypto, gold & currency exchange coming soon!";
 
@@ -14,28 +16,22 @@ const COMING_SOON = "Crypto, gold & currency exchange coming soon!";
  */
 
 /**
- * Resolve a ticker to a symbol entry. Checks KV cache first, then queries TCBS.
+ * Resolve a ticker to a symbol entry. Checks KV cache first, then queries KBS.
+ * Validation reuses the KBS price endpoint — if it returns a bar, the ticker is real.
  * @param {import("../../db/kv-store-interface.js").KVStore} db
  * @param {string} ticker — user input, case-insensitive
- * @returns {Promise<ResolvedSymbol|null>} null if not found on TCBS
+ * @returns {Promise<ResolvedSymbol|null>} null if KBS has no data for this ticker
  */
 export async function resolveSymbol(db, ticker) {
   if (!ticker) return null;
   const symbol = ticker.toUpperCase();
   const cacheKey = `sym:${symbol}`;
 
-  // check KV cache
   const cached = await db.getJSON(cacheKey);
   if (cached) return cached;
 
-  // query TCBS to verify this is a real VN stock
-  const to = Math.floor(Date.now() / 1000);
-  const url = `https://apipubaws.tcbs.com.vn/stock-insight/v1/stock/bars-long-term?ticker=${encodeURIComponent(symbol)}&type=stock&resolution=D&countBack=1&to=${to}`;
-  const res = await fetch(url);
-  if (!res.ok) return null;
-  const json = await res.json();
-  const close = json?.data?.[0]?.close;
-  if (close == null) return null;
+  const price = await fetchStockPrice(symbol);
+  if (price == null) return null;
 
   const entry = { symbol, category: "stock", label: symbol };
   // cache permanently — stock tickers don't change
