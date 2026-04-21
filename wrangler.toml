@@ -7,11 +7,6 @@ compatibility_date = "2025-10-01"
 [vars]
 MODULES = "util,wordle,loldle,misc,trading,lolschedule"
 
-# Optional — chat id the lolschedule cron pushes the daily digest to.
-# Leave unset to disable the push. To keep it out of git, prefer:
-#   wrangler secret put LOLSCHEDULE_CHAT_ID
-# LOLSCHEDULE_CHAT_ID = "123456789"
-
 # KV namespace holding all module state. Each module auto-prefixes its keys via createStore().
 # Create with:
 #   wrangler kv namespace create miti99bot-kv

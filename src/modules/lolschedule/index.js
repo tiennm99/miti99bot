@@ -7,14 +7,20 @@
  *   /lolschedule_week  — next 7 ICT days, grouped per day → league.
  *
  * Cron:
- *   0 1 * * *  (08:00 ICT) — push today's major-league schedule to
- *   LOLSCHEDULE_CHAT_ID when configured.
+ *   0 1 * * *  (08:00 ICT) — push today's major-league schedule to every
+ *   chat that has opted in via /lolschedule_subscribe.
  *
  * See the module README for data-source rationale and the verification
  * reports under plans/reports/ for historical context.
  */
 
-import { handleDailyPushCron, handleToday, handleWeek } from "./handlers.js";
+import {
+  handleDailyPushCron,
+  handleSubscribe,
+  handleToday,
+  handleUnsubscribe,
+  handleWeek,
+} from "./handlers.js";
 
 /** @type {import("../../db/kv-store-interface.js").KVStore | null} */
 let db = null;
@@ -37,6 +43,18 @@ const lolscheduleModule = {
       visibility: "public",
       description: "LoL esports matches for the next 7 days",
       handler: (ctx) => handleWeek(ctx, db),
+    },
+    {
+      name: "lolschedule_subscribe",
+      visibility: "public",
+      description: "Get the daily LoL schedule digest at 08:00 ICT",
+      handler: (ctx) => handleSubscribe(ctx, db),
+    },
+    {
+      name: "lolschedule_unsubscribe",
+      visibility: "public",
+      description: "Stop receiving the daily LoL schedule digest",
+      handler: (ctx) => handleUnsubscribe(ctx, db),
     },
   ],
   crons: [

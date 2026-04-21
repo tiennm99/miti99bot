@@ -8,14 +8,16 @@ LoL esports match schedule via the **lolesports.com** esports-api (the data feed
 |---|---|
 | `/lolschedule_today` | Today's matches (ICT), grouped by league. Scores for played + live, times for upcoming. |
 | `/lolschedule_week`  | Next 7 days, grouped by day → league. |
+| `/lolschedule_subscribe` | Opt the current chat into the daily 08:00 ICT digest. |
+| `/lolschedule_unsubscribe` | Stop receiving the digest. |
 
 ## Cron
 
 | Schedule (UTC) | Local (ICT) | Purpose |
 |---|---|---|
-| `0 1 * * *` | 08:00 | Push today's major-league schedule to `LOLSCHEDULE_CHAT_ID`. Skipped silently when unset or when there are no matches today. |
+| `0 1 * * *` | 08:00 | Fan today's major-league schedule out to every chat subscribed via `/lolschedule_subscribe`. Skipped when no subscribers, no token, or no matches today. |
 
-Set the chat id with `wrangler secret put LOLSCHEDULE_CHAT_ID` (recommended) or as a `[vars]` entry in `wrangler.toml`.
+Subscribers are stored under the module's `subscribers` KV key as a JSON array of chat ids. Per-chat failures during fan-out are logged and swallowed so a single blocked chat can't stop the others.
 
 ## Data source
 
