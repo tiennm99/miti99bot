@@ -153,12 +153,8 @@ describe("renderWeek", () => {
     ).toContain("No matches this week.");
   });
 
-  it("nests leagues under each ICT day in chronological order", () => {
+  it("groups by league first then nests days chronologically", () => {
     const events = [
-      evt({
-        startTime: "2026-04-21T09:00:00Z",
-        league: { name: "LCK", slug: "lck" },
-      }),
       evt({
         startTime: "2026-04-22T09:00:00Z",
         league: { name: "LPL", slug: "lpl" },
@@ -167,15 +163,22 @@ describe("renderWeek", () => {
         startTime: "2026-04-22T11:00:00Z",
         league: { name: "LCK", slug: "lck" },
       }),
+      evt({
+        startTime: "2026-04-21T09:00:00Z",
+        league: { name: "LCK", slug: "lck" },
+      }),
     ];
     const out = renderWeek(
       events,
       new Date("2026-04-21T00:00:00Z"),
       new Date("2026-04-28T00:00:00Z"),
     );
-    expect(out.indexOf("Apr 21")).toBeLessThan(out.indexOf("Apr 22"));
-    // Apr 22: LCK section appears before LPL (per LEAGUE_ORDER)
-    const apr22Block = out.split("Apr 22")[1] || "";
-    expect(apr22Block.indexOf("<b>LCK</b>")).toBeLessThan(apr22Block.indexOf("<b>LPL</b>"));
+    // Top-level: LCK section appears before LPL (per LEAGUE_ORDER).
+    expect(out.indexOf("<b>LCK</b>")).toBeLessThan(out.indexOf("<b>LPL</b>"));
+    // Inside LCK: Apr 21 before Apr 22.
+    const lckBlock = out.split("<b>LCK</b>")[1].split("<b>LPL</b>")[0];
+    expect(lckBlock.indexOf("Apr 21")).toBeLessThan(lckBlock.indexOf("Apr 22"));
+    // Day labels use italic inside league sections (distinct from league bold).
+    expect(lckBlock).toContain("<i>Tue Apr 21</i>");
   });
 });

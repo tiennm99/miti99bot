@@ -151,7 +151,9 @@ export function renderToday(events, day) {
 }
 
 /**
- * Render week reply — grouped by ICT day → league.
+ * Render week reply — grouped by league → ICT day. The league ordering is
+ * determined by LEAGUE_ORDER; within each league, days appear chronologically
+ * and each day section lists its matches.
  *
  * @param {ScheduleEvent[]} events
  * @param {Date} from
@@ -164,24 +166,25 @@ export function renderWeek(events, from, to) {
   const header = `<b>LoL — ${fromLbl} → ${toLbl}</b> (ICT)`;
   if (events.length === 0) return `${header}\nNo matches this week.`;
 
-  /** @type {Map<string, { label: string, events: ScheduleEvent[] }>} */
-  const days = new Map();
-  for (const event of events) {
-    const d = new Date(event.startTime);
-    const key = ictDayKey(d);
-    let g = days.get(key);
-    if (!g) {
-      g = { label: formatIctDayLabel(d), events: [] };
-      days.set(key, g);
+  const leagueBlocks = groupByLeague(events).map((league) => {
+    /** @type {Map<string, { label: string, lines: string[] }>} */
+    const daysInLeague = new Map();
+    for (const event of league.events) {
+      const d = new Date(event.startTime);
+      const key = ictDayKey(d);
+      let g = daysInLeague.get(key);
+      if (!g) {
+        g = { label: formatIctDayLabel(d), lines: [] };
+        daysInLeague.set(key, g);
+      }
+      g.lines.push(formatEventLine(event));
     }
-    g.events.push(event);
-  }
+    const daySections = [...daysInLeague.keys()].sort().map((key) => {
+      const day = daysInLeague.get(key);
+      return `<i>${escapeHtml(day.label)}</i>\n${day.lines.join("\n")}`;
+    });
+    return `<b>${escapeHtml(league.name)}</b>\n${daySections.join("\n")}`;
+  });
 
-  const dayBlocks = [];
-  for (const key of [...days.keys()].sort()) {
-    const day = days.get(key);
-    const leagueSections = groupByLeague(day.events).map(renderLeagueSection);
-    dayBlocks.push(`<b>${escapeHtml(day.label)}</b>\n${leagueSections.join("\n")}`);
-  }
-  return `${header}\n\n${dayBlocks.join("\n\n")}`;
+  return `${header}\n\n${leagueBlocks.join("\n\n")}`;
 }
