@@ -3,12 +3,17 @@ import { createStore } from "../../../src/db/create-store.js";
 import { comingSoonMessage, resolveSymbol } from "../../../src/modules/trading/symbols.js";
 import { makeFakeKv } from "../../fakes/fake-kv-namespace.js";
 
-/** Stub global.fetch to return TCBS-like response */
+/** Stub global.fetch to return KBS-like response */
 function stubFetch(hasData = true) {
   global.fetch = vi.fn(() =>
     Promise.resolve({
       ok: true,
-      json: () => Promise.resolve(hasData ? { data: [{ close: 25 }] } : { data: [] }),
+      json: () =>
+        Promise.resolve(
+          hasData
+            ? { symbol: "TCB", data_day: [{ t: "2026-04-21 07:00", c: 25000 }] }
+            : { symbol: "NOPE", data_day: [] },
+        ),
     }),
   );
 }
@@ -21,7 +26,7 @@ describe("trading/symbols", () => {
     vi.restoreAllMocks();
   });
 
-  it("resolves a valid VN stock ticker via TCBS", async () => {
+  it("resolves a valid VN stock ticker via KBS", async () => {
     stubFetch();
     const result = await resolveSymbol(db, "TCB");
     expect(result).toEqual({ symbol: "TCB", category: "stock", label: "TCB" });
