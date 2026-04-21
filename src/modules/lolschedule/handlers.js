@@ -3,8 +3,8 @@
  *
  * Day boundaries are defined in ICT (UTC+7). Data comes from lolesports.com
  * via a cache-first fetcher; no cron pre-warm is needed because the upstream
- * API is rate-limit friendly. A daily cron also pushes today's schedule to a
- * configured chat.
+ * API is rate-limit friendly. A daily cron fans today's schedule out to every
+ * chat opted in via /lolschedule_subscribe.
  */
 
 import { getEventsCached } from "./api-client.js";
