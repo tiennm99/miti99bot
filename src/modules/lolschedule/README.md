@@ -7,7 +7,7 @@ LoL esports match schedule via the **lolesports.com** esports-api (the data feed
 | Command | Description |
 |---|---|
 | `/lolschedule_today` | Today's matches (ICT), grouped by league. Scores for played + live, times for upcoming. |
-| `/lolschedule_week`  | Next 7 days, grouped by day → league. |
+| `/lolschedule_week`  | Next 7 days, grouped by league → day. |
 | `/lolschedule_subscribe` | Opt the current chat into the daily 08:00 ICT digest. |
 | `/lolschedule_unsubscribe` | Stop receiving the digest. |
 
@@ -63,7 +63,7 @@ Cache-first with KV. Key is `matches:{fromIso}:{toIso}`.
 ## Grouping
 
 - `/lolschedule_today` — one section per league (header + match lines).
-- `/lolschedule_week`  — one section per ICT day; within each day, leagues are sub-grouped.
+- `/lolschedule_week`  — one section per league; within each league, matches are sub-grouped by ICT day (italic date headers).
 - League ordering follows `LEAGUE_ORDER` in `format.js` (worlds / msi / first_stand first, then LCK / LPL / LEC / LCS, then the rest).
 
 ## Subscribers
