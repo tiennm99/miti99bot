@@ -17,10 +17,10 @@ Paper-trading system where each Telegram user manages a virtual portfolio. Curre
 Symbols are **resolved dynamically** — no hardcoded registry. When a user buys a ticker:
 
 1. Check KV cache (`sym:<TICKER>`) → if cached, use it
-2. Query TCBS API to verify the ticker exists and has price data
+2. Query KBS API to verify the ticker exists and has price data
 3. Cache the resolution permanently in KV
 
-Any valid VN stock ticker on TCBS "just works" without code changes.
+Any valid VN stock ticker listed on KBS "just works" without code changes.
 
 ## Database
 
@@ -53,25 +53,25 @@ KV namespace prefix: `trading:`
 { "symbol": "TCB", "category": "stock", "label": "TCB" }
 ```
 
-Cached permanently after first successful TCBS lookup.
+Cached permanently after first successful KBS lookup.
 
 ## Price Source
 
 | API | Purpose | Auth |
 |-----|---------|------|
-| TCBS `/stock-insight/v1/stock/bars-long-term` | VN stock close price (× 1000) | None |
+| KBS `/iis-server/investment/stocks/{TICKER}/data_day` | VN stock daily close (VND, unscaled) | None |
 
-Prices are fetched on demand per symbol (not batch-cached), since any ticker can be queried dynamically.
+Prices are fetched on demand per symbol (not batch-cached), since any ticker can be queried dynamically. KBS returns a multi-day OHLCV window; we take the latest bar's close.
 
 ## File Layout
 
 ```
 src/modules/trading/
 ├── index.js          — module entry, wires handlers to commands
-├── symbols.js        — dynamic symbol resolution via TCBS + KV cache
+├── symbols.js        — dynamic symbol resolution via KBS + KV cache
 ├── format.js         — VND/stock number formatters
 ├── portfolio.js      — per-user KV read/write, flat assets map
-├── prices.js         — TCBS stock price fetch + BIDV forex (for future use)
+├── prices.js         — KBS stock price fetch + BIDV forex (for future use)
 ├── handlers.js       — topup/buy/sell/convert handlers
 └── stats-handler.js  — stats/P&L breakdown handler
 ```
