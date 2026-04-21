@@ -58,5 +58,6 @@ tracks what's **next**, not what's done — for completed work, see git log and
   per-chat daily (each group has its own seed)?
 - Does daily mode count toward the existing `stats:<subject>` record, or live
   in a separate `daily-stats:<subject>:<date>` namespace?
-- Do we keep `/wordle_new` and `/loldle_new` in daily mode, or hide them until
-  the next UTC rollover?
+- Do we keep `/wordle_new` in daily mode, or hide it until the next UTC
+  rollover? (Loldle auto-starts a fresh round after solve/giveup, so the
+  question only applies to wordle now.)
