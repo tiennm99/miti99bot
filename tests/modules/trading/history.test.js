@@ -239,10 +239,14 @@ describe("buy/sell handlers → recordTrade integration", () => {
 
   function stubFetch() {
     global.fetch = vi.fn((url) => {
-      if (url.includes("tcbs")) {
+      if (url.includes("kbsec")) {
         return Promise.resolve({
           ok: true,
-          json: () => Promise.resolve({ data: [{ close: 25 }] }),
+          json: () =>
+            Promise.resolve({
+              symbol: "TCB",
+              data_day: [{ t: "2026-04-21 07:00", c: 25000 }],
+            }),
         });
       }
       if (url.includes("bidv")) {

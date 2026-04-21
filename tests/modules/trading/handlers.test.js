@@ -20,13 +20,17 @@ function makeCtx(match = "", userId = 42) {
   };
 }
 
-/** Stub fetch — TCBS returns stock data, BIDV returns forex */
+/** Stub fetch — KBS returns stock data, BIDV returns forex */
 function stubFetch() {
   global.fetch = vi.fn((url) => {
-    if (url.includes("tcbs")) {
+    if (url.includes("kbsec")) {
       return Promise.resolve({
         ok: true,
-        json: () => Promise.resolve({ data: [{ close: 25 }] }),
+        json: () =>
+          Promise.resolve({
+            symbol: "TCB",
+            data_day: [{ t: "2026-04-21 07:00", c: 25000 }],
+          }),
       });
     }
     if (url.includes("bidv")) {
@@ -105,9 +109,12 @@ describe("trading/handlers", () => {
     });
 
     it("rejects unknown ticker", async () => {
-      // stub TCBS to return empty data for unknown ticker
+      // stub KBS to return empty data_day for unknown ticker
       global.fetch = vi.fn(() =>
-        Promise.resolve({ ok: true, json: () => Promise.resolve({ data: [] }) }),
+        Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ symbol: "NOPE", data_day: [] }),
+        }),
       );
       const ctx = makeCtx("10 NOPE");
       await handleBuy(ctx, db);
