@@ -7,10 +7,12 @@ import {
 import { makeFakeKv } from "../../fakes/fake-kv-namespace.js";
 
 function cargoResponse(rows) {
+  const payload = { cargoquery: rows.map((title) => ({ title })) };
   return {
     ok: true,
     status: 200,
-    json: async () => ({ cargoquery: rows.map((title) => ({ title })) }),
+    text: async () => JSON.stringify(payload),
+    json: async () => payload,
   };
 }
 
@@ -53,10 +55,12 @@ describe("fetchMatchesInRange", () => {
   });
 
   it("surfaces Leaguepedia API error field", async () => {
+    const errPayload = { error: { info: "Bad query", code: "x" } };
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
-      json: async () => ({ error: { info: "Bad query", code: "x" } }),
+      text: async () => JSON.stringify(errPayload),
+      json: async () => errPayload,
     });
     await expect(
       fetchMatchesInRange(new Date("2026-04-21T00:00:00Z"), new Date("2026-04-22T00:00:00Z")),
