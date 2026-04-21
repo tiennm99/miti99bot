@@ -1,36 +1,32 @@
 /**
  * @file Pure formatters — Telegram HTML output for today / week match lists.
  *
- * All user-influenced substrings are escaped; match rows come from the public
- * wiki so we treat them as untrusted. Times are rendered in ICT (UTC+7) since
- * the bot's primary audience is VN; feel free to branch by chat locale later.
+ * Takes lolesports.com schedule events and renders them. All user-influenced
+ * substrings are HTML-escaped. Times are shown in ICT (UTC+7).
  */
 
 import { escapeHtml } from "../../util/escape-html.js";
 
-/** @typedef {import("./api-client.js").MatchRow} MatchRow */
+/** @typedef {import("./api-client.js").ScheduleEvent} ScheduleEvent */
+/** @typedef {import("./api-client.js").Team} Team */
 
 const TZ_OFFSET_MS = 7 * 60 * 60 * 1000; // ICT = UTC+7
 
-/** Parse Leaguepedia's `YYYY-MM-DD HH:MM:SS` UTC literal into a Date. */
-export function parseUtc(literal) {
-  return new Date(`${literal.replace(" ", "T")}Z`);
-}
-
-/** Shift a UTC date by the ICT offset so getUTC* methods yield ICT components. */
+/** Shift a UTC Date by the ICT offset so getUTC* yields ICT components. */
 function toIct(date) {
   return new Date(date.getTime() + TZ_OFFSET_MS);
 }
 
-/** Format ICT time as `HH:MM`. */
-function formatIctTime(date) {
+function pad(n) {
+  return String(n).padStart(2, "0");
+}
+
+export function formatIctTime(date) {
   const d = toIct(date);
-  const pad = (n) => String(n).padStart(2, "0");
   return `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`;
 }
 
-/** Format ICT date as `Mon Apr 21` (weekday + month + day). */
-function formatIctDayLabel(date) {
+export function formatIctDayLabel(date) {
   const d = toIct(date);
   const weekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   const months = [
@@ -50,116 +46,93 @@ function formatIctDayLabel(date) {
   return `${weekdays[d.getUTCDay()]} ${months[d.getUTCMonth()]} ${d.getUTCDate()}`;
 }
 
-/** ICT calendar-day key `YYYY-MM-DD` (used for grouping). */
 function ictDayKey(date) {
   const d = toIct(date);
-  const pad = (n) => String(n).padStart(2, "0");
   return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
 }
 
-/** Coerce Leaguepedia's string score into a number, or null. */
-function parseScore(s) {
-  if (s == null || s === "") return null;
-  const n = Number(s);
-  return Number.isFinite(n) ? n : null;
+/** Pick the visible short tag for a team. */
+function teamLabel(team) {
+  if (!team) return "TBD";
+  return team.code || team.name || "TBD";
 }
 
 /**
- * Classify a match row's display state.
+ * Render one event line (no leading newline).
  *
- * @param {MatchRow} row
- * @param {number} nowMs — injected for testability.
- * @returns {"played"|"live"|"scheduled"}
+ * @param {ScheduleEvent} event
+ * @returns {string} escaped HTML
  */
-export function classifyMatch(row, nowMs = Date.now()) {
-  const startMs = parseUtc(row.DateTime).getTime();
-  const winner = String(row.Winner ?? "");
-  if (winner === "1" || winner === "2") return "played";
-  const s1 = parseScore(row.S1);
-  const s2 = parseScore(row.S2);
-  const hasScore = (s1 ?? 0) + (s2 ?? 0) > 0;
-  if (startMs <= nowMs && hasScore) return "live";
-  return "scheduled";
+export function formatEventLine(event) {
+  const teams = event?.match?.teams || [];
+  const t1Label = escapeHtml(teamLabel(teams[0]));
+  const t2Label = escapeHtml(teamLabel(teams[1]));
+  const league = escapeHtml(event?.league?.name || "");
+  const block = event?.blockName ? ` (${escapeHtml(event.blockName)})` : "";
+  const bestOf = event?.match?.strategy?.count;
+  const bo = bestOf ? ` · Bo${bestOf}` : "";
+
+  if (event?.state === "completed") {
+    const w1 = teams[0]?.result?.gameWins ?? 0;
+    const w2 = teams[1]?.result?.gameWins ?? 0;
+    const winner1 = teams[0]?.result?.outcome === "win";
+    const winner2 = teams[1]?.result?.outcome === "win";
+    const l = winner1 ? `<b>${t1Label}</b>` : t1Label;
+    const r = winner2 ? `<b>${t2Label}</b>` : t2Label;
+    return `✅ ${l} ${w1}–${w2} ${r}${bo} · ${league}${block}`;
+  }
+  if (event?.state === "inProgress") {
+    const w1 = teams[0]?.result?.gameWins ?? 0;
+    const w2 = teams[1]?.result?.gameWins ?? 0;
+    return `🔴 LIVE ${t1Label} ${w1}–${w2} ${t2Label}${bo} · ${league}${block}`;
+  }
+  // unstarted or unknown
+  const time = formatIctTime(new Date(event.startTime));
+  return `🕒 ${time} ${t1Label} vs ${t2Label}${bo} · ${league}${block}`;
 }
 
 /**
- * Render one match line (no leading newline).
+ * Render today's reply.
  *
- * @param {MatchRow} row
- * @param {number} [nowMs]
- * @returns {string} HTML — already escaped
- */
-export function formatMatchLine(row, nowMs = Date.now()) {
-  const t1 = escapeHtml(row.T1 || "TBD");
-  const t2 = escapeHtml(row.T2 || "TBD");
-  const tournament = escapeHtml(row.Tournament || "");
-  const bo = row.BO ? ` · Bo${escapeHtml(row.BO)}` : "";
-  const state = classifyMatch(row, nowMs);
-
-  if (state === "played") {
-    const s1 = parseScore(row.S1) ?? 0;
-    const s2 = parseScore(row.S2) ?? 0;
-    const w1 = String(row.Winner) === "1" ? "<b>" : "";
-    const w1c = w1 ? "</b>" : "";
-    const w2 = String(row.Winner) === "2" ? "<b>" : "";
-    const w2c = w2 ? "</b>" : "";
-    return `✅ ${w1}${t1}${w1c} ${s1}–${s2} ${w2}${t2}${w2c}${bo} · ${tournament}`;
-  }
-  if (state === "live") {
-    const s1 = parseScore(row.S1) ?? 0;
-    const s2 = parseScore(row.S2) ?? 0;
-    return `🔴 LIVE ${t1} ${s1}–${s2} ${t2}${bo} · ${tournament}`;
-  }
-  const time = formatIctTime(parseUtc(row.DateTime));
-  return `🕒 ${time} ${t1} vs ${t2}${bo} · ${tournament}`;
-}
-
-/**
- * Render the "today" command reply.
- *
- * @param {MatchRow[]} rows
+ * @param {ScheduleEvent[]} events
  * @param {Date} day — any moment on the target ICT day.
- * @param {number} [nowMs]
  * @returns {string}
  */
-export function renderToday(rows, day, nowMs = Date.now()) {
+export function renderToday(events, day) {
   const header = `<b>LoL — ${escapeHtml(formatIctDayLabel(day))}</b> (ICT)`;
-  if (rows.length === 0) return `${header}\nNo matches today.`;
-  return `${header}\n${rows.map((r) => formatMatchLine(r, nowMs)).join("\n")}`;
+  if (events.length === 0) return `${header}\nNo matches today.`;
+  return `${header}\n${events.map(formatEventLine).join("\n")}`;
 }
 
 /**
- * Render the "week" command reply — matches grouped by ICT day.
+ * Render week reply — grouped by ICT day.
  *
- * @param {MatchRow[]} rows
+ * @param {ScheduleEvent[]} events
  * @param {Date} from
  * @param {Date} to
- * @param {number} [nowMs]
  * @returns {string}
  */
-export function renderWeek(rows, from, to, nowMs = Date.now()) {
+export function renderWeek(events, from, to) {
   const fromLbl = escapeHtml(formatIctDayLabel(from));
-  // `to` is exclusive; subtract 1 ms for a friendlier "through" label.
   const toLbl = escapeHtml(formatIctDayLabel(new Date(to.getTime() - 1)));
   const header = `<b>LoL — ${fromLbl} → ${toLbl}</b> (ICT)`;
-  if (rows.length === 0) return `${header}\nNo matches this week.`;
+  if (events.length === 0) return `${header}\nNo matches this week.`;
 
   /** @type {Map<string, { label: string, lines: string[] }>} */
   const groups = new Map();
-  for (const row of rows) {
-    const d = parseUtc(row.DateTime);
+  for (const event of events) {
+    const d = new Date(event.startTime);
     const key = ictDayKey(d);
     let g = groups.get(key);
     if (!g) {
       g = { label: formatIctDayLabel(d), lines: [] };
       groups.set(key, g);
     }
-    g.lines.push(formatMatchLine(row, nowMs));
+    g.lines.push(formatEventLine(event));
   }
 
   const sections = [];
-  const sortedKeys = [...groups.keys()].sort();
-  for (const key of sortedKeys) {
+  for (const key of [...groups.keys()].sort()) {
     const g = groups.get(key);
     sections.push(`<b>${escapeHtml(g.label)}</b>\n${g.lines.join("\n")}`);
   }

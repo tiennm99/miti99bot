@@ -1,149 +1,157 @@
 /**
- * @file Leaguepedia cargoquery client for LoL esports match schedule.
+ * @file lolesports.com esports-api client.
  *
- * Uses the MediaWiki Cargo extension on lol.fandom.com. No auth. We identify
- * ourselves with a contact UA (Fandom policy) and cache via both the Worker
- * edge cache (`cf.cacheTtl`) and the module's KVStore for cross-edge reuse.
+ * Endpoint: https://esports-api.lolesports.com/persisted/gw/getSchedule
+ * Auth: `x-api-key` header — the public key embedded in lolesports.com's own
+ *   web client. No registration. No practical rate limit (the same key serves
+ *   the live site). If Riot ever rotates it, lift the new value from their
+ *   public JS bundle.
  *
- * @see plans/reports/researcher-260421-0845-leaguepedia-api-verification.md
+ * We cache responses in KV keyed by league filter so concurrent user requests
+ * collapse to one upstream hit within the TTL window.
  */
 
-const API_URL = "https://lol.fandom.com/api.php";
-const USER_AGENT = "miti99bot/0.1 (https://t.me/miti99bot; minhtienit99@gmail.com)";
+const API_URL = "https://esports-api.lolesports.com/persisted/gw/getSchedule";
+const API_KEY = "0TvQnueqKa5mxJntVWt0w4LpLfEkrV1Ta8rQBb9Z";
+const USER_AGENT = "miti99bot/0.1 (https://t.me/miti99bot)";
 
-/** Default KV cache windows — short enough to catch score updates mid-day. */
-const CACHE_TTL_TODAY_SEC = 60;
-const CACHE_TTL_WEEK_SEC = 300;
+/** Short cache — schedule data changes minute-by-minute during live events. */
+const CACHE_TTL_SEC = 120;
+/** Stale fallback ceiling for resilience during upstream hiccups. */
+const STALE_MAX_AGE_SEC = 60 * 60;
 
 /**
- * @typedef {object} MatchRow
- * @property {string} DateTime — "YYYY-MM-DD HH:MM:SS" UTC (Leaguepedia convention).
- * @property {string} T1
- * @property {string} T2
- * @property {string|null} S1 — team-1 score, may be empty string before match.
- * @property {string|null} S2
- * @property {string|null} Winner — "1" | "2" | "" when unplayed.
- * @property {string} Tournament
- * @property {string|null} BO — best-of count as string.
- * @property {string} OP — OverviewPage (wiki slug) for deep-link.
+ * @typedef {object} Team
+ * @property {string} name
+ * @property {string} code — short league tag, e.g. "T1", "GEN".
+ * @property {string} [image]
+ * @property {{ outcome: "win"|"loss", gameWins: number }} [result]
+ * @property {{ wins: number, losses: number }} [record]
  */
 
 /**
- * Low-level cargoquery POST. Uses POST to avoid edge WAF stripping of `>=`/`<`
- * in the query string and to stay under URL-length limits for long where clauses.
- *
- * @param {Record<string, string>} params
- * @returns {Promise<object[]>} array of row `title` objects
+ * @typedef {object} ScheduleEvent
+ * @property {string} startTime — ISO 8601 UTC.
+ * @property {"unstarted"|"inProgress"|"completed"} state
+ * @property {string} [blockName] — e.g. "Week 4".
+ * @property {{ name: string, slug: string, image?: string }} league
+ * @property {{
+ *   id: string,
+ *   teams: Team[],
+ *   strategy: { type: string, count: number }
+ * }} match
  */
-async function cargoQuery(params) {
-  const body = new URLSearchParams({
-    action: "cargoquery",
-    format: "json",
-    ...params,
-  });
-  const res = await fetch(API_URL, {
-    method: "POST",
+
+/**
+ * Fetch one page of schedule events. Returns events + pagination tokens.
+ *
+ * @param {object} [opts]
+ * @param {string} [opts.pageToken] — `newer`/`older` cursor from a previous call.
+ * @param {string} [opts.leagueId] — optional comma-separated league IDs.
+ * @returns {Promise<{ events: ScheduleEvent[], olderToken?: string, newerToken?: string }>}
+ */
+export async function fetchSchedulePage({ pageToken, leagueId } = {}) {
+  const url = new URL(API_URL);
+  url.searchParams.set("hl", "en-US");
+  if (pageToken) url.searchParams.set("pageToken", pageToken);
+  if (leagueId) url.searchParams.set("leagueId", leagueId);
+
+  const res = await fetch(url.toString(), {
     headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
+      "x-api-key": API_KEY,
       "User-Agent": USER_AGENT,
       Accept: "application/json",
     },
-    body,
-    cf: { cacheTtl: 30, cacheEverything: true },
+    cf: { cacheTtl: 60, cacheEverything: true },
   });
   const text = await res.text();
   if (!res.ok) {
     console.log(
       JSON.stringify({ msg: "lolschedule_fetch", status: res.status, body: text.slice(0, 500) }),
     );
-    throw new Error(`Leaguepedia API HTTP ${res.status}`);
+    throw new Error(`lolesports API HTTP ${res.status}`);
   }
   let json;
   try {
     json = JSON.parse(text);
   } catch {
-    console.log(
-      JSON.stringify({ msg: "lolschedule_parse_fail", body: text.slice(0, 500) }),
-    );
-    throw new Error("Leaguepedia non-JSON response");
+    throw new Error("lolesports non-JSON response");
   }
-  if (json?.error) {
-    console.log(
-      JSON.stringify({
-        msg: "lolschedule_api_error",
-        code: json.error.code,
-        info: json.error.info,
-      }),
-    );
-    throw new Error(`Leaguepedia error: ${json.error.info || json.error.code}`);
-  }
-  const rows = (json?.cargoquery || []).map((r) => r.title);
-  console.log(JSON.stringify({ msg: "lolschedule_fetch_ok", rows: rows.length }));
-  return rows;
-}
-
-/** Format a JS Date as Leaguepedia's UTC literal: `YYYY-MM-DD HH:MM:SS`. */
-function toUtcLiteral(date) {
-  const pad = (n) => String(n).padStart(2, "0");
-  return (
-    `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())} ` +
-    `${pad(date.getUTCHours())}:${pad(date.getUTCMinutes())}:${pad(date.getUTCSeconds())}`
-  );
+  const schedule = json?.data?.schedule;
+  const events = Array.isArray(schedule?.events) ? schedule.events : [];
+  const filtered = events.filter((e) => e?.type !== "show"); // drop pre/post shows
+  return {
+    events: /** @type {ScheduleEvent[]} */ (filtered),
+    olderToken: schedule?.pages?.older,
+    newerToken: schedule?.pages?.newer,
+  };
 }
 
 /**
- * Fetch matches with DateTime_UTC in [from, to).
+ * Fetch enough pages forward in time to cover the given UTC window.
+ * Default page returns ~20 events; week view usually needs 1 extra page.
  *
  * @param {Date} from
  * @param {Date} to
- * @returns {Promise<MatchRow[]>}
+ * @param {number} [maxPages] — hard cap to keep it bounded.
+ * @returns {Promise<ScheduleEvent[]>}
  */
-export async function fetchMatchesInRange(from, to) {
-  const fromLit = toUtcLiteral(from);
-  const toLit = toUtcLiteral(to);
-  const rows = await cargoQuery({
-    tables: "MatchSchedule=MS",
-    fields:
-      "MS.DateTime_UTC=DateTime," +
-      "MS.Team1=T1,MS.Team2=T2," +
-      "MS.Team1Score=S1,MS.Team2Score=S2," +
-      "MS.Winner=Winner,MS.Tournament=Tournament," +
-      "MS.BestOf=BO,MS.OverviewPage=OP",
-    where: `MS.DateTime_UTC >= "${fromLit}" AND MS.DateTime_UTC < "${toLit}"`,
-    order_by: "MS.DateTime_UTC ASC",
-    limit: "100",
+export async function fetchEventsInRange(from, to, maxPages = 3) {
+  const fromMs = from.getTime();
+  const toMs = to.getTime();
+  /** @type {ScheduleEvent[]} */
+  const collected = [];
+  let pageToken;
+  for (let i = 0; i < maxPages; i++) {
+    const { events, newerToken } = await fetchSchedulePage({ pageToken });
+    collected.push(...events);
+    // If the latest event in the page is already past our window end, stop.
+    const lastMs = events.length ? Date.parse(events[events.length - 1].startTime) : null;
+    if (lastMs !== null && lastMs >= toMs) break;
+    if (!newerToken) break;
+    pageToken = newerToken;
+  }
+  return collected.filter((e) => {
+    const t = Date.parse(e.startTime);
+    return t >= fromMs && t < toMs;
   });
-  return /** @type {MatchRow[]} */ (rows);
+}
+
+/** Build the KV cache key for a date range. */
+function cacheKey(from, to) {
+  return `matches:${from.toISOString()}:${to.toISOString()}`;
 }
 
 /**
- * Cache-first match lookup keyed by date range. Returns cached rows without
- * refetch within TTL; on fetch failure, returns stale cache if available.
+ * Cache-first lookup. Returns fresh cache within TTL, else tries upstream,
+ * else returns stale cache up to {@link STALE_MAX_AGE_SEC}, else throws.
  *
  * @param {import("../../db/kv-store-interface.js").KVStore} db
  * @param {Date} from
  * @param {Date} to
- * @param {number} ttlSec
- * @returns {Promise<MatchRow[]>}
+ * @returns {Promise<ScheduleEvent[]>}
  */
-export async function getCachedMatches(db, from, to, ttlSec) {
-  const key = `matches:${from.toISOString()}:${to.toISOString()}`;
+export async function getEventsCached(db, from, to) {
+  const key = cacheKey(from, to);
   const cached = await db.getJSON(key);
-  if (cached?.ts && Date.now() - cached.ts < ttlSec * 1000) {
-    return cached.rows;
+  if (cached?.ts && Date.now() - cached.ts < CACHE_TTL_SEC * 1000) {
+    return cached.events;
   }
   try {
-    const rows = await fetchMatchesInRange(from, to);
+    const events = await fetchEventsInRange(from, to);
     try {
-      await db.putJSON(key, { ts: Date.now(), rows }, { expirationTtl: ttlSec * 4 });
+      await db.putJSON(key, { ts: Date.now(), events }, { expirationTtl: STALE_MAX_AGE_SEC });
     } catch (err) {
-      console.warn("lolschedule: KV putJSON failed", String(err));
+      console.log(JSON.stringify({ msg: "lolschedule_kv_put_fail", err: String(err) }));
     }
-    return rows;
+    return events;
   } catch (err) {
-    if (cached?.rows) return cached.rows; // stale fallback
+    if (cached?.events && cached?.ts && Date.now() - cached.ts < STALE_MAX_AGE_SEC * 1000) {
+      console.log(JSON.stringify({ msg: "lolschedule_stale_fallback", err: String(err) }));
+      return cached.events;
+    }
     throw err;
   }
 }
 
-export { CACHE_TTL_TODAY_SEC, CACHE_TTL_WEEK_SEC };
+export { CACHE_TTL_SEC, STALE_MAX_AGE_SEC };
