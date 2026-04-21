@@ -11,13 +11,13 @@ GitHub Actions workflow that regenerates `champions-data.js`.
 | Command | Visibility | Description |
 |---------|-----------|-------------|
 | `/loldle` | public | Show current board, start a game, or submit a champion guess when an argument is provided |
-| `/loldle_new` | public | Start a new round (auto-gives-up any in-progress one) |
-| `/loldle_giveup` | public | Reveal the current loldle answer |
+| `/loldle_giveup` | public | Reveal the current loldle answer (auto-starts a fresh round) |
 | `/loldle_stats` | public | Show your loldle stats (wins, streak) |
 
 Submit a guess with `/loldle <champion>` — e.g. `/loldle Ahri`. Champion names
 are matched case/space/punctuation-insensitive with a unique-prefix fallback
-(see `lookup.js`).
+(see `lookup.js`). A round that ends (solved, gave up, or ran out of guesses)
+immediately rolls into a fresh round — no manual "new round" command needed.
 
 ## Architecture
 
@@ -27,8 +27,8 @@ are matched case/space/punctuation-insensitive with a unique-prefix fallback
 - `lookup.js` — normalizes user input and resolves it to a champion record.
 - `daily.js` — `pickRandom` / `pickDaily` (djb2-hashed date seed for future
   daily-mode use).
-- `render.js` — Telegram-friendly plain-text rendering (✅/🟨/❌ markers and
-  ⬆/⬇ year direction hints).
+- `render.js` — Telegram HTML `<pre>` monospace table with auto-widthed label
+  column (✅/🟨/❌ markers and ⬆️/⬇️ year direction hints).
 - `state.js` — KV persistence with `MAX_GUESSES = 8`, per-subject stats with
   streak tracking.
 - `handlers.js` — wires subject resolution (user id in DMs, chat id in groups)

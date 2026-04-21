@@ -2,7 +2,7 @@
  * @file Game state in KV, keyed by "subject" (user in DM, chat in groups).
  *
  * One active round per subject at a time. Rounds are self-paced: players
- * can /loldle_new to abandon and reroll. Streak = consecutive wins.
+ * can /loldle_giveup to reveal (a fresh round auto-starts). Streak = consecutive wins.
  *
  * Key layout (inside module-prefixed store):
  *   game:<subject>   -> { target, guesses[], solved, giveup, startedAt }

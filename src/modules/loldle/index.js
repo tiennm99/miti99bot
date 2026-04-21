@@ -5,7 +5,7 @@
  * tiennm99/loldle-data's champions.json (synced via GH Actions).
  */
 
-import { handleGiveup, handleLoldle, handleNew, handleStats } from "./handlers.js";
+import { handleGiveup, handleLoldle, handleStats } from "./handlers.js";
 
 /** @type {import("../../db/kv-store-interface.js").KVStore | null} */
 let db = null;
@@ -24,15 +24,9 @@ const loldleModule = {
       handler: (ctx) => handleLoldle(ctx, db),
     },
     {
-      name: "loldle_new",
-      visibility: "public",
-      description: "Start a new round (auto-gives-up any in-progress one)",
-      handler: (ctx) => handleNew(ctx, db),
-    },
-    {
       name: "loldle_giveup",
       visibility: "public",
-      description: "Reveal the current loldle answer",
+      description: "Reveal the current loldle answer (auto-starts a fresh round)",
       handler: (ctx) => handleGiveup(ctx, db),
     },
     {

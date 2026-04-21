@@ -8,9 +8,11 @@
  * Commands:
  *   /loldle              → show board / start puzzle
  *   /loldle <champion>   → submit a guess
- *   /loldle_new          → abandon current round (counts as giveup) + start fresh
- *   /loldle_giveup       → reveal answer, end current round
+ *   /loldle_giveup       → reveal answer, end round (a fresh round auto-starts)
  *   /loldle_stats        → show stats (per-user in DM, per-group in groups)
+ *
+ * A finished round (solved, gave up, or out of guesses) is immediately
+ * replaced by a fresh round, so the user can just keep playing.
  */
 
 import championsData from "./champions-data.js";
@@ -22,6 +24,8 @@ import { MAX_GUESSES, loadGame, loadStats, recordResult, saveGame } from "./stat
 
 /** @type {Array<Record<string, any>>} */
 const champions = championsData;
+
+const NEW_ROUND_HINT = "🆕 New round started. Use `/loldle <champion>` to guess.";
 
 /**
  * Returns the stable subject identifier for the current chat.
@@ -48,12 +52,14 @@ function isFinished(game) {
 
 /**
  * Load existing round, or create + persist a fresh random one.
+ * A previously-finished round is discarded and replaced with a fresh one so
+ * the game auto-continues without needing a manual "new round" command.
  * @param {import("../../db/kv-store-interface.js").KVStore} db
  * @param {number} subject
  */
 async function getOrInitGame(db, subject) {
   const existing = await loadGame(db, subject);
-  if (existing) return existing;
+  if (existing && !isFinished(existing)) return existing;
   return startFreshGame(db, subject);
 }
 
@@ -82,18 +88,8 @@ export async function handleLoldle(ctx, db) {
   const game = await getOrInitGame(db, subject);
 
   if (!arg) {
-    const header = game.solved
-      ? `🎉 Solved in ${game.guesses.length}/${MAX_GUESSES}. /loldle_new for another.`
-      : game.giveup
-        ? `🏳️ Gave up. Answer was ${game.target}. /loldle_new for another.`
-        : `Guess ${game.guesses.length}/${MAX_GUESSES}. Use \`/loldle <champion>\`.`;
-    return ctx.reply(`${header}\n\n${renderBoard(game.guesses)}`);
-  }
-
-  if (isFinished(game)) {
-    return ctx.reply(
-      `Current round is over. Use /loldle_new to start another. Answer was ${game.target}.`,
-    );
+    const header = `Guess ${game.guesses.length}/${MAX_GUESSES}. Use \`/loldle <champion>\`.`;
+    return ctx.reply(`${header}\n\n${renderBoard(game.guesses)}`, { parse_mode: "HTML" });
   }
 
   const guess = findChampion(champions, arg);
@@ -116,38 +112,23 @@ export async function handleLoldle(ctx, db) {
   const reply = renderGuess(guess.name, results);
   if (won) {
     const s = await recordResult(db, subject, true);
+    await startFreshGame(db, subject);
     return ctx.reply(
-      `${reply}\n\n🎉 Solved in ${game.guesses.length}/${MAX_GUESSES}! Streak: ${s.streak}. /loldle_new for another.`,
+      `${reply}\n\n🎉 Solved in ${game.guesses.length}/${MAX_GUESSES}! Streak: ${s.streak}.\n${NEW_ROUND_HINT}`,
+      { parse_mode: "HTML" },
     );
   }
   if (game.guesses.length >= MAX_GUESSES) {
     await recordResult(db, subject, false);
+    await startFreshGame(db, subject);
     return ctx.reply(
-      `${reply}\n\n❌ Out of guesses. Answer was ${target.name}. /loldle_new to retry.`,
+      `${reply}\n\n❌ Out of guesses. Answer was ${target.name}.\n${NEW_ROUND_HINT}`,
+      { parse_mode: "HTML" },
     );
   }
-  return ctx.reply(`${reply}\n\nGuess ${game.guesses.length}/${MAX_GUESSES}.`);
-}
-
-/**
- * @param {import("grammy").Context} ctx
- * @param {import("../../db/kv-store-interface.js").KVStore} db
- */
-export async function handleNew(ctx, db) {
-  const subject = getSubject(ctx);
-  if (subject == null) return ctx.reply("Cannot identify chat.");
-
-  const prior = await loadGame(db, subject);
-  let prelude = "";
-  if (prior && !isFinished(prior)) {
-    await recordResult(db, subject, false);
-    const prev = champions.find((c) => c.id === prior.target);
-    // prev may be undefined if champion data was refreshed — fall back to the id we stored.
-    prelude = `🏳️ Previous round abandoned (auto-giveup). Answer was ${prev?.name ?? prior.target}.\n\n`;
-  }
-
-  await startFreshGame(db, subject);
-  return ctx.reply(`${prelude}🆕 New round started. Use \`/loldle <champion>\` to guess.`);
+  return ctx.reply(`${reply}\n\nGuess ${game.guesses.length}/${MAX_GUESSES}.`, {
+    parse_mode: "HTML",
+  });
 }
 
 /**
@@ -158,16 +139,16 @@ export async function handleGiveup(ctx, db) {
   const subject = getSubject(ctx);
   if (subject == null) return ctx.reply("Cannot identify chat.");
   const game = await getOrInitGame(db, subject);
-  if (game.solved) return ctx.reply(`Already solved — ${game.target}.`);
-  if (game.giveup) return ctx.reply(`Already gave up — ${game.target}.`);
+  // getOrInitGame guarantees the returned game is unfinished, so mark + record.
   game.giveup = true;
   await saveGame(db, subject, game);
   await recordResult(db, subject, false);
   const target = champions.find((c) => c.id === game.target);
+  await startFreshGame(db, subject);
   if (!target) {
-    return ctx.reply(`🏳️ Answer was ${game.target}. /loldle_new for another.`);
+    return ctx.reply(`🏳️ Answer was ${game.target}.\n${NEW_ROUND_HINT}`);
   }
-  return ctx.reply(`🏳️ Answer was ${target.name} — ${target.title}. /loldle_new for another.`);
+  return ctx.reply(`🏳️ Answer was ${target.name} — ${target.title}.\n${NEW_ROUND_HINT}`);
 }
 
 /**
