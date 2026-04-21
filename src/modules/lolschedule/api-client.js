@@ -7,7 +7,7 @@
  *   the live site). If Riot ever rotates it, lift the new value from their
  *   public JS bundle.
  *
- * We cache responses in KV keyed by league filter so concurrent user requests
+ * We cache responses in KV keyed by date range so concurrent user requests
  * collapse to one upstream hit within the TTL window.
  */
 
@@ -43,18 +43,16 @@ const STALE_MAX_AGE_SEC = 60 * 60;
  */
 
 /**
- * Fetch one page of schedule events. Returns events + pagination tokens.
+ * Fetch one page of schedule events.
  *
  * @param {object} [opts]
- * @param {string} [opts.pageToken] — `newer`/`older` cursor from a previous call.
- * @param {string} [opts.leagueId] — optional comma-separated league IDs.
- * @returns {Promise<{ events: ScheduleEvent[], olderToken?: string, newerToken?: string }>}
+ * @param {string} [opts.pageToken] — forward cursor from a previous call's `newerToken`.
+ * @returns {Promise<{ events: ScheduleEvent[], newerToken?: string }>}
  */
-export async function fetchSchedulePage({ pageToken, leagueId } = {}) {
+export async function fetchSchedulePage({ pageToken } = {}) {
   const url = new URL(API_URL);
   url.searchParams.set("hl", "en-US");
   if (pageToken) url.searchParams.set("pageToken", pageToken);
-  if (leagueId) url.searchParams.set("leagueId", leagueId);
 
   const res = await fetch(url.toString(), {
     headers: {
@@ -82,7 +80,6 @@ export async function fetchSchedulePage({ pageToken, leagueId } = {}) {
   const filtered = events.filter((e) => e?.type !== "show"); // drop pre/post shows
   return {
     events: /** @type {ScheduleEvent[]} */ (filtered),
-    olderToken: schedule?.pages?.older,
     newerToken: schedule?.pages?.newer,
   };
 }
