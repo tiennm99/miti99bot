@@ -6,8 +6,16 @@ LoL esports match schedule via the **lolesports.com** esports-api (the data feed
 
 | Command | Description |
 |---|---|
-| `/lol_today` | Today's matches (ICT). Scores for played + live. Times for upcoming. |
-| `/lol_week`  | Next 7 days, grouped by day. |
+| `/lolschedule_today` | Today's matches (ICT), grouped by league. Scores for played + live, times for upcoming. |
+| `/lolschedule_week`  | Next 7 days, grouped by day → league. |
+
+## Cron
+
+| Schedule (UTC) | Local (ICT) | Purpose |
+|---|---|---|
+| `0 1 * * *` | 08:00 | Push today's major-league schedule to `LOLSCHEDULE_CHAT_ID`. Skipped silently when unset or when there are no matches today. |
+
+Set the chat id with `wrangler secret put LOLSCHEDULE_CHAT_ID` (recommended) or as a `[vars]` entry in `wrangler.toml`.
 
 ## Data source
 
@@ -49,6 +57,12 @@ Cache-first with KV. Key is `matches:{fromIso}:{toIso}`.
 - Fresh TTL: 120 s (catches live score updates quickly)
 - Stale fallback: up to 1 h on upstream failure
 - No cron pre-warm needed — upstream is cheap
+
+## Grouping
+
+- `/lolschedule_today` — one section per league (header + match lines).
+- `/lolschedule_week`  — one section per ICT day; within each day, leagues are sub-grouped.
+- League ordering follows `LEAGUE_ORDER` in `format.js` (worlds / msi / first_stand first, then LCK / LPL / LEC / LCS, then the rest).
 
 ## Time zone
 

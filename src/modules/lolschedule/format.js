@@ -1,8 +1,9 @@
 /**
  * @file Pure formatters — Telegram HTML output for today / week match lists.
  *
- * Takes lolesports.com schedule events and renders them. All user-influenced
- * substrings are HTML-escaped. Times are shown in ICT (UTC+7).
+ * Takes lolesports.com schedule events and renders them, grouped by league
+ * (today) and by day → league (week). All user-influenced substrings are
+ * HTML-escaped. Times are shown in ICT (UTC+7).
  */
 
 import { escapeHtml } from "../../util/escape-html.js";
@@ -11,6 +12,20 @@ import { escapeHtml } from "../../util/escape-html.js";
 /** @typedef {import("./api-client.js").Team} Team */
 
 const TZ_OFFSET_MS = 7 * 60 * 60 * 1000; // ICT = UTC+7
+
+/** Ordering for league sections — most prestigious tournaments first. */
+const LEAGUE_ORDER = [
+  "worlds",
+  "msi",
+  "first_stand",
+  "lck",
+  "lpl",
+  "lec",
+  "lcs",
+  "lcp",
+  "cblol-brazil",
+  "emea_masters",
+];
 
 /** Shift a UTC Date by the ICT offset so getUTC* yields ICT components. */
 function toIct(date) {
@@ -58,41 +73,75 @@ function teamLabel(team) {
 }
 
 /**
- * Render one event line (no leading newline).
+ * Render one event line (no leading newline). By default the league name is
+ * omitted because events are rendered under a league header; pass
+ * `{ showLeague: true }` to include it for flat lists.
  *
  * @param {ScheduleEvent} event
+ * @param {{ showLeague?: boolean }} [opts]
  * @returns {string} escaped HTML
  */
-export function formatEventLine(event) {
+export function formatEventLine(event, { showLeague = false } = {}) {
   const teams = event?.match?.teams || [];
   const t1Label = escapeHtml(teamLabel(teams[0]));
   const t2Label = escapeHtml(teamLabel(teams[1]));
-  const league = escapeHtml(event?.league?.name || "");
   const block = event?.blockName ? ` (${escapeHtml(event.blockName)})` : "";
   const bestOf = event?.match?.strategy?.count;
   const bo = bestOf ? ` · Bo${bestOf}` : "";
+  const leagueSuffix =
+    showLeague && event?.league?.name ? ` · ${escapeHtml(event.league.name)}` : "";
 
   if (event?.state === "completed") {
     const w1 = teams[0]?.result?.gameWins ?? 0;
     const w2 = teams[1]?.result?.gameWins ?? 0;
-    const winner1 = teams[0]?.result?.outcome === "win";
-    const winner2 = teams[1]?.result?.outcome === "win";
-    const l = winner1 ? `<b>${t1Label}</b>` : t1Label;
-    const r = winner2 ? `<b>${t2Label}</b>` : t2Label;
-    return `✅ ${l} ${w1}–${w2} ${r}${bo} · ${league}${block}`;
+    const l = teams[0]?.result?.outcome === "win" ? `<b>${t1Label}</b>` : t1Label;
+    const r = teams[1]?.result?.outcome === "win" ? `<b>${t2Label}</b>` : t2Label;
+    return `✅ ${l} ${w1}–${w2} ${r}${bo}${leagueSuffix}${block}`;
   }
   if (event?.state === "inProgress") {
     const w1 = teams[0]?.result?.gameWins ?? 0;
     const w2 = teams[1]?.result?.gameWins ?? 0;
-    return `🔴 LIVE ${t1Label} ${w1}–${w2} ${t2Label}${bo} · ${league}${block}`;
+    return `🔴 LIVE ${t1Label} ${w1}–${w2} ${t2Label}${bo}${leagueSuffix}${block}`;
   }
-  // unstarted or unknown
   const time = formatIctTime(new Date(event.startTime));
-  return `🕒 ${time} ${t1Label} vs ${t2Label}${bo} · ${league}${block}`;
+  return `🕒 ${time} ${t1Label} vs ${t2Label}${bo}${leagueSuffix}${block}`;
 }
 
 /**
- * Render today's reply.
+ * Group events by league slug, preserving LEAGUE_ORDER for known leagues and
+ * falling back to alphabetical for anything else.
+ *
+ * @param {ScheduleEvent[]} events
+ * @returns {Array<{ slug: string, name: string, events: ScheduleEvent[] }>}
+ */
+function groupByLeague(events) {
+  /** @type {Map<string, { slug: string, name: string, events: ScheduleEvent[] }>} */
+  const bySlug = new Map();
+  for (const event of events) {
+    const slug = event?.league?.slug || "unknown";
+    const name = event?.league?.name || slug;
+    let g = bySlug.get(slug);
+    if (!g) {
+      g = { slug, name, events: [] };
+      bySlug.set(slug, g);
+    }
+    g.events.push(event);
+  }
+  const known = LEAGUE_ORDER.filter((slug) => bySlug.has(slug)).map((slug) => bySlug.get(slug));
+  const unknown = [...bySlug.values()]
+    .filter((g) => !LEAGUE_ORDER.includes(g.slug))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  return [...known, ...unknown];
+}
+
+/** Render a league section (header + lines). */
+function renderLeagueSection(group) {
+  const lines = group.events.map((e) => formatEventLine(e));
+  return `<b>${escapeHtml(group.name)}</b>\n${lines.join("\n")}`;
+}
+
+/**
+ * Render today's reply — grouped by league.
  *
  * @param {ScheduleEvent[]} events
  * @param {Date} day — any moment on the target ICT day.
@@ -101,11 +150,12 @@ export function formatEventLine(event) {
 export function renderToday(events, day) {
   const header = `<b>LoL — ${escapeHtml(formatIctDayLabel(day))}</b> (ICT)`;
   if (events.length === 0) return `${header}\nNo matches today.`;
-  return `${header}\n${events.map(formatEventLine).join("\n")}`;
+  const sections = groupByLeague(events).map(renderLeagueSection);
+  return `${header}\n\n${sections.join("\n\n")}`;
 }
 
 /**
- * Render week reply — grouped by ICT day.
+ * Render week reply — grouped by ICT day → league.
  *
  * @param {ScheduleEvent[]} events
  * @param {Date} from
@@ -118,23 +168,24 @@ export function renderWeek(events, from, to) {
   const header = `<b>LoL — ${fromLbl} → ${toLbl}</b> (ICT)`;
   if (events.length === 0) return `${header}\nNo matches this week.`;
 
-  /** @type {Map<string, { label: string, lines: string[] }>} */
-  const groups = new Map();
+  /** @type {Map<string, { label: string, events: ScheduleEvent[] }>} */
+  const days = new Map();
   for (const event of events) {
     const d = new Date(event.startTime);
     const key = ictDayKey(d);
-    let g = groups.get(key);
+    let g = days.get(key);
     if (!g) {
-      g = { label: formatIctDayLabel(d), lines: [] };
-      groups.set(key, g);
+      g = { label: formatIctDayLabel(d), events: [] };
+      days.set(key, g);
     }
-    g.lines.push(formatEventLine(event));
+    g.events.push(event);
   }
 
-  const sections = [];
-  for (const key of [...groups.keys()].sort()) {
-    const g = groups.get(key);
-    sections.push(`<b>${escapeHtml(g.label)}</b>\n${g.lines.join("\n")}`);
+  const dayBlocks = [];
+  for (const key of [...days.keys()].sort()) {
+    const day = days.get(key);
+    const leagueSections = groupByLeague(day.events).map(renderLeagueSection);
+    dayBlocks.push(`<b>${escapeHtml(day.label)}</b>\n${leagueSections.join("\n")}`);
   }
-  return `${header}\n\n${sections.join("\n\n")}`;
+  return `${header}\n\n${dayBlocks.join("\n\n")}`;
 }

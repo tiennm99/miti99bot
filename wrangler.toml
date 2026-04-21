@@ -7,6 +7,11 @@ compatibility_date = "2025-10-01"
 [vars]
 MODULES = "util,wordle,loldle,misc,trading,lolschedule"
 
+# Optional — chat id the lolschedule cron pushes the daily digest to.
+# Leave unset to disable the push. To keep it out of git, prefer:
+#   wrangler secret put LOLSCHEDULE_CHAT_ID
+# LOLSCHEDULE_CHAT_ID = "123456789"
+
 # KV namespace holding all module state. Each module auto-prefixes its keys via createStore().
 # Create with:
 #   wrangler kv namespace create miti99bot-kv
@@ -33,7 +38,7 @@ database_id = "261b54e7-0fdb-4fe7-8ed9-2e8a8bcf459c"
 # Local testing: curl "http://localhost:8787/__scheduled?cron=0+1+*+*+*"
 # (requires `wrangler dev --test-scheduled`)
 [triggers]
-crons = ["0 17 * * *"]
+crons = ["0 17 * * *", "0 1 * * *"]
 
 # Workers Observability — captures console.* logs, request metadata, and
 # invocation traces in the Cloudflare dashboard (Observability → Logs).
