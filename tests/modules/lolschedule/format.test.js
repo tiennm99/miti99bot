@@ -62,12 +62,8 @@ describe("formatIctTime / formatIctDayLabel", () => {
 });
 
 describe("formatEventLine", () => {
-  it("omits league name by default (renders under league header)", () => {
+  it("omits league name — renders under a league header", () => {
     expect(formatEventLine(evt())).not.toContain("LCK");
-  });
-
-  it("includes league name when showLeague is true", () => {
-    expect(formatEventLine(evt(), { showLeague: true })).toContain("LCK");
   });
 
   it("renders completed with bolded winner + score", () => {

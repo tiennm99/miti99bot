@@ -73,38 +73,34 @@ function teamLabel(team) {
 }
 
 /**
- * Render one event line (no leading newline). By default the league name is
- * omitted because events are rendered under a league header; pass
- * `{ showLeague: true }` to include it for flat lists.
+ * Render one event line (no leading newline). The league name is omitted
+ * because events render under a league header.
  *
  * @param {ScheduleEvent} event
- * @param {{ showLeague?: boolean }} [opts]
  * @returns {string} escaped HTML
  */
-export function formatEventLine(event, { showLeague = false } = {}) {
+export function formatEventLine(event) {
   const teams = event?.match?.teams || [];
   const t1Label = escapeHtml(teamLabel(teams[0]));
   const t2Label = escapeHtml(teamLabel(teams[1]));
   const block = event?.blockName ? ` (${escapeHtml(event.blockName)})` : "";
   const bestOf = event?.match?.strategy?.count;
   const bo = bestOf ? ` · Bo${bestOf}` : "";
-  const leagueSuffix =
-    showLeague && event?.league?.name ? ` · ${escapeHtml(event.league.name)}` : "";
 
   if (event?.state === "completed") {
     const w1 = teams[0]?.result?.gameWins ?? 0;
     const w2 = teams[1]?.result?.gameWins ?? 0;
     const l = teams[0]?.result?.outcome === "win" ? `<b>${t1Label}</b>` : t1Label;
     const r = teams[1]?.result?.outcome === "win" ? `<b>${t2Label}</b>` : t2Label;
-    return `✅ ${l} ${w1}–${w2} ${r}${bo}${leagueSuffix}${block}`;
+    return `✅ ${l} ${w1}–${w2} ${r}${bo}${block}`;
   }
   if (event?.state === "inProgress") {
     const w1 = teams[0]?.result?.gameWins ?? 0;
     const w2 = teams[1]?.result?.gameWins ?? 0;
-    return `🔴 LIVE ${t1Label} ${w1}–${w2} ${t2Label}${bo}${leagueSuffix}${block}`;
+    return `🔴 LIVE ${t1Label} ${w1}–${w2} ${t2Label}${bo}${block}`;
   }
   const time = formatIctTime(new Date(event.startTime));
-  return `🕒 ${time} ${t1Label} vs ${t2Label}${bo}${leagueSuffix}${block}`;
+  return `🕒 ${time} ${t1Label} vs ${t2Label}${bo}${block}`;
 }
 
 /**

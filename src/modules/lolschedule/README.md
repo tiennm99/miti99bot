@@ -66,13 +66,18 @@ Cache-first with KV. Key is `matches:{fromIso}:{toIso}`.
 - `/lolschedule_week`  — one section per ICT day; within each day, leagues are sub-grouped.
 - League ordering follows `LEAGUE_ORDER` in `format.js` (worlds / msi / first_stand first, then LCK / LPL / LEC / LCS, then the rest).
 
+## Subscribers
+
+`/lolschedule_subscribe` adds `ctx.chat.id` to the module's `subscribers` KV key (JSON array). `/lolschedule_unsubscribe` removes it. Both are idempotent and reply with the new state. The daily cron reads this list; empty list means the cron skips cleanly.
+
 ## Time zone
 
-All rendering is in **ICT (UTC+7)**. `startTime` is UTC ISO; day boundaries for the `/lol_today` and `/lol_week` windows are anchored to ICT midnight.
+All rendering is in **ICT (UTC+7)**. `startTime` is UTC ISO; day boundaries for the `/lolschedule_today` and `/lolschedule_week` windows are anchored to ICT midnight.
 
 ## Files
 
 - `index.js` — module contract
 - `api-client.js` — getSchedule client with pagination + cache
 - `format.js` — pure renderers (`formatEventLine`, `renderToday`, `renderWeek`)
-- `handlers.js` — grammY command handlers + ICT day-boundary helpers
+- `handlers.js` — grammY command handlers, ICT day boundaries, cron fan-out
+- `subscribers.js` — KV-backed add/list/remove for the daily-push list
