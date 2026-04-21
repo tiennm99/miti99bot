@@ -8,11 +8,12 @@
 
 import { helpCommand } from "./help-command.js";
 import { infoCommand } from "./info-command.js";
+import { stickerIdCommand } from "./stickerid-command.js";
 
 /** @type {import("../registry.js").BotModule} */
 const utilModule = {
   name: "util",
-  commands: [infoCommand, helpCommand],
+  commands: [infoCommand, helpCommand, stickerIdCommand],
 };
 
 export default utilModule;
