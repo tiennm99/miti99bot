@@ -3,7 +3,7 @@
  *
  * Price fetches are issued in parallel with Promise.allSettled so a portfolio
  * holding N stocks only waits for the slowest fetch, not the sum. Without this
- * 10+ symbols would serially stack TCBS latency and can blow Cloudflare's
+ * 10+ symbols would serially stack KBS latency and can blow Cloudflare's
  * subrequest budget.
  */
 
