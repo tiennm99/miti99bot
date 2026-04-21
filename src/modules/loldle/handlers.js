@@ -15,6 +15,7 @@
  * replaced by a fresh round, so the user can just keep playing.
  */
 
+import { escapeHtml } from "../../util/escape-html.js";
 import championsData from "./champions-data.js";
 import { compareChampions } from "./compare.js";
 import { pickRandom } from "./daily.js";
@@ -25,7 +26,9 @@ import { MAX_GUESSES, loadGame, loadStats, recordResult, saveGame } from "./stat
 /** @type {Array<Record<string, any>>} */
 const champions = championsData;
 
-const NEW_ROUND_HINT = "🆕 New round started. Use `/loldle <champion>` to guess.";
+// Sent inside HTML parse_mode replies — must be HTML-safe.
+// `<champion>` as a literal tag would make Telegram reject the whole message.
+const NEW_ROUND_HINT = "🆕 New round started. Use <code>/loldle &lt;champion&gt;</code> to guess.";
 
 /**
  * Returns the stable subject identifier for the current chat.
@@ -88,7 +91,7 @@ export async function handleLoldle(ctx, db) {
   const game = await getOrInitGame(db, subject);
 
   if (!arg) {
-    const header = `Guess ${game.guesses.length}/${MAX_GUESSES}. Use \`/loldle <champion>\`.`;
+    const header = `Guess ${game.guesses.length}/${MAX_GUESSES}. Use <code>/loldle &lt;champion&gt;</code>.`;
     return ctx.reply(`${header}\n\n${renderBoard(game.guesses)}`, { parse_mode: "HTML" });
   }
 
@@ -122,7 +125,7 @@ export async function handleLoldle(ctx, db) {
     await recordResult(db, subject, false);
     await startFreshGame(db, subject);
     return ctx.reply(
-      `${reply}\n\n❌ Out of guesses. Answer was ${target.name}.\n${NEW_ROUND_HINT}`,
+      `${reply}\n\n❌ Out of guesses. Answer was ${escapeHtml(target.name)}.\n${NEW_ROUND_HINT}`,
       { parse_mode: "HTML" },
     );
   }
@@ -145,10 +148,10 @@ export async function handleGiveup(ctx, db) {
   await recordResult(db, subject, false);
   const target = champions.find((c) => c.id === game.target);
   await startFreshGame(db, subject);
-  if (!target) {
-    return ctx.reply(`🏳️ Answer was ${game.target}.\n${NEW_ROUND_HINT}`);
-  }
-  return ctx.reply(`🏳️ Answer was ${target.name} — ${target.title}.\n${NEW_ROUND_HINT}`);
+  const answer = target
+    ? `${escapeHtml(target.name)} — ${escapeHtml(target.title)}`
+    : escapeHtml(game.target);
+  return ctx.reply(`🏳️ Answer was ${answer}.\n${NEW_ROUND_HINT}`, { parse_mode: "HTML" });
 }
 
 /**
