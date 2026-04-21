@@ -19,9 +19,11 @@ import { escapeHtml } from "../../util/escape-html.js";
 import championsData from "./champions-data.js";
 import { compareChampions } from "./compare.js";
 import { pickRandom } from "./daily.js";
+import { attemptFlavor, formatDuration } from "./flavor.js";
 import { findChampion } from "./lookup.js";
 import { renderBoard, renderGuess } from "./render.js";
 import { MAX_GUESSES, loadGame, loadStats, recordResult, saveGame } from "./state.js";
+import { GIVEUP_STICKERS, LOSE_STICKERS, WIN_STICKERS, pickSticker } from "./stickers.js";
 
 /** @type {Array<Record<string, any>>} */
 const champions = championsData;
@@ -80,6 +82,24 @@ async function startFreshGame(db, subject) {
 }
 
 /**
+ * Send a random sticker from the pool, swallowing errors so a rotten file_id
+ * (Telegram rejection) never blocks the follow-up text reply.
+ *
+ * @param {import("grammy").Context} ctx
+ * @param {readonly string[]} pool
+ */
+async function trySendSticker(ctx, pool) {
+  const sticker = pickSticker(pool);
+  if (!sticker) return;
+  try {
+    await ctx.replyWithSticker(sticker);
+  } catch {
+    // Ignore — the outcome text reply is what matters. An invalid file_id
+    // or transient Telegram error must not derail the game flow.
+  }
+}
+
+/**
  * @param {import("grammy").Context} ctx
  * @param {import("../../db/kv-store-interface.js").KVStore} db
  */
@@ -113,21 +133,26 @@ export async function handleLoldle(ctx, db) {
   await saveGame(db, subject, game);
 
   const reply = renderGuess(guess.name, results);
+  const elapsed = formatDuration(Date.now() - (game.startedAt ?? Date.now()));
+  const champ = `${escapeHtml(target.name)} — ${escapeHtml(target.title)}`;
+
   if (won) {
     const s = await recordResult(db, subject, true);
     await startFreshGame(db, subject);
+    await trySendSticker(ctx, WIN_STICKERS);
+    const flavor = attemptFlavor(game.guesses.length, MAX_GUESSES);
     return ctx.reply(
-      `${reply}\n\n🎉 Solved in ${game.guesses.length}/${MAX_GUESSES}! Streak: ${s.streak}.\n${NEW_ROUND_HINT}`,
+      `${reply}\n\n🎉 ${flavor} ${champ}\n⏱ ${elapsed} · 🔥 Streak: ${s.streak} (${game.guesses.length}/${MAX_GUESSES})\n${NEW_ROUND_HINT}`,
       { parse_mode: "HTML" },
     );
   }
   if (game.guesses.length >= MAX_GUESSES) {
     await recordResult(db, subject, false);
     await startFreshGame(db, subject);
-    return ctx.reply(
-      `${reply}\n\n❌ Out of guesses. Answer was ${escapeHtml(target.name)}.\n${NEW_ROUND_HINT}`,
-      { parse_mode: "HTML" },
-    );
+    await trySendSticker(ctx, LOSE_STICKERS);
+    return ctx.reply(`${reply}\n\n❌ Out of guesses. Answer was ${champ}.\n${NEW_ROUND_HINT}`, {
+      parse_mode: "HTML",
+    });
   }
   return ctx.reply(`${reply}\n\nGuess ${game.guesses.length}/${MAX_GUESSES}.`, {
     parse_mode: "HTML",
@@ -148,6 +173,7 @@ export async function handleGiveup(ctx, db) {
   await recordResult(db, subject, false);
   const target = champions.find((c) => c.id === game.target);
   await startFreshGame(db, subject);
+  await trySendSticker(ctx, GIVEUP_STICKERS);
   const answer = target
     ? `${escapeHtml(target.name)} — ${escapeHtml(target.title)}`
     : escapeHtml(game.target);
