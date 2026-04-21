@@ -51,10 +51,35 @@ async function cargoQuery(params) {
     body,
     cf: { cacheTtl: 30, cacheEverything: true },
   });
-  if (!res.ok) throw new Error(`Leaguepedia API HTTP ${res.status}`);
-  const json = await res.json();
-  if (json?.error) throw new Error(`Leaguepedia error: ${json.error.info || json.error.code}`);
-  return (json?.cargoquery || []).map((r) => r.title);
+  const text = await res.text();
+  if (!res.ok) {
+    console.log(
+      JSON.stringify({ msg: "lolschedule_fetch", status: res.status, body: text.slice(0, 500) }),
+    );
+    throw new Error(`Leaguepedia API HTTP ${res.status}`);
+  }
+  let json;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    console.log(
+      JSON.stringify({ msg: "lolschedule_parse_fail", body: text.slice(0, 500) }),
+    );
+    throw new Error("Leaguepedia non-JSON response");
+  }
+  if (json?.error) {
+    console.log(
+      JSON.stringify({
+        msg: "lolschedule_api_error",
+        code: json.error.code,
+        info: json.error.info,
+      }),
+    );
+    throw new Error(`Leaguepedia error: ${json.error.info || json.error.code}`);
+  }
+  const rows = (json?.cargoquery || []).map((r) => r.title);
+  console.log(JSON.stringify({ msg: "lolschedule_fetch_ok", rows: rows.length }));
+  return rows;
 }
 
 /** Format a JS Date as Leaguepedia's UTC literal: `YYYY-MM-DD HH:MM:SS`. */

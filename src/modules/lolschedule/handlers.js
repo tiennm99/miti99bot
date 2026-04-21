@@ -41,7 +41,9 @@ export async function handleToday(ctx, db) {
     const rows = await getCachedMatches(db, from, to, CACHE_TTL_TODAY_SEC);
     await ctx.reply(renderToday(rows, from), { parse_mode: "HTML" });
   } catch (err) {
-    console.warn("lolschedule /lol_today failed", String(err));
+    console.log(
+      JSON.stringify({ msg: "lolschedule_today_fail", err: String(err) }),
+    );
     await ctx.reply("Could not fetch today's matches. Try again later.");
   }
 }
@@ -61,7 +63,9 @@ export async function handleWeek(ctx, db) {
     const rows = await getCachedMatches(db, from, to, CACHE_TTL_WEEK_SEC);
     await ctx.reply(renderWeek(rows, from, to), { parse_mode: "HTML" });
   } catch (err) {
-    console.warn("lolschedule /lol_week failed", String(err));
+    console.log(
+      JSON.stringify({ msg: "lolschedule_week_fail", err: String(err) }),
+    );
     await ctx.reply("Could not fetch this week's matches. Try again later.");
   }
 }
