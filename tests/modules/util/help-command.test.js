@@ -99,6 +99,13 @@ describe("renderHelp", () => {
 
   it("returns a placeholder when no commands are visible", () => {
     const reg = makeRegistry([{ name: "a", commands: [cmd("hidden", "private", "H")] }]);
-    expect(renderHelp(reg)).toBe("no commands registered");
+    expect(renderHelp(reg)).toContain("no commands registered");
+  });
+
+  it("appends a support footer with the repo link", () => {
+    const reg = makeRegistry([{ name: "a", commands: [cmd("one", "public", "A-one")] }]);
+    const out = renderHelp(reg);
+    expect(out).toContain("star");
+    expect(out).toContain("https://github.com/tiennm99/miti99bot");
   });
 });

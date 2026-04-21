@@ -17,6 +17,9 @@ import { getCurrentRegistry } from "../registry.js";
  * @typedef {import("../validate-command.js").ModuleCommand} ModuleCommand
  */
 
+const REPO_URL = "https://github.com/tiennm99/miti99bot";
+const SUPPORT_FOOTER = `Enjoying the bot? Support me by starring the repo: <a href="${REPO_URL}">${REPO_URL}</a>`;
+
 /**
  * Pure render step — exported separately so tests can assert on the string
  * without instantiating a bot context.
@@ -51,7 +54,8 @@ export function renderHelp(reg) {
     sections.push(`<b>${escapeHtml(mod.name)}</b>\n${lines.join("\n")}`);
   }
 
-  return sections.length > 0 ? sections.join("\n\n") : "no commands registered";
+  const body = sections.length > 0 ? sections.join("\n\n") : "no commands registered";
+  return `${body}\n\n${SUPPORT_FOOTER}`;
 }
 
 /** @type {ModuleCommand} */
@@ -62,7 +66,7 @@ export const helpCommand = {
   handler: async (ctx) => {
     const reg = getCurrentRegistry();
     const text = renderHelp(reg);
-    await ctx.reply(text, { parse_mode: "HTML" });
+    await ctx.reply(text, { parse_mode: "HTML", link_preview_options: { is_disabled: true } });
   },
 };
 
