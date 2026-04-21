@@ -3,14 +3,18 @@
  * lolesports.com esports-api (the data feed behind lolesports.com).
  *
  * Commands:
- *   /lol_today — matches scheduled for the current ICT day, with live/played scores.
- *   /lol_week  — next 7 ICT days, grouped per day.
+ *   /lolschedule_today — matches scheduled for the current ICT day, with live/played scores.
+ *   /lolschedule_week  — next 7 ICT days, grouped per day → league.
  *
- * See the module README for the data-source rationale and the verification
+ * Cron:
+ *   0 1 * * *  (08:00 ICT) — push today's major-league schedule to
+ *   LOLSCHEDULE_CHAT_ID when configured.
+ *
+ * See the module README for data-source rationale and the verification
  * reports under plans/reports/ for historical context.
  */
 
-import { handleToday, handleWeek } from "./handlers.js";
+import { handleDailyPushCron, handleToday, handleWeek } from "./handlers.js";
 
 /** @type {import("../../db/kv-store-interface.js").KVStore | null} */
 let db = null;
@@ -23,16 +27,23 @@ const lolscheduleModule = {
   },
   commands: [
     {
-      name: "lol_today",
+      name: "lolschedule_today",
       visibility: "public",
       description: "Today's LoL esports matches (scores if played)",
       handler: (ctx) => handleToday(ctx, db),
     },
     {
-      name: "lol_week",
+      name: "lolschedule_week",
       visibility: "public",
       description: "LoL esports matches for the next 7 days",
       handler: (ctx) => handleWeek(ctx, db),
+    },
+  ],
+  crons: [
+    {
+      schedule: "0 1 * * *",
+      name: "daily-push",
+      handler: handleDailyPushCron,
     },
   ],
 };
