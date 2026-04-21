@@ -1,145 +1,148 @@
 import { describe, expect, it } from "vitest";
 import {
-  classifyMatch,
-  formatMatchLine,
-  parseUtc,
+  formatEventLine,
+  formatIctDayLabel,
+  formatIctTime,
   renderToday,
   renderWeek,
 } from "../../../src/modules/lolschedule/format.js";
 
-const scheduled = {
-  DateTime: "2026-04-21 09:00:00",
-  T1: "T1",
-  T2: "Gen.G",
-  S1: "",
-  S2: "",
-  Winner: "",
-  Tournament: "LCK 2026 Spring",
-  BO: "3",
-  OP: "LCK/2026_Season/Spring_Season",
-};
+/** @typedef {import("../../../src/modules/lolschedule/api-client.js").ScheduleEvent} ScheduleEvent */
 
-const live = {
-  ...scheduled,
-  DateTime: "2026-04-21 08:00:00",
-  S1: "1",
-  S2: "0",
-};
+const completed = /** @type {ScheduleEvent} */ ({
+  startTime: "2026-04-20T08:00:00Z",
+  state: "completed",
+  blockName: "Week 3",
+  league: { name: "LCK", slug: "lck" },
+  match: {
+    id: "1",
+    teams: [
+      { name: "T1", code: "T1", result: { outcome: "win", gameWins: 2 } },
+      { name: "Gen.G", code: "GEN", result: { outcome: "loss", gameWins: 1 } },
+    ],
+    strategy: { type: "bestOf", count: 3 },
+  },
+});
 
-const played = {
-  ...scheduled,
-  DateTime: "2026-04-20 10:00:00",
-  S1: "2",
-  S2: "1",
-  Winner: "1",
-};
+const live = /** @type {ScheduleEvent} */ ({
+  startTime: "2026-04-21T08:00:00Z",
+  state: "inProgress",
+  blockName: "Week 4",
+  league: { name: "LCK", slug: "lck" },
+  match: {
+    id: "2",
+    teams: [
+      { name: "Hanwha Life", code: "HLE", result: { gameWins: 1 } },
+      { name: "DRX", code: "DRX", result: { gameWins: 0 } },
+    ],
+    strategy: { type: "bestOf", count: 3 },
+  },
+});
 
-// Fixed reference — 2026-04-21 08:30:00 UTC (i.e. 15:30 ICT)
-const nowMs = Date.parse("2026-04-21T08:30:00Z");
+const scheduled = /** @type {ScheduleEvent} */ ({
+  startTime: "2026-04-21T09:00:00Z", // 16:00 ICT
+  state: "unstarted",
+  blockName: "Week 4",
+  league: { name: "LCK", slug: "lck" },
+  match: {
+    id: "3",
+    teams: [
+      { name: "KT Rolster", code: "KT" },
+      { name: "Dplus KIA", code: "DK" },
+    ],
+    strategy: { type: "bestOf", count: 3 },
+  },
+});
 
-describe("parseUtc", () => {
-  it("parses Leaguepedia UTC literal", () => {
-    expect(parseUtc("2026-04-21 09:00:00").toISOString()).toBe("2026-04-21T09:00:00.000Z");
+describe("formatIctTime / formatIctDayLabel", () => {
+  it("formats UTC datetime in ICT", () => {
+    expect(formatIctTime(new Date("2026-04-21T09:00:00Z"))).toBe("16:00");
+    expect(formatIctDayLabel(new Date("2026-04-21T00:00:00Z"))).toBe("Tue Apr 21");
   });
 });
 
-describe("classifyMatch", () => {
-  it("returns played when Winner is 1 or 2", () => {
-    expect(classifyMatch(played, nowMs)).toBe("played");
-    expect(classifyMatch({ ...played, Winner: "2" }, nowMs)).toBe("played");
-  });
-
-  it("returns live when started, has partial score, no winner", () => {
-    expect(classifyMatch(live, nowMs)).toBe("live");
-  });
-
-  it("returns scheduled when start time is in the future", () => {
-    expect(classifyMatch(scheduled, nowMs)).toBe("scheduled");
-  });
-
-  it("returns scheduled when start is past but no score", () => {
-    const row = { ...scheduled, DateTime: "2026-04-21 07:00:00" };
-    expect(classifyMatch(row, nowMs)).toBe("scheduled");
-  });
-});
-
-describe("formatMatchLine", () => {
-  it("renders scheduled with ICT time and vs", () => {
-    const line = formatMatchLine(scheduled, nowMs);
-    // 09:00 UTC → 16:00 ICT
-    expect(line).toContain("16:00");
-    expect(line).toContain("vs");
-    expect(line).toContain("Bo3");
-    expect(line).toContain("LCK 2026 Spring");
-    expect(line.startsWith("🕒")).toBe(true);
-  });
-
-  it("renders played with score and winner bolded", () => {
-    const line = formatMatchLine(played, nowMs);
-    expect(line).toContain("2–1");
-    expect(line).toContain("<b>T1</b>");
+describe("formatEventLine", () => {
+  it("renders completed with bolded winner + score", () => {
+    const line = formatEventLine(completed);
     expect(line.startsWith("✅")).toBe(true);
+    expect(line).toContain("<b>T1</b>");
+    expect(line).toContain("2–1");
+    expect(line).toContain("GEN");
+    expect(line).toContain("Bo3");
+    expect(line).toContain("LCK");
+    expect(line).toContain("Week 3");
   });
 
-  it("renders live prefix", () => {
-    const line = formatMatchLine(live, nowMs);
+  it("renders live with LIVE prefix + current score", () => {
+    const line = formatEventLine(live);
     expect(line.startsWith("🔴 LIVE")).toBe(true);
     expect(line).toContain("1–0");
   });
 
-  it("escapes HTML in team and tournament names", () => {
-    const row = { ...scheduled, T1: "<script>", Tournament: "A&B" };
-    const line = formatMatchLine(row, nowMs);
+  it("renders unstarted with ICT time + vs", () => {
+    const line = formatEventLine(scheduled);
+    expect(line.startsWith("🕒 16:00")).toBe(true);
+    expect(line).toContain("KT vs DK");
+  });
+
+  it("escapes HTML in league, block, team names", () => {
+    const event = /** @type {ScheduleEvent} */ ({
+      ...scheduled,
+      league: { name: "A&B", slug: "ab" },
+      blockName: "<script>",
+      match: {
+        ...scheduled.match,
+        teams: [{ code: "<bad>" }, { code: "GEN" }],
+      },
+    });
+    const line = formatEventLine(event);
     expect(line).not.toContain("<script>");
     expect(line).toContain("&lt;script&gt;");
+    expect(line).toContain("&lt;bad&gt;");
     expect(line).toContain("A&amp;B");
   });
 
-  it("shows TBD when team field is empty", () => {
-    const row = { ...scheduled, T1: "" };
-    expect(formatMatchLine(row, nowMs)).toContain("TBD");
+  it("shows TBD when team is missing", () => {
+    const event = /** @type {ScheduleEvent} */ ({
+      ...scheduled,
+      match: { ...scheduled.match, teams: [null, { code: "GEN" }] },
+    });
+    expect(formatEventLine(event)).toContain("TBD vs GEN");
   });
 });
 
 describe("renderToday", () => {
-  it("returns empty-state message when no rows", () => {
-    const out = renderToday([], new Date("2026-04-21T00:00:00Z"), nowMs);
-    expect(out).toContain("No matches today.");
+  it("empty state when no events", () => {
+    expect(renderToday([], new Date("2026-04-21T00:00:00Z"))).toContain("No matches today.");
   });
 
-  it("renders header + one line per match", () => {
-    const out = renderToday([scheduled, played], new Date("2026-04-21T00:00:00Z"), nowMs);
-    expect(out).toContain("<b>LoL —");
-    expect(out.split("\n").length).toBeGreaterThanOrEqual(3);
+  it("renders header + one line per event", () => {
+    const out = renderToday([scheduled, live], new Date("2026-04-21T00:00:00Z"));
+    expect(out).toContain("<b>LoL — Tue Apr 21</b>");
+    expect(out.split("\n")).toHaveLength(3);
   });
 });
 
 describe("renderWeek", () => {
-  it("groups rows by ICT day", () => {
-    const rows = [
-      { ...scheduled, DateTime: "2026-04-21 09:00:00" }, // Apr 21 ICT
-      { ...scheduled, DateTime: "2026-04-22 10:00:00" }, // Apr 22 ICT
-      { ...scheduled, DateTime: "2026-04-22 12:00:00" }, // Apr 22 ICT
+  it("groups events by ICT day in order", () => {
+    const events = [
+      { ...scheduled, startTime: "2026-04-21T09:00:00Z" },
+      { ...scheduled, startTime: "2026-04-22T10:00:00Z" },
+      { ...scheduled, startTime: "2026-04-22T12:00:00Z" },
     ];
     const out = renderWeek(
-      rows,
+      events,
       new Date("2026-04-21T00:00:00Z"),
       new Date("2026-04-28T00:00:00Z"),
-      nowMs,
     );
-    // Day labels appear once each, in order
     expect(out.indexOf("Apr 21")).toBeLessThan(out.indexOf("Apr 22"));
-    const apr22Matches = out.split("Apr 22")[1] || "";
-    expect((apr22Matches.match(/🕒/g) || []).length).toBe(2);
+    const apr22Section = out.split("Apr 22")[1] || "";
+    expect((apr22Section.match(/🕒/g) || []).length).toBe(2);
   });
 
-  it("returns empty-state when no matches", () => {
-    const out = renderWeek(
-      [],
-      new Date("2026-04-21T00:00:00Z"),
-      new Date("2026-04-28T00:00:00Z"),
-      nowMs,
-    );
-    expect(out).toContain("No matches this week.");
+  it("empty state when no events", () => {
+    expect(
+      renderWeek([], new Date("2026-04-21T00:00:00Z"), new Date("2026-04-28T00:00:00Z")),
+    ).toContain("No matches this week.");
   });
 });

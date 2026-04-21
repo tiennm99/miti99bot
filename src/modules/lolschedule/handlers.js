@@ -1,20 +1,37 @@
 /**
  * @file /lol_today and /lol_week command handlers.
  *
- * Day boundaries are defined in ICT (UTC+7), converted to the UTC literals
- * that Leaguepedia's cargo query expects. Errors are surfaced as a short reply
- * — we never throw through grammY.
+ * Day boundaries are defined in ICT (UTC+7). Data comes from lolesports.com
+ * via a cache-first fetcher; no cron pre-warm is needed because the upstream
+ * API is rate-limit friendly.
  */
 
-import { CACHE_TTL_TODAY_SEC, CACHE_TTL_WEEK_SEC, getCachedMatches } from "./api-client.js";
+import { getEventsCached } from "./api-client.js";
 import { renderToday, renderWeek } from "./format.js";
 
 const ICT_OFFSET_MS = 7 * 60 * 60 * 1000;
 
-/**
- * Start of the current ICT calendar day, expressed as a UTC `Date`.
- * @param {number} [nowMs]
- */
+// Top-tier league allowlist. The API returns every regional/academy league
+// (135+ events/week); filtering keeps the reply under Telegram's 4096-char
+// limit and focuses on what most viewers care about.
+const MAJOR_LEAGUE_SLUGS = new Set([
+  "lck",
+  "lpl",
+  "lec",
+  "lcs",
+  "worlds",
+  "msi",
+  "first_stand",
+  "lcp",
+  "cblol-brazil",
+  "emea_masters",
+]);
+
+function filterMajor(events) {
+  return events.filter((e) => MAJOR_LEAGUE_SLUGS.has(e?.league?.slug));
+}
+
+/** Start of the current ICT calendar day, expressed as a UTC `Date`. */
 export function ictDayStart(nowMs = Date.now()) {
   const shifted = new Date(nowMs + ICT_OFFSET_MS);
   shifted.setUTCHours(0, 0, 0, 0);
@@ -38,12 +55,10 @@ export async function handleToday(ctx, db) {
   const from = ictDayStart();
   const to = addDays(from, 1);
   try {
-    const rows = await getCachedMatches(db, from, to, CACHE_TTL_TODAY_SEC);
-    await ctx.reply(renderToday(rows, from), { parse_mode: "HTML" });
+    const events = filterMajor(await getEventsCached(db, from, to));
+    await ctx.reply(renderToday(events, from), { parse_mode: "HTML" });
   } catch (err) {
-    console.log(
-      JSON.stringify({ msg: "lolschedule_today_fail", err: String(err) }),
-    );
+    console.log(JSON.stringify({ msg: "lolschedule_today_fail", err: String(err) }));
     await ctx.reply("Could not fetch today's matches. Try again later.");
   }
 }
@@ -60,12 +75,10 @@ export async function handleWeek(ctx, db) {
   const from = ictDayStart();
   const to = addDays(from, 7);
   try {
-    const rows = await getCachedMatches(db, from, to, CACHE_TTL_WEEK_SEC);
-    await ctx.reply(renderWeek(rows, from, to), { parse_mode: "HTML" });
+    const events = filterMajor(await getEventsCached(db, from, to));
+    await ctx.reply(renderWeek(events, from, to), { parse_mode: "HTML" });
   } catch (err) {
-    console.log(
-      JSON.stringify({ msg: "lolschedule_week_fail", err: String(err) }),
-    );
+    console.log(JSON.stringify({ msg: "lolschedule_week_fail", err: String(err) }));
     await ctx.reply("Could not fetch this week's matches. Try again later.");
   }
 }
