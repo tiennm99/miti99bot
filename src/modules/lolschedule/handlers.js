@@ -9,6 +9,7 @@
 
 import { getEventsCached } from "./api-client.js";
 import { renderToday, renderWeek } from "./format.js";
+import { addSubscriber, listSubscribers, removeSubscriber } from "./subscribers.js";
 
 const ICT_OFFSET_MS = 7 * 60 * 60 * 1000;
 
@@ -110,37 +111,84 @@ async function sendTelegramMessage(token, chatId, text) {
 }
 
 /**
- * Cron handler — pushes today's major-league schedule to `LOLSCHEDULE_CHAT_ID`.
- * Silently skips when the env var or token is missing, or when there are no
- * major-league matches today.
+ * /lolschedule_subscribe — opts the current chat into the daily push.
+ * @param {import("grammy").Context} ctx
+ * @param {import("../../db/kv-store-interface.js").KVStore | null} db
+ */
+export async function handleSubscribe(ctx, db) {
+  if (!db) {
+    await ctx.reply("lolschedule: storage unavailable");
+    return;
+  }
+  const chatId = ctx.chat?.id;
+  if (chatId == null) {
+    await ctx.reply("Could not read chat id — subscribe failed.");
+    return;
+  }
+  const added = await addSubscriber(db, chatId);
+  await ctx.reply(
+    added ? "✅ Subscribed. You'll get today's LoL schedule at 08:00 ICT." : "Already subscribed.",
+  );
+}
+
+/**
+ * /lolschedule_unsubscribe — removes the current chat from the daily push.
+ * @param {import("grammy").Context} ctx
+ * @param {import("../../db/kv-store-interface.js").KVStore | null} db
+ */
+export async function handleUnsubscribe(ctx, db) {
+  if (!db) {
+    await ctx.reply("lolschedule: storage unavailable");
+    return;
+  }
+  const chatId = ctx.chat?.id;
+  if (chatId == null) {
+    await ctx.reply("Could not read chat id — unsubscribe failed.");
+    return;
+  }
+  const removed = await removeSubscriber(db, chatId);
+  await ctx.reply(removed ? "Unsubscribed." : "You weren't subscribed.");
+}
+
+/**
+ * Cron handler — pushes today's major-league schedule to every subscribed chat.
+ * Per-chat failures are swallowed so one blocked bot cannot stop the fan-out.
  *
  * @param {any} _event
  * @param {{ db: import("../../db/kv-store-interface.js").KVStore, env: any }} ctx
  */
 export async function handleDailyPushCron(_event, ctx) {
   const { db, env } = ctx;
-  const chatId = env?.LOLSCHEDULE_CHAT_ID;
   const token = env?.TELEGRAM_BOT_TOKEN;
-  if (!chatId || !token) {
-    console.log(
-      JSON.stringify({
-        msg: "lolschedule_cron_skip",
-        reason: !chatId ? "no_chat_id" : "no_token",
-      }),
-    );
+  if (!token) {
+    console.log(JSON.stringify({ msg: "lolschedule_cron_skip", reason: "no_token" }));
+    return;
+  }
+  const subscribers = await listSubscribers(db);
+  if (subscribers.length === 0) {
+    console.log(JSON.stringify({ msg: "lolschedule_cron_skip", reason: "no_subscribers" }));
     return;
   }
   const from = ictDayStart();
   const to = addDays(from, 1);
+  let events;
   try {
-    const events = filterMajor(await getEventsCached(db, from, to));
-    if (events.length === 0) {
-      console.log(JSON.stringify({ msg: "lolschedule_cron_empty" }));
-      return;
-    }
-    await sendTelegramMessage(token, chatId, renderToday(events, from));
-    console.log(JSON.stringify({ msg: "lolschedule_cron_sent", events: events.length }));
+    events = filterMajor(await getEventsCached(db, from, to));
   } catch (err) {
     console.log(JSON.stringify({ msg: "lolschedule_cron_fail", err: String(err) }));
+    return;
   }
+  if (events.length === 0) {
+    console.log(JSON.stringify({ msg: "lolschedule_cron_empty" }));
+    return;
+  }
+  const text = renderToday(events, from);
+  const results = await Promise.allSettled(
+    subscribers.map((chatId) => sendTelegramMessage(token, chatId, text)),
+  );
+  const sent = results.filter((r) => r.status === "fulfilled").length;
+  const failed = results.length - sent;
+  console.log(
+    JSON.stringify({ msg: "lolschedule_cron_sent", events: events.length, sent, failed }),
+  );
 }
