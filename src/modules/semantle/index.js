@@ -1,10 +1,10 @@
 /**
- * @file Semantle module — similarity guessing game backed by ConceptNet.
+ * @file Semantle module — similarity guessing game backed by Cloudflare Workers AI.
  *
- * Targets come from a curated local wordlist (ConceptNet has no /random).
- * Similarity scores come from `api.conceptnet.io/relatedness`. The ConceptNet
- * base URL is hardcoded in the client; tests can still override via
- * `createClient(url)` if needed.
+ * Targets come from a curated local wordlist (same list doubles as the
+ * vocabulary for OOV detection, so no upstream check is needed to pick or
+ * validate a word). Similarity scores come from cosine distance between
+ * `@cf/baai/bge-base-en-v1.5` embeddings produced by the `env.AI` binding.
  */
 
 import { createClient } from "./api-client.js";
@@ -18,9 +18,9 @@ let client = null;
 /** @type {import("../registry.js").BotModule} */
 const semantleModule = {
   name: "semantle",
-  init: async ({ db: store }) => {
+  init: async ({ db: store, env }) => {
     db = store;
-    client = createClient();
+    client = createClient(env.AI);
   },
   commands: [
     {

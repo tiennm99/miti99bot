@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   UpstreamError,
   Word2SimError,
@@ -6,32 +6,24 @@ import {
 } from "../../../src/modules/semantle/api-client.js";
 
 /**
- * ConceptNet stubs — minimal shape the client cares about.
+ * Build a deterministic 768-dim vector from a seed so cosine scores are
+ * reproducible in tests without hardcoding 768 floats.
  */
-function conceptResp(edgeCount = 5) {
-  return {
-    ok: true,
-    text: () =>
-      Promise.resolve(
-        JSON.stringify({
-          edges: Array.from({ length: edgeCount }, (_, i) => ({ id: `e${i}` })),
-        }),
-      ),
-  };
+function fakeVector(seed, dim = 768) {
+  const out = new Array(dim);
+  for (let i = 0; i < dim; i++) out[i] = Math.sin(seed * (i + 1));
+  return out;
 }
 
-function relatednessResp(value) {
-  return {
-    ok: true,
-    text: () => Promise.resolve(JSON.stringify({ value })),
-  };
+/**
+ * Minimal Workers AI binding fake. `impl(model, input)` returns the payload
+ * `env.AI.run()` would normally resolve to.
+ */
+function fakeAi(impl) {
+  return { run: vi.fn(impl) };
 }
 
 describe("semantle/api-client", () => {
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
   describe("UpstreamError", () => {
     it("stores status and body metadata", () => {
       const err = new UpstreamError("test", { status: 404, body: "not found" });
@@ -53,167 +45,99 @@ describe("semantle/api-client", () => {
   });
 
   describe("createClient", () => {
-    it("similarity runs concept + relatedness in parallel", async () => {
-      const client = createClient("https://api.test", { timeoutMs: 100 });
-      const calls = [];
-      global.fetch = vi.fn((url) => {
-        calls.push(String(url));
-        if (url.includes("/relatedness")) return Promise.resolve(relatednessResp(0.45));
-        return Promise.resolve(conceptResp(3));
-      });
-      const res = await client.similarity("apple", "orange");
-      expect(res.similarity).toBe(0.45);
-      expect(res.in_vocab_b).toBe(true);
-      expect(res.canonical_b).toBe("orange");
-      expect(global.fetch).toHaveBeenCalledTimes(2);
-      expect(calls.some((u) => u.includes("/c/en/orange"))).toBe(true);
-      expect(calls.some((u) => u.includes("node1=%2Fc%2Fen%2Fapple"))).toBe(true);
-      expect(calls.some((u) => u.includes("node2=%2Fc%2Fen%2Forange"))).toBe(true);
+    it("throws without a valid AI binding", () => {
+      expect(() => createClient(null)).toThrow(TypeError);
+      expect(() => createClient({})).toThrow(TypeError);
+      expect(() => createClient({ run: "not a function" })).toThrow(TypeError);
     });
 
-    it("similarity flags OOV when the concept endpoint returns no edges", async () => {
-      const client = createClient("https://api.test", { timeoutMs: 100 });
-      global.fetch = vi.fn((url) => {
-        if (url.includes("/relatedness")) return Promise.resolve(relatednessResp(0.02));
-        return Promise.resolve(conceptResp(0));
-      });
-      const res = await client.similarity("apple", "zzzfoo");
+    it("similarity batches target + guess in a single run() call", async () => {
+      const ai = fakeAi(async (_model, { text }) => ({
+        shape: [text.length, 768],
+        data: text.map((_, i) => fakeVector(i + 1)),
+      }));
+      const client = createClient(ai);
+      await client.similarity("apple", "orange");
+      expect(ai.run).toHaveBeenCalledTimes(1);
+      const [model, input] = ai.run.mock.calls[0];
+      expect(model).toBe("@cf/baai/bge-small-en-v1.5");
+      expect(input).toEqual({ text: ["apple", "orange"] });
+    });
+
+    it("similarity returns cosine score for in-vocab guess", async () => {
+      const ai = fakeAi(async (_model, { text }) => ({
+        data: text.map((_, i) => fakeVector(i + 1)),
+      }));
+      const client = createClient(ai);
+      const res = await client.similarity("apple", "orange");
+      expect(res.in_vocab_a).toBe(true);
+      expect(res.in_vocab_b).toBe(true);
+      expect(res.canonical_a).toBe("apple");
+      expect(res.canonical_b).toBe("orange");
+      expect(typeof res.similarity).toBe("number");
+      expect(res.similarity).toBeGreaterThan(-1);
+      expect(res.similarity).toBeLessThanOrEqual(1);
+    });
+
+    it("similarity returns 1 for identical vectors", async () => {
+      const vec = fakeVector(7);
+      const ai = fakeAi(async () => ({ data: [vec, vec] }));
+      const client = createClient(ai);
+      const res = await client.similarity("apple", "orange");
+      expect(res.similarity).toBeCloseTo(1, 10);
+    });
+
+    it("similarity skips the AI call for OOV guess and flags in_vocab_b:false", async () => {
+      const ai = fakeAi(async () => ({ data: [fakeVector(1), fakeVector(2)] }));
+      const client = createClient(ai);
+      const res = await client.similarity("apple", "zzzfoobarbaz");
       expect(res.in_vocab_b).toBe(false);
       expect(res.similarity).toBe(null);
+      expect(ai.run).not.toHaveBeenCalled();
     });
 
-    it("similarity returns null when relatedness payload lacks a numeric value", async () => {
-      const client = createClient("https://api.test", { timeoutMs: 100 });
-      global.fetch = vi.fn((url) => {
-        if (url.includes("/relatedness")) {
-          return Promise.resolve({ ok: true, text: () => Promise.resolve("{}") });
-        }
-        return Promise.resolve(conceptResp(5));
+    it("similarity wraps AI.run rejection as UpstreamError", async () => {
+      const ai = fakeAi(async () => {
+        throw new Error("boom");
       });
+      const client = createClient(ai);
+      await expect(client.similarity("apple", "orange")).rejects.toMatchObject({
+        name: "UpstreamError",
+      });
+    });
+
+    it("similarity throws UpstreamError on malformed payload", async () => {
+      const ai = fakeAi(async () => ({ data: [fakeVector(1)] })); // only 1 vector
+      const client = createClient(ai);
+      await expect(client.similarity("apple", "orange")).rejects.toMatchObject({
+        name: "UpstreamError",
+      });
+    });
+
+    it("similarity returns null score when a vector norm is zero", async () => {
+      const zero = new Array(768).fill(0);
+      const ai = fakeAi(async () => ({ data: [zero, fakeVector(1)] }));
+      const client = createClient(ai);
       const res = await client.similarity("apple", "orange");
+      expect(res.in_vocab_b).toBe(true);
       expect(res.similarity).toBe(null);
     });
 
-    it("similarity distinguishes 0 from null", async () => {
-      const client = createClient("https://api.test", { timeoutMs: 100 });
-      global.fetch = vi.fn((url) => {
-        if (url.includes("/relatedness")) return Promise.resolve(relatednessResp(0));
-        return Promise.resolve(conceptResp(5));
-      });
-      const res = await client.similarity("apple", "orange");
-      expect(res.similarity).toBe(0);
-      expect(res.in_vocab_b).toBe(true);
-    });
-
-    it("randomWord returns a verified pick when edges present", async () => {
-      const client = createClient("https://api.test", { timeoutMs: 100 });
-      global.fetch = vi.fn(() => Promise.resolve(conceptResp(5)));
+    it("randomWord returns a verified pick from the local pool", async () => {
+      const ai = fakeAi(async () => ({ data: [] }));
+      const client = createClient(ai);
       const res = await client.randomWord();
       expect(typeof res.word).toBe("string");
       expect(res.word.length).toBeGreaterThan(0);
       expect(res.verified).toBe(true);
+      expect(ai.run).not.toHaveBeenCalled();
     });
 
-    it("randomWord falls back to unverified pick after max attempts", async () => {
-      const client = createClient("https://api.test", { timeoutMs: 100 });
-      // Every concept lookup returns zero edges → exhausts retries.
-      global.fetch = vi.fn(() => Promise.resolve(conceptResp(0)));
-      const res = await client.randomWord();
-      expect(res.verified).toBe(false);
-      expect(typeof res.word).toBe("string");
-    });
-
-    it("randomWord swallows transient fetch errors during verification", async () => {
-      const client = createClient("https://api.test", { timeoutMs: 100 });
-      let n = 0;
-      global.fetch = vi.fn(() => {
-        n += 1;
-        // Error for the first few attempts, then succeed.
-        if (n <= 2) return Promise.reject(new Error("transient"));
-        return Promise.resolve(conceptResp(3));
-      });
-      const res = await client.randomWord();
-      expect(res.verified).toBe(true);
-    });
-
-    it("concept throws UpstreamError on non-2xx response", async () => {
-      const client = createClient("https://api.test", { timeoutMs: 100 });
-      global.fetch = vi.fn(() =>
-        Promise.resolve({
-          ok: false,
-          status: 500,
-          text: () => Promise.resolve("Internal Server Error"),
-        }),
-      );
-      await expect(client.concept("apple")).rejects.toMatchObject({
-        name: "UpstreamError",
-        status: 500,
-        body: "Internal Server Error",
-      });
-    });
-
-    it("concept throws UpstreamError when response is not valid JSON", async () => {
-      const client = createClient("https://api.test", { timeoutMs: 100 });
-      global.fetch = vi.fn(() =>
-        Promise.resolve({ ok: true, text: () => Promise.resolve("not json") }),
-      );
-      await expect(client.concept("apple")).rejects.toMatchObject({ name: "UpstreamError" });
-    });
-
-    it("concept throws UpstreamError on fetch failure", async () => {
-      const client = createClient("https://api.test", { timeoutMs: 100 });
-      global.fetch = vi.fn(() => Promise.reject(new Error("network error")));
-      await expect(client.concept("apple")).rejects.toThrow("conceptnet fetch failed");
-    });
-
-    it("truncates response body to 500 chars in UpstreamError", async () => {
-      const client = createClient("https://api.test", { timeoutMs: 50 });
-      const longBody = "x".repeat(600);
-      global.fetch = vi.fn(() =>
-        Promise.resolve({ ok: false, status: 400, text: () => Promise.resolve(longBody) }),
-      );
-      try {
-        await client.concept("apple");
-      } catch (err) {
-        expect(err.body.length).toBe(500);
-      }
-    });
-
-    it("sends User-Agent and Accept headers", async () => {
-      const client = createClient("https://api.test", { timeoutMs: 100 });
-      global.fetch = vi.fn((_, opts) => {
-        expect(opts.headers["User-Agent"]).toContain("miti99bot");
-        expect(opts.headers.Accept).toBe("application/json");
-        return Promise.resolve(conceptResp(1));
-      });
-      await client.concept("apple");
-    });
-
-    it("strips trailing slashes from the API base URL", async () => {
-      const client = createClient("https://api.test///", { timeoutMs: 100 });
-      global.fetch = vi.fn((url) => {
-        expect(url.startsWith("https://api.test/c/en/")).toBe(true);
-        return Promise.resolve(conceptResp(1));
-      });
-      await client.concept("apple");
-    });
-
-    it("URL-encodes the term path segment", async () => {
-      const client = createClient("https://api.test", { timeoutMs: 100 });
-      global.fetch = vi.fn((url) => {
-        expect(url).toContain("/c/en/hello%20world");
-        return Promise.resolve(conceptResp(1));
-      });
-      await client.concept("hello world");
-    });
-
-    it("defaults to the public ConceptNet base URL when none provided", async () => {
-      const client = createClient();
-      global.fetch = vi.fn((url) => {
-        expect(url.startsWith("https://api.conceptnet.io/")).toBe(true);
-        return Promise.resolve(conceptResp(1));
-      });
-      await client.concept("apple");
+    it("supports model override via options", async () => {
+      const ai = fakeAi(async () => ({ data: [fakeVector(1), fakeVector(2)] }));
+      const client = createClient(ai, { model: "@cf/baai/bge-large-en-v1.5" });
+      await client.similarity("apple", "orange");
+      expect(ai.run.mock.calls[0][0]).toBe("@cf/baai/bge-large-en-v1.5");
     });
   });
 });

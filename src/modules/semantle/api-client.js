@@ -1,25 +1,25 @@
 /**
- * @file ConceptNet API client for the semantle module.
+ * @file Cloudflare Workers AI client for the semantle module.
  *
- * ConceptNet endpoints:
- *   GET /relatedness?node1=/c/en/X&node2=/c/en/Y  → { value: number ∈ [-1, 1] }
- *   GET /c/en/{term}                              → { edges: [...] }   (empty ⇒ OOV)
+ * Runs the `@cf/baai/bge-small-en-v1.5` text-embedding model via the `env.AI`
+ * binding, then scores guesses by computing cosine similarity between the
+ * target and guess vectors locally (no extra round-trip).
  *
- * There is no official random-word endpoint, so the client picks a candidate
- * from our local `TARGET_POOL` and verifies it has a ConceptNet entry with
- * edges. After a few failed attempts it falls back to an unverified pick —
- * the curated pool is trusted enough that this should be rare.
+ * Vocabulary: the curated `words-data.js` list (google-10k) doubles as our
+ * in/out-of-vocabulary set — anything outside it is treated as OOV so players
+ * get the "not in the vocabulary" reply instead of a noisy embedding score.
  *
- * The returned `similarity(a, b)` shape mirrors the earlier word2sim contract
- * so handlers/render/state don't have to change.
+ * The returned `similarity(a, b)` shape is kept identical to the prior
+ * ConceptNet/word2sim contract so handlers/render/state stay untouched.
  */
 
 import { pickFromPool } from "./wordlist.js";
+import WORDS from "./words-data.js";
 
-const DEFAULT_API_BASE = "https://api.conceptnet.io";
-const DEFAULT_TIMEOUT_MS = 5000;
-const USER_AGENT = "miti99bot/semantle";
-const MAX_RANDOM_ATTEMPTS = 5;
+const DEFAULT_MODEL = "@cf/baai/bge-small-en-v1.5";
+
+// O(1) membership lookup for OOV detection. Built once per isolate.
+const VOCAB = new Set(WORDS);
 
 export class UpstreamError extends Error {
   /** @param {string} message @param {{status?: number, body?: string, cause?: unknown}} [meta] */
@@ -32,98 +32,60 @@ export class UpstreamError extends Error {
   }
 }
 
-function buildUrl(base, path, params = {}) {
-  const normalized = String(base).replace(/\/+$/, "");
-  const url = new URL(`${normalized}${path}`);
-  for (const [k, v] of Object.entries(params)) {
-    if (v === undefined || v === null) continue;
-    url.searchParams.set(k, String(v));
+function cosineSimilarity(a, b) {
+  if (!a || !b || a.length !== b.length) return null;
+  let dot = 0;
+  let normA = 0;
+  let normB = 0;
+  for (let i = 0; i < a.length; i++) {
+    dot += a[i] * b[i];
+    normA += a[i] * a[i];
+    normB += b[i] * b[i];
   }
-  return url.toString();
-}
-
-async function fetchJson(url, timeoutMs) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  let res;
-  try {
-    res = await fetch(url, {
-      headers: { "User-Agent": USER_AGENT, Accept: "application/json" },
-      signal: controller.signal,
-    });
-  } catch (err) {
-    clearTimeout(timer);
-    throw new UpstreamError("conceptnet fetch failed", { cause: err });
-  }
-  clearTimeout(timer);
-  const text = await res.text();
-  if (!res.ok) {
-    throw new UpstreamError(`conceptnet HTTP ${res.status}`, {
-      status: res.status,
-      body: text.slice(0, 500),
-    });
-  }
-  try {
-    return JSON.parse(text);
-  } catch (err) {
-    throw new UpstreamError("conceptnet non-JSON response", { cause: err });
-  }
-}
-
-function hasEdges(concept) {
-  return Array.isArray(concept?.edges) && concept.edges.length > 0;
+  const denom = Math.sqrt(normA) * Math.sqrt(normB);
+  return denom === 0 ? null : dot / denom;
 }
 
 /**
- * @param {string} [apiBase] — override for mirrors/tests (default api.conceptnet.io)
- * @param {{ timeoutMs?: number }} [opts]
+ * @param {{ run: (model: string, input: { text: string[] }) => Promise<{ data: number[][] }> }} ai
+ *   — Workers AI binding (`env.AI`). Tests pass a fake with the same `.run()` shape.
+ * @param {{ model?: string }} [opts]
  */
-export function createClient(apiBase = DEFAULT_API_BASE, { timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
-  /** @param {string} term */
-  function concept(term) {
-    return fetchJson(buildUrl(apiBase, `/c/en/${encodeURIComponent(term)}`), timeoutMs);
+export function createClient(ai, { model = DEFAULT_MODEL } = {}) {
+  if (!ai || typeof ai.run !== "function") {
+    throw new TypeError("createClient: ai binding with .run(model, input) is required");
   }
 
-  /** @param {string} a @param {string} b */
-  function relatedness(a, b) {
-    return fetchJson(
-      buildUrl(apiBase, "/relatedness", {
-        node1: `/c/en/${a}`,
-        node2: `/c/en/${b}`,
-      }),
-      timeoutMs,
-    );
+  async function embedPair(a, b) {
+    let resp;
+    try {
+      resp = await ai.run(model, { text: [a, b] });
+    } catch (err) {
+      throw new UpstreamError("workers-ai embedding failed", { cause: err });
+    }
+    const data = resp?.data;
+    if (!Array.isArray(data) || data.length < 2) {
+      throw new UpstreamError("workers-ai returned malformed embedding payload");
+    }
+    return [data[0], data[1]];
   }
 
   return {
-    concept,
-    relatedness,
-
     /**
-     * Pick a target word from the local pool. Verifies each candidate has a
-     * ConceptNet entry; falls back to an unverified pick after a few tries.
+     * Pick a target word from the local pool. The pool IS our vocabulary,
+     * so every pick is trivially verified — no upstream check needed.
      * Shape matches the old word2sim `/random` response for handler reuse.
      * @returns {Promise<{ word: string, verified: boolean }>}
      */
     async randomWord() {
-      for (let i = 0; i < MAX_RANDOM_ATTEMPTS; i++) {
-        const candidate = pickFromPool();
-        try {
-          const c = await concept(candidate);
-          if (hasEdges(c)) return { word: candidate, verified: true };
-        } catch {
-          // swallow — try the next candidate
-        }
-      }
-      return { word: pickFromPool(), verified: false };
+      return { word: pickFromPool(), verified: true };
     },
 
     /**
-     * Cosine-like similarity between `a` (target) and `b` (guess). Runs the
-     * edge-check for `b` in parallel with the relatedness call so OOV guesses
-     * are identified on the same round-trip.
+     * Cosine similarity between `a` (target) and `b` (guess). Uses the local
+     * wordlist as the vocabulary — unknown words return `in_vocab_b: false`
+     * with `similarity: null` and skip the inference call entirely.
      *
-     * Shape deliberately mirrors the old word2sim response.
      * @param {string} a
      * @param {string} b
      * @returns {Promise<{
@@ -134,18 +96,13 @@ export function createClient(apiBase = DEFAULT_API_BASE, { timeoutMs = DEFAULT_T
      * }>}
      */
     async similarity(a, b) {
-      const [conceptB, rel] = await Promise.all([concept(b), relatedness(a, b)]);
-      const inVocabB = hasEdges(conceptB);
-      const value = typeof rel?.value === "number" ? rel.value : null;
-      return {
-        a,
-        b,
-        canonical_a: a,
-        canonical_b: b,
-        in_vocab_a: true, // target was verified at round start
-        in_vocab_b: inVocabB,
-        similarity: inVocabB ? value : null,
-      };
+      const base = { a, b, canonical_a: a, canonical_b: b, in_vocab_a: true };
+      if (!VOCAB.has(b)) {
+        return { ...base, in_vocab_b: false, similarity: null };
+      }
+      const [vecA, vecB] = await embedPair(a, b);
+      const sim = cosineSimilarity(vecA, vecB);
+      return { ...base, in_vocab_b: true, similarity: sim };
     },
   };
 }

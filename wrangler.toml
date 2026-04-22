@@ -25,6 +25,15 @@ binding = "DB"
 database_name = "miti99bot-db"
 database_id = "261b54e7-0fdb-4fe7-8ed9-2e8a8bcf459c"
 
+# Workers AI — inference binding used by the semantle module for
+# @cf/baai/bge-small-en-v1.5 text embeddings (replaces ConceptNet upstream).
+# Accessed as `env.AI` in handlers. Included on the Workers Free plan:
+# 10,000 Neurons/day at no charge (hard-stops — no billing on Free plan).
+# bge-small is ~0.0037 Neurons/guess → ~2.7M guesses/day within the cap.
+# Pricing: https://developers.cloudflare.com/workers-ai/platform/pricing/
+[ai]
+binding = "AI"
+
 # Cron Triggers — union of all schedules declared by modules.
 # When adding a module with cron entries, append its schedule(s) here.
 # See docs/adding-a-module.md for the full module author workflow.
