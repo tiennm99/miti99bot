@@ -22,18 +22,8 @@ import { resolve } from "node:path";
 
 const LOLDLE_CLASSIC = "https://loldle.net/classic";
 
-const LANE_MAP = {
-  top: "top",
-  jungle: "jungle",
-  middle: "mid",
-  bottom: "bottom",
-  support: "support",
-};
-
-const GENDER_MAP = { male: "male", female: "female", other: "divers" };
-
 const CHAMPION_RECORD_RX =
-  /\{_id:"[a-f0-9]+",championId:"[^"]+",championName:"([^"]+)",gender:"([^"]+)",positions:\[([^\]]+)\],species:\[([^\]]+)\],resource:"([^"]+)",range_type:\[([^\]]+)\],regions:\[([^\]]+)\],release_date:"(\d{4})-\d{2}-\d{2}"\}/g;
+  /\{_id:"([a-f0-9]+)",championId:"([^"]+)",championName:"([^"]+)",gender:"([^"]+)",positions:\[([^\]]+)\],species:\[([^\]]+)\],resource:"([^"]+)",range_type:\[([^\]]+)\],regions:\[([^\]]+)\],release_date:"(\d{4}-\d{2}-\d{2})"\}/g;
 
 async function fetchText(url) {
   const res = await fetch(url);
@@ -43,10 +33,6 @@ async function fetchText(url) {
 
 function parseJsArrayStrings(inner) {
   return [...inner.matchAll(/"([^"]+)"/g)].map((m) => m[1]);
-}
-
-function normalizeRegion(name) {
-  return name.toLowerCase().replace(/\s+/g, "-");
 }
 
 async function scrapeLoldle() {
@@ -59,27 +45,33 @@ async function scrapeLoldle() {
   const seen = new Set();
   const records = [];
   for (const m of bundle.matchAll(CHAMPION_RECORD_RX)) {
-    const [, name, gender, positionsRaw, speciesRaw, resource, rangeTypeRaw, regionsRaw, year] = m;
-    if (seen.has(name)) continue;
-    seen.add(name);
-
-    const lanes = parseJsArrayStrings(positionsRaw)
-      .map((p) => LANE_MAP[p.toLowerCase()])
-      .filter(Boolean);
-    const regions = parseJsArrayStrings(regionsRaw).map(normalizeRegion);
-    const species = parseJsArrayStrings(speciesRaw).map((s) => s.toLowerCase());
-    const rangeType = parseJsArrayStrings(rangeTypeRaw)[0]?.toLowerCase();
+    const [
+      ,
+      _id,
+      championId,
+      championName,
+      gender,
+      positions,
+      species,
+      resource,
+      rangeType,
+      regions,
+      releaseDate,
+    ] = m;
+    if (seen.has(championName)) continue;
+    seen.add(championName);
 
     records.push({
-      id: name,
-      name,
-      gender: GENDER_MAP[gender.toLowerCase()] ?? "divers",
-      species: species.join(","),
+      _id,
+      championId,
+      championName,
+      gender,
+      positions: parseJsArrayStrings(positions),
+      species: parseJsArrayStrings(species),
       resource,
-      attackType: rangeType === "melee" ? "close" : "range",
-      region: regions.join(","),
-      lane: lanes.join(","),
-      releaseDate: Number(year),
+      range_type: parseJsArrayStrings(rangeType),
+      regions: parseJsArrayStrings(regions),
+      release_date: releaseDate,
     });
   }
 
@@ -88,7 +80,7 @@ async function scrapeLoldle() {
       "loldle.net: zero champion records parsed — bundle format changed, update CHAMPION_RECORD_RX",
     );
   }
-  records.sort((a, b) => a.name.localeCompare(b.name));
+  records.sort((a, b) => a.championName.localeCompare(b.championName));
   return records;
 }
 

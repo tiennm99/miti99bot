@@ -10,7 +10,7 @@ const sampleResults = [
   { key: "region", label: "Region", result: "correct", guessValue: "Runeterra" },
   { key: "lane", label: "Lane", result: "partial", guessValue: "Jungle, Support" },
   {
-    key: "releaseDate",
+    key: "release_date",
     label: "Year",
     result: "wrong",
     direction: "up",
@@ -48,7 +48,7 @@ describe("renderGuess", () => {
     expect(up).toContain("2011 ⬆️");
 
     const correctYear = sampleResults.map((r) =>
-      r.key === "releaseDate" ? { ...r, result: "correct", direction: undefined } : r,
+      r.key === "release_date" ? { ...r, result: "correct", direction: undefined } : r,
     );
     const out = renderGuess("Brand", correctYear);
     expect(out).not.toContain("⬆️");
