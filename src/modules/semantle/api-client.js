@@ -8,12 +8,9 @@
  * Vocabulary: the curated `words-data.js` list (google-10k) doubles as our
  * in/out-of-vocabulary set — anything outside it is treated as OOV so players
  * get the "not in the vocabulary" reply instead of a noisy embedding score.
- *
- * The returned `similarity(a, b)` shape is kept identical to the prior
- * ConceptNet/word2sim contract so handlers/render/state stay untouched.
  */
 
-import { pickFromPool } from "./wordlist.js";
+import { randomLine } from "./wordlist.js";
 import WORDS from "./words-data.js";
 
 const DEFAULT_MODEL = "@cf/baai/bge-small-en-v1.5";
@@ -74,11 +71,10 @@ export function createClient(ai, { model = DEFAULT_MODEL } = {}) {
     /**
      * Pick a target word from the local pool. The pool IS our vocabulary,
      * so every pick is trivially verified — no upstream check needed.
-     * Shape matches the old word2sim `/random` response for handler reuse.
      * @returns {Promise<{ word: string, verified: boolean }>}
      */
     async randomWord() {
-      return { word: pickFromPool(), verified: true };
+      return { word: randomLine(), verified: true };
     },
 
     /**
@@ -106,6 +102,3 @@ export function createClient(ai, { model = DEFAULT_MODEL } = {}) {
     },
   };
 }
-
-// Backwards-compat alias — older imports referenced `Word2SimError`.
-export { UpstreamError as Word2SimError };

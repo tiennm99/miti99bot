@@ -31,7 +31,7 @@ if (!res.ok) throw new Error(`fetch failed: ${res.status} ${res.statusText}`);
 const text = await res.text();
 
 // Normalize only: trim whitespace, lowercase, drop blanks, dedupe.
-// Preserve original frequency order so `getLine(n)` stays a frequency rank.
+// Preserve original frequency order — source is ranked by Google Ngram.
 const words = Array.from(
   new Set(
     text

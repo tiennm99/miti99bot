@@ -4,8 +4,7 @@
  * Allows Unicode letters (including diacritics via combining marks) plus
  * single spaces between syllables for compound words (`con chó`,
  * `máy bay`). Rejects digits, punctuation, and underscores so the board
- * stays clean; the api-client handles the space→underscore conversion
- * internally when building ConceptNet URIs.
+ * stays clean.
  */
 
 /** @param {string} raw */

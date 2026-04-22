@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createStore } from "../../../src/db/create-store.js";
-import { Word2SimError } from "../../../src/modules/semantle/api-client.js";
+import { UpstreamError } from "../../../src/modules/semantle/api-client.js";
 import {
   handleGiveup,
   handleSemantle,
@@ -302,7 +302,7 @@ describe("semantle/handlers", () => {
     });
 
     it("replies with UPSTREAM_FAIL on randomWord error", async () => {
-      client.randomWord.mockRejectedValue(new Word2SimError("timeout", { status: 504 }));
+      client.randomWord.mockRejectedValue(new UpstreamError("timeout", { status: 504 }));
 
       const ctx = makeCtx(1, "private", "/semantle");
       await handleSemantle(ctx, { db, client });
@@ -312,7 +312,7 @@ describe("semantle/handlers", () => {
 
     it("replies with UPSTREAM_FAIL on similarity error", async () => {
       client.randomWord.mockResolvedValue({ word: "apple", rank: 1000 });
-      client.similarity.mockRejectedValue(new Word2SimError("network error"));
+      client.similarity.mockRejectedValue(new UpstreamError("network error"));
 
       const ctx = makeCtx(1, "private", "/semantle guess");
       await handleSemantle(ctx, { db, client });
