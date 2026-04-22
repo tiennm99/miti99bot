@@ -15,4 +15,5 @@ export const moduleRegistry = {
   misc: () => import("./misc/index.js"),
   trading: () => import("./trading/index.js"),
   lolschedule: () => import("./lolschedule/index.js"),
+  semantle: () => import("./semantle/index.js"),
 };
