@@ -4,10 +4,10 @@ import { CLASSIC_ATTRIBUTES, compareChampions } from "../../../src/modules/loldl
 const aatrox = {
   id: "Aatrox",
   gender: "male",
-  genre: "Fighter",
+  species: "darkin",
   attackType: "close",
-  resource: "Blood Well",
-  region: "runeterra",
+  resource: "Manaless",
+  region: "runeterra,shurima",
   lane: "top",
   releaseDate: 2013,
 };
@@ -15,7 +15,7 @@ const aatrox = {
 const ahri = {
   id: "Ahri",
   gender: "female",
-  genre: "Mage,Assassin",
+  species: "vastayan",
   attackType: "range",
   resource: "Mana",
   region: "ionia",
@@ -26,7 +26,7 @@ const ahri = {
 const akali = {
   id: "Akali",
   gender: "female",
-  genre: "Assassin",
+  species: "human",
   attackType: "close",
   resource: "Energy",
   region: "ionia",
@@ -49,18 +49,24 @@ describe("compareChampions", () => {
     expect(byKey(r, "gender").result).toBe("wrong");
     expect(byKey(r, "attackType").result).toBe("wrong");
     expect(byKey(r, "resource").result).toBe("wrong");
-    expect(byKey(r, "region").result).toBe("wrong");
   });
 
   it("multi-value partial overlap is partial", () => {
-    const r = compareChampions(akali, ahri);
-    expect(byKey(r, "genre").result).toBe("partial");
+    const r = compareChampions({ ...akali, lane: "mid,top" }, { ...ahri, lane: "mid" });
     expect(byKey(r, "lane").result).toBe("partial");
+    const r2 = compareChampions(
+      { ...aatrox, region: "runeterra,shurima" },
+      { ...ahri, region: "runeterra,ionia" },
+    );
+    expect(byKey(r2, "region").result).toBe("partial");
   });
 
   it("multi-value identical sets are correct even if order/case differ", () => {
-    const r = compareChampions({ ...akali, genre: "assassin" }, { ...akali, genre: "Assassin" });
-    expect(byKey(r, "genre").result).toBe("correct");
+    const r = compareChampions(
+      { ...akali, species: "human,ninja" },
+      { ...akali, species: "Ninja,Human" },
+    );
+    expect(byKey(r, "species").result).toBe("correct");
   });
 
   it("year direction hints up when guess < target", () => {

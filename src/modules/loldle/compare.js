@@ -5,10 +5,10 @@
 
 export const CLASSIC_ATTRIBUTES = [
   { key: "gender", label: "Gender", type: "exact" },
-  { key: "genre", label: "Genre", type: "multi" },
+  { key: "species", label: "Species", type: "multi" },
   { key: "attackType", label: "Range", type: "exact" },
   { key: "resource", label: "Resource", type: "exact" },
-  { key: "region", label: "Region", type: "exact" },
+  { key: "region", label: "Region", type: "multi" },
   { key: "lane", label: "Lane", type: "multi" },
   { key: "releaseDate", label: "Year", type: "year" },
 ];
@@ -102,8 +102,11 @@ function formatValue(key, value) {
     case "attackType":
       return str === "close" ? "Melee" : "Ranged";
     case "region":
-      return str.split("-").map(capitalize).join(" ");
-    case "genre":
+      return str
+        .split(",")
+        .map((s) => s.split("-").map(capitalize).join(" "))
+        .join(", ");
+    case "species":
     case "lane":
       return str
         .split(",")

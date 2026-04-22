@@ -1,11 +1,12 @@
 name: scrape-loldle-data
 
 # Rebuilds src/modules/loldle/champions.json every Monday 06:00 UTC by
-# scraping loldle.net's JS bundle + merging ddragon championFull.
-# Opens a PR if the output changed. Manually triggerable from Actions tab.
+# scraping loldle.net's JS bundle (sole source of truth for classic-mode
+# fields). Opens a PR if the output changed. Manually triggerable from the
+# Actions tab.
 #
-# Note: the bundled data is shipped with the Worker — the change only takes
-# effect after `npm run deploy` is run on the updated main branch.
+# Note: the bundled data ships with the Worker — the change only takes effect
+# after `npm run deploy` is run on the updated main branch.
 
 on:
   schedule:
@@ -41,11 +42,9 @@ jobs:
           title: "data: weekly loldle.net champion refresh"
           body: |
             Automated weekly refresh of `src/modules/loldle/champions.json`
-            from loldle.net + ddragon championFull.
-
-            Fields sourced from loldle.net: `gender`, `attackType`, `lane`,
-            `region`, `releaseDate`. Display fields (`title`, `resource`,
-            `genre`, `skinCount`, `image`) come from ddragon.
+            from loldle.net's JS bundle — the canonical source for all
+            classic-mode fields (`gender`, `species`, `resource`,
+            `attackType`, `region`, `lane`, `releaseDate`).
 
             Review the diff, merge, then run `npm run deploy` to ship.
           add-paths: |

@@ -4,7 +4,7 @@ import { renderBoard, renderGuess } from "../../../src/modules/loldle/render.js"
 /** Mirror the shape compareChampions returns — only the fields render.js reads. */
 const sampleResults = [
   { key: "gender", label: "Gender", result: "correct", guessValue: "Male" },
-  { key: "genre", label: "Genre", result: "correct", guessValue: "Mage, Support" },
+  { key: "species", label: "Species", result: "correct", guessValue: "Human, Darkin" },
   { key: "attackType", label: "Range", result: "correct", guessValue: "Ranged" },
   { key: "resource", label: "Resource", result: "correct", guessValue: "Mana" },
   { key: "region", label: "Region", result: "correct", guessValue: "Runeterra" },
