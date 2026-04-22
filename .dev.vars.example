@@ -2,3 +2,7 @@
 # Copy to .dev.vars (gitignored) and fill in real values.
 TELEGRAM_BOT_TOKEN=
 TELEGRAM_WEBHOOK_SECRET=
+
+# Optional: override the word2sim base URL for local/self-hosted instances
+# (semantle module). Default is https://word2sim.sg.miti99.com.
+# WORD2SIM_API_URL=http://localhost:8000
