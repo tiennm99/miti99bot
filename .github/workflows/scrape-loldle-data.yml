@@ -47,6 +47,4 @@ jobs:
             `attackType`, `region`, `lane`, `releaseDate`).
 
             Review the diff, merge, then run `npm run deploy` to ship.
-          add-paths: |
-            src/modules/loldle/champions.json
-            src/modules/loldle/champions-data.js
+          add-paths: src/modules/loldle/champions.json
