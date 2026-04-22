@@ -1,7 +1,5 @@
 [
     {
-        "_id": "6293f3354fccc7941b03a333",
-        "championId": "628141c33a4f16643c39d042",
         "championName": "Aatrox",
         "gender": "Male",
         "positions": [
@@ -21,8 +19,6 @@
         "release_date": "2013-06-13"
     },
     {
-        "_id": "6293f33b4fccc7941b03a337",
-        "championId": "628141c33a4f16643c39d043",
         "championName": "Ahri",
         "gender": "Female",
         "positions": [
@@ -41,8 +37,6 @@
         "release_date": "2011-12-14"
     },
     {
-        "_id": "6293f3404fccc7941b03a33b",
-        "championId": "628141c33a4f16643c39d044",
         "championName": "Akali",
         "gender": "Female",
         "positions": [
@@ -61,8 +55,6 @@
         "release_date": "2010-05-11"
     },
     {
-        "_id": "6293f3454fccc7941b03a33f",
-        "championId": "628141c33a4f16643c39d045",
         "championName": "Akshan",
         "gender": "Male",
         "positions": [
@@ -81,8 +73,6 @@
         "release_date": "2021-07-22"
     },
     {
-        "_id": "6293f34d4fccc7941b03a343",
-        "championId": "628141c33a4f16643c39d046",
         "championName": "Alistar",
         "gender": "Male",
         "positions": [
@@ -102,8 +92,6 @@
         "release_date": "2009-02-21"
     },
     {
-        "_id": "6293f34d4fccc7941b03a787",
-        "championId": "6293f34d4fccc7941b03a787",
         "championName": "Ambessa",
         "gender": "Female",
         "positions": [
@@ -123,8 +111,6 @@
         "release_date": "2024-11-06"
     },
     {
-        "_id": "6293f3524fccc7941b03a347",
-        "championId": "628141c33a4f16643c39d047",
         "championName": "Amumu",
         "gender": "Male",
         "positions": [
@@ -144,8 +130,6 @@
         "release_date": "2009-06-26"
     },
     {
-        "_id": "6293f3584fccc7941b03a34b",
-        "championId": "628141c33a4f16643c39d048",
         "championName": "Anivia",
         "gender": "Female",
         "positions": [
@@ -165,8 +149,6 @@
         "release_date": "2009-07-10"
     },
     {
-        "_id": "6293f35f4fccc7941b03a34f",
-        "championId": "628141c33a4f16643c39d049",
         "championName": "Annie",
         "gender": "Female",
         "positions": [
@@ -187,8 +169,6 @@
         "release_date": "2009-02-21"
     },
     {
-        "_id": "6293f3654fccc7941b03a353",
-        "championId": "628141c33a4f16643c39d04a",
         "championName": "Aphelios",
         "gender": "Male",
         "positions": [
@@ -208,8 +188,6 @@
         "release_date": "2019-12-11"
     },
     {
-        "_id": "6293f36b4fccc7941b03a357",
-        "championId": "628141c33a4f16643c39d04b",
         "championName": "Ashe",
         "gender": "Female",
         "positions": [
@@ -229,8 +207,6 @@
         "release_date": "2009-02-21"
     },
     {
-        "_id": "6293f3704fccc7941b03a35b",
-        "championId": "628141c33a4f16643c39d04c",
         "championName": "Aurelion Sol",
         "gender": "Male",
         "positions": [
@@ -251,8 +227,6 @@
         "release_date": "2016-03-24"
     },
     {
-        "_id": "670018e6d29cfb77a6fdf420",
-        "championId": "670018e6d29cfb77a6fdf420",
         "championName": "Aurora",
         "gender": "Female",
         "positions": [
@@ -271,8 +245,6 @@
         "release_date": "2024-07-17"
     },
     {
-        "_id": "6293f3764fccc7941b03a35f",
-        "championId": "628141c33a4f16643c39d04d",
         "championName": "Azir",
         "gender": "Male",
         "positions": [
@@ -291,8 +263,6 @@
         "release_date": "2014-09-16"
     },
     {
-        "_id": "6293f37b4fccc7941b03a363",
-        "championId": "628141c33a4f16643c39d04e",
         "championName": "Bard",
         "gender": "Male",
         "positions": [
@@ -311,8 +281,24 @@
         "release_date": "2015-03-12"
     },
     {
-        "_id": "6293f3804fccc7941b03a367",
-        "championId": "628141c33a4f16643c39d04f",
+        "championName": "Bel'Veth",
+        "gender": "Female",
+        "positions": [
+            "Jungle"
+        ],
+        "species": [
+            "Void-Being"
+        ],
+        "resource": "Manaless",
+        "range_type": [
+            "Melee"
+        ],
+        "regions": [
+            "Void"
+        ],
+        "release_date": "2022-06-09"
+    },
+    {
         "championName": "Blitzcrank",
         "gender": "Other",
         "positions": [
@@ -331,8 +317,6 @@
         "release_date": "2009-09-02"
     },
     {
-        "_id": "6293f3854fccc7941b03a36b",
-        "championId": "628141c33a4f16643c39d050",
         "championName": "Brand",
         "gender": "Male",
         "positions": [
@@ -353,8 +337,6 @@
         "release_date": "2011-04-12"
     },
     {
-        "_id": "6293f38a4fccc7941b03a36f",
-        "championId": "628141c33a4f16643c39d051",
         "championName": "Braum",
         "gender": "Male",
         "positions": [
@@ -374,8 +356,6 @@
         "release_date": "2014-05-12"
     },
     {
-        "_id": "4513538a4fccc7941b03a36f",
-        "championId": "65579ee109856fc51e488083",
         "championName": "Briar",
         "gender": "Female",
         "positions": [
@@ -394,8 +374,6 @@
         "release_date": "2023-09-14"
     },
     {
-        "_id": "6293f3914fccc7941b03a373",
-        "championId": "628141c33a4f16643c39d052",
         "championName": "Caitlyn",
         "gender": "Female",
         "positions": [
@@ -414,8 +392,6 @@
         "release_date": "2011-01-04"
     },
     {
-        "_id": "6293f3984fccc7941b03a377",
-        "championId": "628141c33a4f16643c39d053",
         "championName": "Camille",
         "gender": "Female",
         "positions": [
@@ -435,8 +411,6 @@
         "release_date": "2016-12-07"
     },
     {
-        "_id": "6293f39d4fccc7941b03a37b",
-        "championId": "628141c33a4f16643c39d054",
         "championName": "Cassiopeia",
         "gender": "Female",
         "positions": [
@@ -458,8 +432,6 @@
         "release_date": "2010-12-14"
     },
     {
-        "_id": "6293f3a24fccc7941b03a37f",
-        "championId": "628141c33a4f16643c39d055",
         "championName": "Cho'Gath",
         "gender": "Male",
         "positions": [
@@ -478,8 +450,6 @@
         "release_date": "2009-06-26"
     },
     {
-        "_id": "6293f3a84fccc7941b03a383",
-        "championId": "628141c33a4f16643c39d056",
         "championName": "Corki",
         "gender": "Male",
         "positions": [
@@ -499,8 +469,6 @@
         "release_date": "2009-09-19"
     },
     {
-        "_id": "6293f3af4fccc7941b03a387",
-        "championId": "628141c33a4f16643c39d057",
         "championName": "Darius",
         "gender": "Male",
         "positions": [
@@ -519,8 +487,6 @@
         "release_date": "2012-05-23"
     },
     {
-        "_id": "6293f3b44fccc7941b03a38b",
-        "championId": "628141c33a4f16643c39d058",
         "championName": "Diana",
         "gender": "Female",
         "positions": [
@@ -541,8 +507,6 @@
         "release_date": "2012-08-07"
     },
     {
-        "_id": "6293f3ba4fccc7941b03a38f",
-        "championId": "628141c33a4f16643c39d059",
         "championName": "Dr. Mundo",
         "gender": "Male",
         "positions": [
@@ -563,8 +527,6 @@
         "release_date": "2009-09-02"
     },
     {
-        "_id": "6293f3bf4fccc7941b03a393",
-        "championId": "628141c33a4f16643c39d05a",
         "championName": "Draven",
         "gender": "Male",
         "positions": [
@@ -583,8 +545,6 @@
         "release_date": "2012-06-06"
     },
     {
-        "_id": "6293f3c34fccc7941b03a397",
-        "championId": "628141c33a4f16643c39d05b",
         "championName": "Ekko",
         "gender": "Male",
         "positions": [
@@ -604,8 +564,6 @@
         "release_date": "2015-05-29"
     },
     {
-        "_id": "6293f3c94fccc7941b03a39b",
-        "championId": "628141c33a4f16643c39d05c",
         "championName": "Elise",
         "gender": "Female",
         "positions": [
@@ -628,8 +586,6 @@
         "release_date": "2012-10-26"
     },
     {
-        "_id": "6293f3cf4fccc7941b03a39f",
-        "championId": "628141c33a4f16643c39d05d",
         "championName": "Evelynn",
         "gender": "Female",
         "positions": [
@@ -649,8 +605,6 @@
         "release_date": "2009-05-01"
     },
     {
-        "_id": "6293f3d44fccc7941b03a3a3",
-        "championId": "628141c33a4f16643c39d05e",
         "championName": "Ezreal",
         "gender": "Male",
         "positions": [
@@ -670,8 +624,6 @@
         "release_date": "2010-03-16"
     },
     {
-        "_id": "6293f3da4fccc7941b03a3a7",
-        "championId": "628141c33a4f16643c39d05f",
         "championName": "Fiddlesticks",
         "gender": "Other",
         "positions": [
@@ -691,8 +643,6 @@
         "release_date": "2009-02-21"
     },
     {
-        "_id": "6293f3df4fccc7941b03a3ab",
-        "championId": "628141c33a4f16643c39d060",
         "championName": "Fiora",
         "gender": "Female",
         "positions": [
@@ -711,8 +661,6 @@
         "release_date": "2012-02-29"
     },
     {
-        "_id": "6293f3e44fccc7941b03a3af",
-        "championId": "628141c33a4f16643c39d061",
         "championName": "Fizz",
         "gender": "Male",
         "positions": [
@@ -731,8 +679,6 @@
         "release_date": "2011-11-15"
     },
     {
-        "_id": "6293f3ec4fccc7941b03a3b3",
-        "championId": "628141c33a4f16643c39d062",
         "championName": "Galio",
         "gender": "Male",
         "positions": [
@@ -751,8 +697,6 @@
         "release_date": "2010-08-10"
     },
     {
-        "_id": "6293f3f04fccc7941b03a3b7",
-        "championId": "628141c33a4f16643c39d063",
         "championName": "Gangplank",
         "gender": "Male",
         "positions": [
@@ -771,8 +715,6 @@
         "release_date": "2009-08-19"
     },
     {
-        "_id": "6293f3f54fccc7941b03a3bb",
-        "championId": "628141c33a4f16643c39d064",
         "championName": "Garen",
         "gender": "Male",
         "positions": [
@@ -791,8 +733,6 @@
         "release_date": "2010-04-27"
     },
     {
-        "_id": "6293f3fb4fccc7941b03a3bf",
-        "championId": "628141c33a4f16643c39d065",
         "championName": "Gnar",
         "gender": "Male",
         "positions": [
@@ -812,8 +752,6 @@
         "release_date": "2014-08-14"
     },
     {
-        "_id": "6293f4004fccc7941b03a3c3",
-        "championId": "628141c33a4f16643c39d066",
         "championName": "Gragas",
         "gender": "Male",
         "positions": [
@@ -834,8 +772,6 @@
         "release_date": "2010-02-02"
     },
     {
-        "_id": "6293f4064fccc7941b03a3c7",
-        "championId": "628141c33a4f16643c39d067",
         "championName": "Graves",
         "gender": "Male",
         "positions": [
@@ -854,8 +790,6 @@
         "release_date": "2011-10-19"
     },
     {
-        "_id": "6293f40b4fccc7941b03a3cb",
-        "championId": "628141c33a4f16643c39d068",
         "championName": "Gwen",
         "gender": "Female",
         "positions": [
@@ -877,8 +811,6 @@
         "release_date": "2021-04-15"
     },
     {
-        "_id": "6293f4104fccc7941b03a3cf",
-        "championId": "628141c33a4f16643c39d069",
         "championName": "Hecarim",
         "gender": "Male",
         "positions": [
@@ -898,8 +830,6 @@
         "release_date": "2012-04-18"
     },
     {
-        "_id": "6293f4154fccc7941b03a3d3",
-        "championId": "628141c33a4f16643c39d06a",
         "championName": "Heimerdinger",
         "gender": "Male",
         "positions": [
@@ -919,8 +849,6 @@
         "release_date": "2009-10-10"
     },
     {
-        "_id": "65ba6a5c547472b54a43a764",
-        "championId": "65ba6a5c547472b54a43a765",
         "championName": "Hwei",
         "gender": "Male",
         "positions": [
@@ -940,8 +868,6 @@
         "release_date": "2023-12-05"
     },
     {
-        "_id": "6293f41c4fccc7941b03a3d7",
-        "championId": "628141c33a4f16643c39d06b",
         "championName": "Illaoi",
         "gender": "Female",
         "positions": [
@@ -961,8 +887,6 @@
         "release_date": "2015-11-24"
     },
     {
-        "_id": "6293f4224fccc7941b03a3db",
-        "championId": "628141c33a4f16643c39d06c",
         "championName": "Irelia",
         "gender": "Female",
         "positions": [
@@ -983,8 +907,6 @@
         "release_date": "2010-11-16"
     },
     {
-        "_id": "6293f4284fccc7941b03a3df",
-        "championId": "628141c33a4f16643c39d06d",
         "championName": "Ivern",
         "gender": "Male",
         "positions": [
@@ -1005,8 +927,6 @@
         "release_date": "2016-10-05"
     },
     {
-        "_id": "6293f42e4fccc7941b03a3e3",
-        "championId": "628141c33a4f16643c39d06e",
         "championName": "Janna",
         "gender": "Female",
         "positions": [
@@ -1027,8 +947,6 @@
         "release_date": "2009-09-02"
     },
     {
-        "_id": "6293f4344fccc7941b03a3e7",
-        "championId": "628141c33a4f16643c39d06f",
         "championName": "Jarvan IV",
         "gender": "Male",
         "positions": [
@@ -1047,8 +965,6 @@
         "release_date": "2011-03-01"
     },
     {
-        "_id": "6293f4394fccc7941b03a3eb",
-        "championId": "628141c33a4f16643c39d070",
         "championName": "Jax",
         "gender": "Male",
         "positions": [
@@ -1070,8 +986,6 @@
         "release_date": "2009-02-21"
     },
     {
-        "_id": "6293f43d4fccc7941b03a3ef",
-        "championId": "628141c33a4f16643c39d071",
         "championName": "Jayce",
         "gender": "Male",
         "positions": [
@@ -1092,8 +1006,6 @@
         "release_date": "2012-07-07"
     },
     {
-        "_id": "6293f4464fccc7941b03a3f3",
-        "championId": "628141c33a4f16643c39d072",
         "championName": "Jhin",
         "gender": "Male",
         "positions": [
@@ -1113,8 +1025,6 @@
         "release_date": "2016-02-01"
     },
     {
-        "_id": "6293f44b4fccc7941b03a3f7",
-        "championId": "628141c33a4f16643c39d073",
         "championName": "Jinx",
         "gender": "Female",
         "positions": [
@@ -1134,8 +1044,24 @@
         "release_date": "2013-10-10"
     },
     {
-        "_id": "6293f44f4fccc7941b03a3fb",
-        "championId": "628141c33a4f16643c39d074",
+        "championName": "K'Sante",
+        "gender": "Male",
+        "positions": [
+            "Top"
+        ],
+        "species": [
+            "Human"
+        ],
+        "resource": "Mana",
+        "range_type": [
+            "Melee"
+        ],
+        "regions": [
+            "Shurima"
+        ],
+        "release_date": "2022-11-02"
+    },
+    {
         "championName": "Kai'Sa",
         "gender": "Female",
         "positions": [
@@ -1156,8 +1082,6 @@
         "release_date": "2018-03-07"
     },
     {
-        "_id": "6293f4544fccc7941b03a3ff",
-        "championId": "628141c33a4f16643c39d075",
         "championName": "Kalista",
         "gender": "Female",
         "positions": [
@@ -1177,8 +1101,6 @@
         "release_date": "2014-11-20"
     },
     {
-        "_id": "6293f4594fccc7941b03a403",
-        "championId": "628141c33a4f16643c39d076",
         "championName": "Karma",
         "gender": "Female",
         "positions": [
@@ -1198,8 +1120,6 @@
         "release_date": "2011-02-01"
     },
     {
-        "_id": "6293f45e4fccc7941b03a407",
-        "championId": "628141c33a4f16643c39d077",
         "championName": "Karthus",
         "gender": "Male",
         "positions": [
@@ -1219,8 +1139,6 @@
         "release_date": "2009-06-12"
     },
     {
-        "_id": "6293f4634fccc7941b03a40b",
-        "championId": "628141c33a4f16643c39d078",
         "championName": "Kassadin",
         "gender": "Male",
         "positions": [
@@ -1241,8 +1159,6 @@
         "release_date": "2009-08-07"
     },
     {
-        "_id": "6293f46b4fccc7941b03a40f",
-        "championId": "628141c33a4f16643c39d079",
         "championName": "Katarina",
         "gender": "Female",
         "positions": [
@@ -1261,8 +1177,6 @@
         "release_date": "2009-09-19"
     },
     {
-        "_id": "6293f4704fccc7941b03a413",
-        "championId": "628141c33a4f16643c39d07a",
         "championName": "Kayle",
         "gender": "Female",
         "positions": [
@@ -1285,8 +1199,6 @@
         "release_date": "2009-02-21"
     },
     {
-        "_id": "6293f4784fccc7941b03a417",
-        "championId": "628141c33a4f16643c39d07b",
         "championName": "Kayn",
         "gender": "Male",
         "positions": [
@@ -1310,8 +1222,6 @@
         "release_date": "2017-07-12"
     },
     {
-        "_id": "6293f47c4fccc7941b03a41b",
-        "championId": "628141c33a4f16643c39d07c",
         "championName": "Kennen",
         "gender": "Male",
         "positions": [
@@ -1331,8 +1241,6 @@
         "release_date": "2010-04-08"
     },
     {
-        "_id": "6293f4814fccc7941b03a41f",
-        "championId": "628141c33a4f16643c39d07d",
         "championName": "Kha'Zix",
         "gender": "Male",
         "positions": [
@@ -1351,8 +1259,6 @@
         "release_date": "2012-09-27"
     },
     {
-        "_id": "6293f4864fccc7941b03a423",
-        "championId": "628141c33a4f16643c39d07e",
         "championName": "Kindred",
         "gender": "Other",
         "positions": [
@@ -1372,8 +1278,6 @@
         "release_date": "2015-10-14"
     },
     {
-        "_id": "6293f48c4fccc7941b03a427",
-        "championId": "628141c33a4f16643c39d07f",
         "championName": "Kled",
         "gender": "Male",
         "positions": [
@@ -1392,8 +1296,6 @@
         "release_date": "2016-08-10"
     },
     {
-        "_id": "6293f4914fccc7941b03a42b",
-        "championId": "628141c33a4f16643c39d080",
         "championName": "Kog'Maw",
         "gender": "Male",
         "positions": [
@@ -1412,8 +1314,6 @@
         "release_date": "2010-06-24"
     },
     {
-        "_id": "6293f4964fccc7941b03a42f",
-        "championId": "628141c33a4f16643c39d081",
         "championName": "LeBlanc",
         "gender": "Female",
         "positions": [
@@ -1433,8 +1333,6 @@
         "release_date": "2010-11-02"
     },
     {
-        "_id": "6293f49c4fccc7941b03a433",
-        "championId": "628141c33a4f16643c39d082",
         "championName": "Lee Sin",
         "gender": "Male",
         "positions": [
@@ -1454,8 +1352,6 @@
         "release_date": "2011-04-01"
     },
     {
-        "_id": "6293f4a14fccc7941b03a437",
-        "championId": "628141c33a4f16643c39d083",
         "championName": "Leona",
         "gender": "Female",
         "positions": [
@@ -1475,8 +1371,6 @@
         "release_date": "2011-07-13"
     },
     {
-        "_id": "6293f4a84fccc7941b03a43b",
-        "championId": "628141c33a4f16643c39d084",
         "championName": "Lillia",
         "gender": "Female",
         "positions": [
@@ -1495,8 +1389,6 @@
         "release_date": "2020-07-22"
     },
     {
-        "_id": "6293f4ad4fccc7941b03a43f",
-        "championId": "628141c33a4f16643c39d085",
         "championName": "Lissandra",
         "gender": "Female",
         "positions": [
@@ -1516,8 +1408,6 @@
         "release_date": "2013-04-30"
     },
     {
-        "_id": "6293f4b24fccc7941b03a443",
-        "championId": "628141c33a4f16643c39d086",
         "championName": "Lucian",
         "gender": "Male",
         "positions": [
@@ -1537,8 +1427,6 @@
         "release_date": "2013-08-22"
     },
     {
-        "_id": "6293f4b74fccc7941b03a447",
-        "championId": "628141c33a4f16643c39d087",
         "championName": "Lulu",
         "gender": "Female",
         "positions": [
@@ -1557,8 +1445,6 @@
         "release_date": "2012-03-20"
     },
     {
-        "_id": "6293f2bf4fccc7941b03a32e",
-        "championId": "628141c33a4f16643c39d088",
         "championName": "Lux",
         "gender": "Female",
         "positions": [
@@ -1579,8 +1465,6 @@
         "release_date": "2010-10-19"
     },
     {
-        "_id": "6293f4c14fccc7941b03a44e",
-        "championId": "628141c33a4f16643c39d089",
         "championName": "Malphite",
         "gender": "Male",
         "positions": [
@@ -1600,8 +1484,6 @@
         "release_date": "2009-09-02"
     },
     {
-        "_id": "6293f4c74fccc7941b03a452",
-        "championId": "628141c33a4f16643c39d08a",
         "championName": "Malzahar",
         "gender": "Male",
         "positions": [
@@ -1622,8 +1504,6 @@
         "release_date": "2010-06-01"
     },
     {
-        "_id": "6293f4cc4fccc7941b03a456",
-        "championId": "628141c33a4f16643c39d08b",
         "championName": "Maokai",
         "gender": "Male",
         "positions": [
@@ -1642,8 +1522,6 @@
         "release_date": "2011-02-16"
     },
     {
-        "_id": "6293f4d14fccc7941b03a45a",
-        "championId": "628141c33a4f16643c39d08c",
         "championName": "Master Yi",
         "gender": "Male",
         "positions": [
@@ -1663,8 +1541,6 @@
         "release_date": "2009-02-21"
     },
     {
-        "_id": "6293f4d14fccc7941b026478",
-        "championId": "6293f4d14fccc7941b026478",
         "championName": "Mel",
         "gender": "Female",
         "positions": [
@@ -1686,8 +1562,6 @@
         "release_date": "2025-01-23"
     },
     {
-        "_id": "6293f4d64fccc7941babab115e",
-        "championId": "628141c28a4f16643c39d08d",
         "championName": "Milio",
         "gender": "Male",
         "positions": [
@@ -1707,8 +1581,6 @@
         "release_date": "2023-03-23"
     },
     {
-        "_id": "6293f4d64fccc7941b03a45e",
-        "championId": "628141c33a4f16643c39d08d",
         "championName": "Miss Fortune",
         "gender": "Female",
         "positions": [
@@ -1727,8 +1599,6 @@
         "release_date": "2010-09-08"
     },
     {
-        "_id": "6293f4dc4fccc7941b03a462",
-        "championId": "628141c33a4f16643c39d08e",
         "championName": "Mordekaiser",
         "gender": "Male",
         "positions": [
@@ -1748,8 +1618,6 @@
         "release_date": "2010-02-24"
     },
     {
-        "_id": "6293f4e14fccc7941b03a466",
-        "championId": "628141c33a4f16643c39d08f",
         "championName": "Morgana",
         "gender": "Female",
         "positions": [
@@ -1772,8 +1640,6 @@
         "release_date": "2009-02-21"
     },
     {
-        "_id": "6293f4e64fccc7941b03b73e",
-        "championId": "64e3b80af25bc58fed5c9333",
         "championName": "Naafiri",
         "gender": "Female",
         "positions": [
@@ -1794,8 +1660,6 @@
         "release_date": "2023-07-19"
     },
     {
-        "_id": "6293f4e64fccc7941b03a46a",
-        "championId": "628141c33a4f16643c39d090",
         "championName": "Nami",
         "gender": "Female",
         "positions": [
@@ -1815,8 +1679,6 @@
         "release_date": "2012-12-07"
     },
     {
-        "_id": "6293f4eb4fccc7941b03a46e",
-        "championId": "628141c33a4f16643c39d091",
         "championName": "Nasus",
         "gender": "Male",
         "positions": [
@@ -1835,8 +1697,6 @@
         "release_date": "2009-10-01"
     },
     {
-        "_id": "6293f4ef4fccc7941b03a472",
-        "championId": "628141c33a4f16643c39d092",
         "championName": "Nautilus",
         "gender": "Male",
         "positions": [
@@ -1855,8 +1715,6 @@
         "release_date": "2012-02-14"
     },
     {
-        "_id": "6293f4f44fccc7941b03a476",
-        "championId": "628141c33a4f16643c39d093",
         "championName": "Neeko",
         "gender": "Female",
         "positions": [
@@ -1875,8 +1733,6 @@
         "release_date": "2018-12-05"
     },
     {
-        "_id": "6293f4f94fccc7941b03a47a",
-        "championId": "628141c33a4f16643c39d094",
         "championName": "Nidalee",
         "gender": "Female",
         "positions": [
@@ -1897,8 +1753,25 @@
         "release_date": "2009-12-17"
     },
     {
-        "_id": "6293f4ff4fccc7941b03a47e",
-        "championId": "628141c33a4f16643c39d095",
+        "championName": "Nilah",
+        "gender": "Female",
+        "positions": [
+            "Bottom"
+        ],
+        "species": [
+            "Human",
+            "Magically Altered"
+        ],
+        "resource": "Mana",
+        "range_type": [
+            "Melee"
+        ],
+        "regions": [
+            "Bilgewater"
+        ],
+        "release_date": "2022-07-13"
+    },
+    {
         "championName": "Nocturne",
         "gender": "Male",
         "positions": [
@@ -1918,8 +1791,6 @@
         "release_date": "2011-03-15"
     },
     {
-        "_id": "6293f5044fccc7941b03a482",
-        "championId": "628141c33a4f16643c39d096",
         "championName": "Nunu & Willump",
         "gender": "Male",
         "positions": [
@@ -1939,8 +1810,6 @@
         "release_date": "2009-02-21"
     },
     {
-        "_id": "6293f5084fccc7941b03a486",
-        "championId": "628141c33a4f16643c39d097",
         "championName": "Olaf",
         "gender": "Male",
         "positions": [
@@ -1960,8 +1829,6 @@
         "release_date": "2010-06-09"
     },
     {
-        "_id": "629404504cb984a3fe84c562",
-        "championId": "628141c33a4f16643c39d098",
         "championName": "Orianna",
         "gender": "Female",
         "positions": [
@@ -1980,8 +1847,6 @@
         "release_date": "2011-06-01"
     },
     {
-        "_id": "629407dc2b9c9bb81d0ac4a6",
-        "championId": "628141c33a4f16643c39d099",
         "championName": "Ornn",
         "gender": "Male",
         "positions": [
@@ -2001,8 +1866,6 @@
         "release_date": "2017-08-23"
     },
     {
-        "_id": "629407e22b9c9bb81d0ac4bd",
-        "championId": "628141c33a4f16643c39d09a",
         "championName": "Pantheon",
         "gender": "Male",
         "positions": [
@@ -2024,8 +1887,6 @@
         "release_date": "2010-02-02"
     },
     {
-        "_id": "629407ec2b9c9bb81d0ac4c6",
-        "championId": "628141c33a4f16643c39d09b",
         "championName": "Poppy",
         "gender": "Female",
         "positions": [
@@ -2045,8 +1906,6 @@
         "release_date": "2010-01-13"
     },
     {
-        "_id": "629407f12b9c9bb81d0ac4cc",
-        "championId": "628141c33a4f16643c39d09c",
         "championName": "Pyke",
         "gender": "Male",
         "positions": [
@@ -2065,8 +1924,6 @@
         "release_date": "2018-05-31"
     },
     {
-        "_id": "629407f92b9c9bb81d0ac4d0",
-        "championId": "628141c33a4f16643c39d09d",
         "championName": "Qiyana",
         "gender": "Female",
         "positions": [
@@ -2087,8 +1944,6 @@
         "release_date": "2019-06-28"
     },
     {
-        "_id": "629407fe2b9c9bb81d0ac4d6",
-        "championId": "628141c33a4f16643c39d09e",
         "championName": "Quinn",
         "gender": "Female",
         "positions": [
@@ -2107,8 +1962,6 @@
         "release_date": "2013-03-01"
     },
     {
-        "_id": "629408022b9c9bb81d0ac4dc",
-        "championId": "628141c33a4f16643c39d09f",
         "championName": "Rakan",
         "gender": "Male",
         "positions": [
@@ -2127,8 +1980,6 @@
         "release_date": "2017-04-19"
     },
     {
-        "_id": "629408072b9c9bb81d0ac4e2",
-        "championId": "628141c33a4f16643c39d0a0",
         "championName": "Rammus",
         "gender": "Male",
         "positions": [
@@ -2147,8 +1998,6 @@
         "release_date": "2009-07-10"
     },
     {
-        "_id": "6294080c2b9c9bb81d0ac4e8",
-        "championId": "628141c33a4f16643c39d0a1",
         "championName": "Rek'Sai",
         "gender": "Female",
         "positions": [
@@ -2168,8 +2017,6 @@
         "release_date": "2014-12-11"
     },
     {
-        "_id": "629408112b9c9bb81d0ac4ee",
-        "championId": "628141c33a4f16643c39d0a2",
         "championName": "Rell",
         "gender": "Female",
         "positions": [
@@ -2190,8 +2037,6 @@
         "release_date": "2020-12-10"
     },
     {
-        "_id": "62bcce982546c0a0fddbc240",
-        "championId": "628141c33a4f16643c39d0a3",
         "championName": "Renata Glasc",
         "gender": "Female",
         "positions": [
@@ -2211,8 +2056,6 @@
         "release_date": "2022-02-17"
     },
     {
-        "_id": "62940a17025236c7f393eaac",
-        "championId": "628141c33a4f16643c39d0a4",
         "championName": "Renekton",
         "gender": "Male",
         "positions": [
@@ -2231,8 +2074,6 @@
         "release_date": "2011-01-18"
     },
     {
-        "_id": "62940a1d025236c7f393eab2",
-        "championId": "628141c33a4f16643c39d0a5",
         "championName": "Rengar",
         "gender": "Male",
         "positions": [
@@ -2252,8 +2093,6 @@
         "release_date": "2012-08-21"
     },
     {
-        "_id": "62940a24025236c7f393eab6",
-        "championId": "628141c33a4f16643c39d0a6",
         "championName": "Riven",
         "gender": "Female",
         "positions": [
@@ -2273,8 +2112,6 @@
         "release_date": "2011-09-14"
     },
     {
-        "_id": "62940a29025236c7f393eaba",
-        "championId": "628141c33a4f16643c39d0a7",
         "championName": "Rumble",
         "gender": "Male",
         "positions": [
@@ -2293,8 +2130,6 @@
         "release_date": "2011-04-26"
     },
     {
-        "_id": "62940a2f025236c7f393eabe",
-        "championId": "628141c33a4f16643c39d0a8",
         "championName": "Ryze",
         "gender": "Male",
         "positions": [
@@ -2314,8 +2149,6 @@
         "release_date": "2009-02-21"
     },
     {
-        "_id": "62940a35025236c7f393eac2",
-        "championId": "628141c33a4f16643c39d0a9",
         "championName": "Samira",
         "gender": "Female",
         "positions": [
@@ -2335,8 +2168,6 @@
         "release_date": "2020-09-21"
     },
     {
-        "_id": "62940a3a025236c7f393eac9",
-        "championId": "628141c33a4f16643c39d0aa",
         "championName": "Sejuani",
         "gender": "Female",
         "positions": [
@@ -2356,8 +2187,6 @@
         "release_date": "2012-01-17"
     },
     {
-        "_id": "62940a44025236c7f393eacd",
-        "championId": "628141c33a4f16643c39d0ab",
         "championName": "Senna",
         "gender": "Female",
         "positions": [
@@ -2377,8 +2206,6 @@
         "release_date": "2019-11-10"
     },
     {
-        "_id": "62940a48025236c7f393ead1",
-        "championId": "628141c33a4f16643c39d0ac",
         "championName": "Seraphine",
         "gender": "Female",
         "positions": [
@@ -2399,8 +2226,6 @@
         "release_date": "2020-10-29"
     },
     {
-        "_id": "62940a4e025236c7f393eade",
-        "championId": "628141c33a4f16643c39d0ad",
         "championName": "Sett",
         "gender": "Male",
         "positions": [
@@ -2420,8 +2245,6 @@
         "release_date": "2020-01-14"
     },
     {
-        "_id": "62940a55025236c7f393eaeb",
-        "championId": "628141c33a4f16643c39d0ae",
         "championName": "Shaco",
         "gender": "Male",
         "positions": [
@@ -2441,8 +2264,6 @@
         "release_date": "2009-10-10"
     },
     {
-        "_id": "62940a5a025236c7f393eaef",
-        "championId": "628141c33a4f16643c39d0af",
         "championName": "Shen",
         "gender": "Male",
         "positions": [
@@ -2463,8 +2284,6 @@
         "release_date": "2010-03-24"
     },
     {
-        "_id": "62940a5f025236c7f393eaf3",
-        "championId": "628141c33a4f16643c39d0b0",
         "championName": "Shyvana",
         "gender": "Female",
         "positions": [
@@ -2484,8 +2303,6 @@
         "release_date": "2011-11-01"
     },
     {
-        "_id": "62940a64025236c7f393eaf7",
-        "championId": "628141c33a4f16643c39d0b1",
         "championName": "Singed",
         "gender": "Male",
         "positions": [
@@ -2506,8 +2323,6 @@
         "release_date": "2009-04-18"
     },
     {
-        "_id": "62940a6a025236c7f393eafb",
-        "championId": "628141c33a4f16643c39d0b2",
         "championName": "Sion",
         "gender": "Male",
         "positions": [
@@ -2526,8 +2341,6 @@
         "release_date": "2009-02-21"
     },
     {
-        "_id": "62940a70025236c7f393eb01",
-        "championId": "628141c33a4f16643c39d0b3",
         "championName": "Sivir",
         "gender": "Female",
         "positions": [
@@ -2546,8 +2359,6 @@
         "release_date": "2009-02-21"
     },
     {
-        "_id": "62940a78025236c7f393eb05",
-        "championId": "628141c33a4f16643c39d0b4",
         "championName": "Skarner",
         "gender": "Male",
         "positions": [
@@ -2566,8 +2377,6 @@
         "release_date": "2011-08-09"
     },
     {
-        "_id": "62940a78025236c7f393ef78",
-        "championId": "62940a78025236c7f393ef78",
         "championName": "Smolder",
         "gender": "Male",
         "positions": [
@@ -2587,8 +2396,6 @@
         "release_date": "2024-01-31"
     },
     {
-        "_id": "62940a7c025236c7f393eb09",
-        "championId": "628141c33a4f16643c39d0b5",
         "championName": "Sona",
         "gender": "Female",
         "positions": [
@@ -2609,8 +2416,6 @@
         "release_date": "2010-09-21"
     },
     {
-        "_id": "62940a82025236c7f393eb0d",
-        "championId": "628141c33a4f16643c39d0b6",
         "championName": "Soraka",
         "gender": "Female",
         "positions": [
@@ -2630,8 +2435,6 @@
         "release_date": "2009-02-21"
     },
     {
-        "_id": "62940a87025236c7f393eb11",
-        "championId": "628141c33a4f16643c39d0b7",
         "championName": "Swain",
         "gender": "Male",
         "positions": [
@@ -2651,8 +2454,6 @@
         "release_date": "2010-10-05"
     },
     {
-        "_id": "62940a8c025236c7f393eb15",
-        "championId": "628141c33a4f16643c39d0b8",
         "championName": "Sylas",
         "gender": "Male",
         "positions": [
@@ -2674,8 +2475,6 @@
         "release_date": "2019-01-25"
     },
     {
-        "_id": "62940a91025236c7f393eb1b",
-        "championId": "628141c33a4f16643c39d0b9",
         "championName": "Syndra",
         "gender": "Female",
         "positions": [
@@ -2695,8 +2494,6 @@
         "release_date": "2012-09-13"
     },
     {
-        "_id": "62940a96025236c7f393eb1f",
-        "championId": "628141c33a4f16643c39d0ba",
         "championName": "Tahm Kench",
         "gender": "Male",
         "positions": [
@@ -2718,8 +2515,6 @@
         "release_date": "2015-07-09"
     },
     {
-        "_id": "62940a9e025236c7f393eb23",
-        "championId": "628141c33a4f16643c39d0bb",
         "championName": "Taliyah",
         "gender": "Female",
         "positions": [
@@ -2739,8 +2534,6 @@
         "release_date": "2016-05-18"
     },
     {
-        "_id": "62940aa3025236c7f393eb27",
-        "championId": "628141c33a4f16643c39d0bc",
         "championName": "Talon",
         "gender": "Male",
         "positions": [
@@ -2760,8 +2553,6 @@
         "release_date": "2011-08-24"
     },
     {
-        "_id": "62940aaa025236c7f393eb2d",
-        "championId": "628141c33a4f16643c39d0bd",
         "championName": "Taric",
         "gender": "Male",
         "positions": [
@@ -2782,8 +2573,6 @@
         "release_date": "2009-08-19"
     },
     {
-        "_id": "62940ab0025236c7f393eb31",
-        "championId": "628141c33a4f16643c39d0be",
         "championName": "Teemo",
         "gender": "Male",
         "positions": [
@@ -2802,8 +2591,6 @@
         "release_date": "2009-02-21"
     },
     {
-        "_id": "62940ab5025236c7f393eb35",
-        "championId": "628141c33a4f16643c39d0bf",
         "championName": "Thresh",
         "gender": "Male",
         "positions": [
@@ -2822,8 +2609,6 @@
         "release_date": "2013-01-23"
     },
     {
-        "_id": "62940aba025236c7f393eb39",
-        "championId": "628141c33a4f16643c39d0c0",
         "championName": "Tristana",
         "gender": "Female",
         "positions": [
@@ -2842,8 +2627,6 @@
         "release_date": "2009-02-21"
     },
     {
-        "_id": "62940abf025236c7f393eb45",
-        "championId": "628141c33a4f16643c39d0c1",
         "championName": "Trundle",
         "gender": "Male",
         "positions": [
@@ -2864,8 +2647,6 @@
         "release_date": "2010-12-01"
     },
     {
-        "_id": "62940ac4025236c7f393eb49",
-        "championId": "628141c33a4f16643c39d0c2",
         "championName": "Tryndamere",
         "gender": "Male",
         "positions": [
@@ -2885,8 +2666,6 @@
         "release_date": "2009-05-01"
     },
     {
-        "_id": "62940aca025236c7f393eb4f",
-        "championId": "628141c33a4f16643c39d0c3",
         "championName": "Twisted Fate",
         "gender": "Male",
         "positions": [
@@ -2906,8 +2685,6 @@
         "release_date": "2009-02-21"
     },
     {
-        "_id": "62940acf025236c7f393eb53",
-        "championId": "628141c33a4f16643c39d0c4",
         "championName": "Twitch",
         "gender": "Male",
         "positions": [
@@ -2927,8 +2704,6 @@
         "release_date": "2009-05-01"
     },
     {
-        "_id": "62940ad4025236c7f393eb57",
-        "championId": "628141c33a4f16643c39d0c5",
         "championName": "Udyr",
         "gender": "Male",
         "positions": [
@@ -2949,8 +2724,6 @@
         "release_date": "2009-12-02"
     },
     {
-        "_id": "62940ada025236c7f393eb63",
-        "championId": "628141c33a4f16643c39d0c6",
         "championName": "Urgot",
         "gender": "Male",
         "positions": [
@@ -2972,8 +2745,6 @@
         "release_date": "2010-08-24"
     },
     {
-        "_id": "62940ae1025236c7f393eb69",
-        "championId": "628141c33a4f16643c39d0c7",
         "championName": "Varus",
         "gender": "Male",
         "positions": [
@@ -2995,8 +2766,6 @@
         "release_date": "2012-05-08"
     },
     {
-        "_id": "62940ae6025236c7f393eb6e",
-        "championId": "628141c33a4f16643c39d0c8",
         "championName": "Vayne",
         "gender": "Female",
         "positions": [
@@ -3016,8 +2785,6 @@
         "release_date": "2011-05-10"
     },
     {
-        "_id": "62940aeb025236c7f393eb73",
-        "championId": "628141c33a4f16643c39d0c9",
         "championName": "Veigar",
         "gender": "Male",
         "positions": [
@@ -3038,8 +2805,6 @@
         "release_date": "2009-07-24"
     },
     {
-        "_id": "62940af0025236c7f393eb77",
-        "championId": "628141c33a4f16643c39d0ca",
         "championName": "Vel'Koz",
         "gender": "Male",
         "positions": [
@@ -3059,8 +2824,6 @@
         "release_date": "2014-02-27"
     },
     {
-        "_id": "62940af8025236c7f393eb7d",
-        "championId": "628141c33a4f16643c39d0cb",
         "championName": "Vex",
         "gender": "Female",
         "positions": [
@@ -3080,8 +2843,6 @@
         "release_date": "2021-09-23"
     },
     {
-        "_id": "62940afe025236c7f393eb83",
-        "championId": "628141c33a4f16643c39d0cc",
         "championName": "Vi",
         "gender": "Female",
         "positions": [
@@ -3101,8 +2862,6 @@
         "release_date": "2012-12-19"
     },
     {
-        "_id": "62940b03025236c7f393eb87",
-        "championId": "628141c33a4f16643c39d0cd",
         "championName": "Viego",
         "gender": "Male",
         "positions": [
@@ -3122,8 +2881,6 @@
         "release_date": "2021-01-21"
     },
     {
-        "_id": "62940b08025236c7f393eb8d",
-        "championId": "628141c33a4f16643c39d0ce",
         "championName": "Viktor",
         "gender": "Male",
         "positions": [
@@ -3144,8 +2901,6 @@
         "release_date": "2011-12-29"
     },
     {
-        "_id": "62940b0e025236c7f393eb91",
-        "championId": "628141c33a4f16643c39d0cf",
         "championName": "Vladimir",
         "gender": "Male",
         "positions": [
@@ -3168,8 +2923,6 @@
         "release_date": "2010-07-27"
     },
     {
-        "_id": "62940b13025236c7f393eb95",
-        "championId": "628141c33a4f16643c39d0d0",
         "championName": "Volibear",
         "gender": "Male",
         "positions": [
@@ -3190,8 +2943,6 @@
         "release_date": "2011-11-29"
     },
     {
-        "_id": "62940b19025236c7f393eba2",
-        "championId": "628141c33a4f16643c39d0d1",
         "championName": "Warwick",
         "gender": "Male",
         "positions": [
@@ -3212,8 +2963,6 @@
         "release_date": "2009-02-21"
     },
     {
-        "_id": "62940b1f025236c7f393eba9",
-        "championId": "628141c33a4f16643c39d0d2",
         "championName": "Wukong",
         "gender": "Male",
         "positions": [
@@ -3232,8 +2981,6 @@
         "release_date": "2011-07-26"
     },
     {
-        "_id": "62940b24025236c7f393ebad",
-        "championId": "628141c33a4f16643c39d0d3",
         "championName": "Xayah",
         "gender": "Female",
         "positions": [
@@ -3252,8 +2999,6 @@
         "release_date": "2017-04-19"
     },
     {
-        "_id": "62940b2a025236c7f393ebb9",
-        "championId": "628141c33a4f16643c39d0d4",
         "championName": "Xerath",
         "gender": "Male",
         "positions": [
@@ -3273,8 +3018,6 @@
         "release_date": "2011-10-05"
     },
     {
-        "_id": "62940b31025236c7f393ebc6",
-        "championId": "628141c33a4f16643c39d0d5",
         "championName": "Xin Zhao",
         "gender": "Male",
         "positions": [
@@ -3295,8 +3038,6 @@
         "release_date": "2010-07-13"
     },
     {
-        "_id": "62940b36025236c7f393ebd3",
-        "championId": "628141c33a4f16643c39d0d6",
         "championName": "Yasuo",
         "gender": "Male",
         "positions": [
@@ -3317,8 +3058,6 @@
         "release_date": "2013-12-13"
     },
     {
-        "_id": "62940b3c025236c7f393ebd7",
-        "championId": "628141c33a4f16643c39d0d7",
         "championName": "Yone",
         "gender": "Male",
         "positions": [
@@ -3339,8 +3078,6 @@
         "release_date": "2020-08-06"
     },
     {
-        "_id": "62940b45025236c7f393ebee",
-        "championId": "628141c33a4f16643c39d0d8",
         "championName": "Yorick",
         "gender": "Male",
         "positions": [
@@ -3360,8 +3097,6 @@
         "release_date": "2011-06-22"
     },
     {
-        "_id": "13546715415452415416",
-        "championId": "13546715415452415416",
         "championName": "Yunara",
         "gender": "Female",
         "positions": [
@@ -3381,8 +3116,6 @@
         "release_date": "2025-07-16"
     },
     {
-        "_id": "62940b4b025236c7f393ebfb",
-        "championId": "628141c33a4f16643c39d0d9",
         "championName": "Yuumi",
         "gender": "Female",
         "positions": [
@@ -3402,8 +3135,6 @@
         "release_date": "2019-05-14"
     },
     {
-        "_id": "62940b4b025236c7f3931234",
-        "championId": "628141c33a4f16643c391234",
         "championName": "Zaahen",
         "gender": "Male",
         "positions": [
@@ -3424,8 +3155,6 @@
         "release_date": "2025-11-19"
     },
     {
-        "_id": "62940b4f025236c7f393ebff",
-        "championId": "628141c33a4f16643c39d0da",
         "championName": "Zac",
         "gender": "Male",
         "positions": [
@@ -3444,8 +3173,6 @@
         "release_date": "2013-03-29"
     },
     {
-        "_id": "62940b55025236c7f393ec03",
-        "championId": "628141c33a4f16643c39d0db",
         "championName": "Zed",
         "gender": "Male",
         "positions": [
@@ -3466,8 +3193,6 @@
         "release_date": "2012-11-13"
     },
     {
-        "_id": "62940b5c025236c7f393ec08",
-        "championId": "628141c33a4f16643c39d0dc",
         "championName": "Zeri",
         "gender": "Female",
         "positions": [
@@ -3487,8 +3212,6 @@
         "release_date": "2022-01-20"
     },
     {
-        "_id": "62940b61025236c7f393ec0e",
-        "championId": "628141c33a4f16643c39d0dd",
         "championName": "Ziggs",
         "gender": "Male",
         "positions": [
@@ -3508,8 +3231,6 @@
         "release_date": "2012-02-01"
     },
     {
-        "_id": "62940b66025236c7f393ec16",
-        "championId": "628141c33a4f16643c39d0de",
         "championName": "Zilean",
         "gender": "Male",
         "positions": [
@@ -3531,8 +3252,6 @@
         "release_date": "2009-04-18"
     },
     {
-        "_id": "62940b6b025236c7f393ec1a",
-        "championId": "628141c33a4f16643c39d0df",
         "championName": "Zoe",
         "gender": "Female",
         "positions": [
@@ -3552,8 +3271,6 @@
         "release_date": "2017-11-21"
     },
     {
-        "_id": "62940b71025236c7f393ec1e",
-        "championId": "628141c33a4f16643c39d0e0",
         "championName": "Zyra",
         "gender": "Female",
         "positions": [

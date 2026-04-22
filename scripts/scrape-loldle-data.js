@@ -1,9 +1,11 @@
 #!/usr/bin/env node
 /**
  * @file Rebuilds src/modules/loldle/champions.json from loldle.net's JS
- * bundle. The bundle embeds the full champion array in plaintext — one
- * record per champion with fields: _id, championId, championName, gender,
- * positions, species, resource, range_type, regions, release_date.
+ * bundle. The bundle embeds the full champion array in plaintext. Records
+ * have two shapes (older champions carry _id/championId, newer ones don't);
+ * both shapes share the gameplay fields: championName, gender, positions,
+ * species, resource, range_type, regions, release_date — the only fields
+ * the bot consumes, so we keep just those.
  *
  * The bot imports the resulting JSON directly via `with { type: "json" }`.
  *
@@ -16,8 +18,10 @@ import { resolve } from "node:path";
 
 const LOLDLE_CLASSIC = "https://loldle.net/classic";
 
+// _id and championId are only present on older records — make them optional
+// and discard them (they're not used downstream).
 const CHAMPION_RECORD_RX =
-  /\{_id:"([a-f0-9]+)",championId:"([^"]+)",championName:"([^"]+)",gender:"([^"]+)",positions:\[([^\]]+)\],species:\[([^\]]+)\],resource:"([^"]+)",range_type:\[([^\]]+)\],regions:\[([^\]]+)\],release_date:"(\d{4}-\d{2}-\d{2})"\}/g;
+  /\{(?:_id:"[a-f0-9]+",championId:"[^"]+",)?championName:"([^"]+)",gender:"([^"]+)",positions:\[([^\]]+)\],species:\[([^\]]+)\],resource:"([^"]+)",range_type:\[([^\]]+)\],regions:\[([^\]]+)\],release_date:"(\d{4}-\d{2}-\d{2})"\}/g;
 
 async function fetchText(url) {
   const res = await fetch(url);
@@ -39,25 +43,12 @@ async function scrapeLoldle() {
   const seen = new Set();
   const records = [];
   for (const m of bundle.matchAll(CHAMPION_RECORD_RX)) {
-    const [
-      ,
-      _id,
-      championId,
-      championName,
-      gender,
-      positions,
-      species,
-      resource,
-      rangeType,
-      regions,
-      releaseDate,
-    ] = m;
+    const [, championName, gender, positions, species, resource, rangeType, regions, releaseDate] =
+      m;
     if (seen.has(championName)) continue;
     seen.add(championName);
 
     records.push({
-      _id,
-      championId,
       championName,
       gender,
       positions: parseJsArrayStrings(positions),
