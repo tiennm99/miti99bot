@@ -35,6 +35,14 @@ cosine similarity. At 1075 Neurons per M input tokens (~0.002 N/guess
 for short words), the Workers Free plan cap of 10k Neurons/day covers
 ~4.6M guesses/day. Same model as `doantu` so both share the binding.
 
+**Score calibration:** BGE embeddings live in a narrow cone, so raw
+cosine for unrelated words already clusters at ~0.40–0.55 — reading as
+misleadingly "warm". `format.js` applies a normalized sigmoid (FLOOR
+0.40, CENTER 0.60, SCALE 8) to remap raw cosine → displayed 0-100.
+Resulting curve: raw 0.40 → 0, 0.50 → 18, 0.60 → 42, 0.70 → 66,
+0.80 → 84, 0.90 → 94, 1.00 → 100. Retune those three constants if you
+swap models.
+
 OOV guesses short-circuit before inference — the player sees
 "isn't in the vocabulary" instead of a noisy subword-based score.
 

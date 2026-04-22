@@ -1,73 +1,91 @@
 import { describe, expect, it } from "vitest";
-import { formatWarmth, warmthEmoji } from "../../../src/modules/semantle/format.js";
+import { calibrate, formatWarmth, warmthEmoji } from "../../../src/modules/semantle/format.js";
 
 describe("semantle/format", () => {
+  describe("calibrate", () => {
+    it("maps raw cosine <= floor to 0", () => {
+      expect(calibrate(0.4)).toBe(0);
+      expect(calibrate(0.2)).toBe(0);
+      expect(calibrate(-1)).toBe(0);
+    });
+
+    it("maps raw cosine = 1 to 100", () => {
+      expect(calibrate(1)).toBe(100);
+    });
+
+    it("is monotonically increasing between floor and 1", () => {
+      let prev = calibrate(0.4);
+      for (let r = 0.41; r <= 1.001; r += 0.02) {
+        const s = calibrate(r);
+        expect(s).toBeGreaterThanOrEqual(prev);
+        prev = s;
+      }
+    });
+
+    it("compresses mid-range cosines so unrelated-baseline reads low", () => {
+      // Unrelated BGE pairs cluster around 0.45-0.55 — should still look cold.
+      expect(calibrate(0.5)).toBeLessThan(25);
+      expect(calibrate(0.55)).toBeLessThan(35);
+    });
+
+    it("rewards clearly-related cosines with high scores", () => {
+      expect(calibrate(0.75)).toBeGreaterThan(70);
+      expect(calibrate(0.85)).toBeGreaterThan(85);
+      expect(calibrate(0.95)).toBeGreaterThan(95);
+    });
+
+    it("stays clamped to [0, 100]", () => {
+      expect(calibrate(2)).toBe(100);
+      expect(calibrate(-5)).toBe(0);
+    });
+  });
+
   describe("formatWarmth", () => {
-    it("formats positive similarity as signed percent with padding", () => {
-      expect(formatWarmth(0.734)).toBe("+73");
-      expect(formatWarmth(1.0)).toBe("+100");
-      expect(formatWarmth(0.05)).toBe("+05");
+    it("formats integer percent with zero-padding at width 2", () => {
+      expect(formatWarmth(0)).toBe("00");
+      expect(formatWarmth(7)).toBe("07");
+      expect(formatWarmth(73)).toBe("73");
     });
 
-    it("formats negative similarity with minus sign and padding", () => {
-      expect(formatWarmth(-0.04)).toBe("-04");
-      expect(formatWarmth(-1.0)).toBe("-100");
-      expect(formatWarmth(-0.5)).toBe("-50");
-    });
-
-    it("formats zero as +00", () => {
-      expect(formatWarmth(0)).toBe("+00");
-      expect(formatWarmth(0.0)).toBe("+00");
+    it("returns '100' without padding at the max", () => {
+      expect(formatWarmth(100)).toBe("100");
     });
 
     it("rounds to nearest integer", () => {
-      expect(formatWarmth(0.504)).toBe("+50");
-      expect(formatWarmth(0.505)).toBe("+51");
-      expect(formatWarmth(-0.125)).toBe("-12");
-    });
-
-    it("handles boundary values", () => {
-      expect(formatWarmth(0.004)).toBe("+00");
-      expect(formatWarmth(0.994)).toBe("+99");
+      expect(formatWarmth(50.4)).toBe("50");
+      expect(formatWarmth(50.5)).toBe("51");
+      expect(formatWarmth(99.5)).toBe("100");
     });
   });
 
   describe("warmthEmoji", () => {
-    it("returns 🥶 for similarity < 0.2", () => {
-      expect(warmthEmoji(0.19)).toBe("🥶");
-      expect(warmthEmoji(-1)).toBe("🥶");
+    it("returns 🥶 for score < 15", () => {
       expect(warmthEmoji(0)).toBe("🥶");
+      expect(warmthEmoji(14.9)).toBe("🥶");
     });
 
-    it("returns 😐 for similarity >= 0.2 and < 0.4", () => {
-      expect(warmthEmoji(0.2)).toBe("😐");
-      expect(warmthEmoji(0.3)).toBe("😐");
-      expect(warmthEmoji(0.39)).toBe("😐");
+    it("returns 😐 for score in [15, 40)", () => {
+      expect(warmthEmoji(15)).toBe("😐");
+      expect(warmthEmoji(30)).toBe("😐");
+      expect(warmthEmoji(39.9)).toBe("😐");
     });
 
-    it("returns 🌡️ for similarity >= 0.4 and < 0.6", () => {
-      expect(warmthEmoji(0.4)).toBe("🌡️");
-      expect(warmthEmoji(0.5)).toBe("🌡️");
-      expect(warmthEmoji(0.59)).toBe("🌡️");
+    it("returns 🌡️ for score in [40, 70)", () => {
+      expect(warmthEmoji(40)).toBe("🌡️");
+      expect(warmthEmoji(55)).toBe("🌡️");
+      expect(warmthEmoji(69.9)).toBe("🌡️");
     });
 
-    it("returns 🔥 for similarity >= 0.6 and < 0.8", () => {
-      expect(warmthEmoji(0.6)).toBe("🔥");
-      expect(warmthEmoji(0.7)).toBe("🔥");
-      expect(warmthEmoji(0.79)).toBe("🔥");
+    it("returns 🔥 for score in [70, 90)", () => {
+      expect(warmthEmoji(70)).toBe("🔥");
+      expect(warmthEmoji(80)).toBe("🔥");
+      expect(warmthEmoji(89.9)).toBe("🔥");
     });
 
-    it("returns 🎯 for similarity >= 0.8", () => {
-      expect(warmthEmoji(0.8)).toBe("🎯");
-      expect(warmthEmoji(0.9)).toBe("🎯");
-      expect(warmthEmoji(1)).toBe("🎯");
-    });
-
-    it("handles edge cases at boundaries", () => {
-      expect(warmthEmoji(0.1999)).toBe("🥶");
-      expect(warmthEmoji(0.2001)).toBe("😐");
-      expect(warmthEmoji(0.7999)).toBe("🔥");
-      expect(warmthEmoji(0.8001)).toBe("🎯");
+    it("returns 🎯 for score >= 90", () => {
+      expect(warmthEmoji(90)).toBe("🎯");
+      expect(warmthEmoji(99)).toBe("🎯");
+      expect(warmthEmoji(100)).toBe("🎯");
     });
   });
 });

@@ -95,9 +95,10 @@ describe("semantle/render", () => {
     });
 
     it("includes warmth emoji in each row", () => {
+      // calibrate(0.85) ≈ 90 → 🎯, calibrate(0.55) ≈ 29 → 😐
       const guesses = [
         { word: "a", canonical: "a", similarity: 0.85 },
-        { word: "b", canonical: "b", similarity: 0.3 },
+        { word: "b", canonical: "b", similarity: 0.55 },
       ];
       const result = renderBoard(guesses);
 
@@ -149,7 +150,8 @@ describe("semantle/render", () => {
       const result = renderGuess(guess);
 
       expect(result).toContain("apple");
-      expect(result).toContain("+75");
+      // calibrate(0.75) ≈ 76
+      expect(result).toContain("76");
       expect(result).toContain("🔥");
     });
 
@@ -173,9 +175,10 @@ describe("semantle/render", () => {
       expect(renderGuess({ word: "b", canonical: "b", similarity: 0.15 })).toContain("🥶");
     });
 
-    it("formats similarity with sign and padding", () => {
-      expect(renderGuess({ word: "a", canonical: "a", similarity: 0.05 })).toContain("+05");
-      expect(renderGuess({ word: "b", canonical: "b", similarity: -0.2 })).toContain("-20");
+    it("clips raw cosines below the calibration floor to 00", () => {
+      // raw 0.05 and raw -0.2 are both well below FLOOR (0.4) → display "00"
+      expect(renderGuess({ word: "a", canonical: "a", similarity: 0.05 })).toContain("00");
+      expect(renderGuess({ word: "b", canonical: "b", similarity: -0.2 })).toContain("00");
     });
   });
 });
