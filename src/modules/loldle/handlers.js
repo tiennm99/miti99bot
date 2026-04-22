@@ -118,6 +118,13 @@ export async function handleLoldle(ctx, db) {
   const guess = findChampion(champions, arg);
   if (!guess) return ctx.reply(`Champion not found: "${arg}".`);
 
+  if (game.guesses.some((g) => g.champion === guess.name)) {
+    return ctx.reply(
+      `🔁 <b>${escapeHtml(guess.name)}</b> was already guessed this round — try another champion.`,
+      { parse_mode: "HTML" },
+    );
+  }
+
   const target = champions.find((c) => c.id === game.target);
   // champions.json can be refreshed between rounds — an active target may disappear.
   if (!target) {
