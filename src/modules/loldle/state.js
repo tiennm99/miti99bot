@@ -5,8 +5,12 @@
  * can /loldle_giveup to reveal (a fresh round auto-starts). Streak = consecutive wins.
  *
  * Key layout (inside module-prefixed store):
- *   game:<subject>   -> { target, guesses[], solved, giveup, startedAt }
+ *   game:<subject>   -> { target, guesses[championName...], solved, giveup, startedAt }
  *   stats:<subject>  -> { played, wins, streak, bestStreak, lastResultAt }
+ *
+ * Only championName strings are stored in `guesses` — comparison rows are
+ * recomputed at render time from the live champions.json. This keeps payloads
+ * tiny and avoids stale results if loldle.net data shifts mid-round.
  */
 
 const MAX_GUESSES = 8;
@@ -20,8 +24,8 @@ const statsKey = (subject) => `stats:${subject}`;
 
 /**
  * @typedef {object} GameState
- * @property {string} target — champion id
- * @property {Array<{champion:string, results:any[]}>} guesses
+ * @property {string} target — championName of the hidden champion
+ * @property {string[]} guesses — championNames already tried this round
  * @property {boolean} solved
  * @property {boolean} [giveup]
  * @property {number} [startedAt] — epoch ms
