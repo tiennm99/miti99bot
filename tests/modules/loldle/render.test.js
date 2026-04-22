@@ -56,9 +56,7 @@ describe("renderGuess", () => {
   });
 
   it("HTML-escapes values so < and > render literally", () => {
-    const evil = [
-      { key: "regions", label: "Region(s)", result: "wrong", guessValue: "<script>" },
-    ];
+    const evil = [{ key: "regions", label: "Region(s)", result: "wrong", guessValue: "<script>" }];
     const out = renderGuess("Foo", evil);
     expect(out).toContain("&lt;script&gt;");
     expect(out).not.toContain("<script>");
