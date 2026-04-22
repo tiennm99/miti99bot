@@ -13,19 +13,12 @@
  */
 
 import { escapeHtml } from "../../util/escape-html.js";
-import { Word2SimError } from "./api-client.js";
+import { UpstreamError } from "./api-client.js";
 import { isValidShape, normalize } from "./lookup.js";
 import { renderBoard, renderGuess } from "./render.js";
 import { clearGame, loadGame, loadStats, recordResult, saveGame } from "./state.js";
 
 const UPSTREAM_FAIL = "⚠️ Upstream hiccup — try again in a few seconds.";
-const RANDOM_FILTERS = {
-  min_rank: 500,
-  max_rank: 20000,
-  alpha_only: true,
-  min_len: 4,
-  max_len: 10,
-};
 
 function getSubject(ctx) {
   const type = ctx.chat?.type;
@@ -44,15 +37,15 @@ function logFail(stage, err) {
     JSON.stringify({
       msg: "semantle_upstream_fail",
       stage,
-      err: err instanceof Word2SimError ? { status: err.status, body: err.body } : String(err),
+      err: err instanceof UpstreamError ? { status: err.status, body: err.body } : String(err),
     }),
   );
 }
 
 async function startFreshGame(db, client, subject) {
-  const picked = await client.randomWord(RANDOM_FILTERS);
+  const picked = await client.randomWord();
   const target = String(picked?.word ?? "").toLowerCase();
-  if (!target) throw new Word2SimError("empty target from /random");
+  if (!target) throw new UpstreamError("empty target from randomWord");
   const fresh = { target, startedAt: null, solved: false, guesses: [] };
   await saveGame(db, subject, fresh);
   return fresh;
