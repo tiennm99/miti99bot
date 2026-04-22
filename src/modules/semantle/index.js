@@ -4,7 +4,7 @@
  * Targets come from a curated local wordlist (same list doubles as the
  * vocabulary for OOV detection, so no upstream check is needed to pick or
  * validate a word). Similarity scores come from cosine distance between
- * `@cf/baai/bge-small-en-v1.5` embeddings produced by the `env.AI` binding.
+ * `@cf/baai/bge-m3` multilingual embeddings produced by the `env.AI` binding.
  */
 
 import { createClient } from "./api-client.js";

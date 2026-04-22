@@ -1,9 +1,9 @@
 /**
  * @file Cloudflare Workers AI client for the semantle module.
  *
- * Runs the `@cf/baai/bge-small-en-v1.5` text-embedding model via the `env.AI`
- * binding, then scores guesses by computing cosine similarity between the
- * target and guess vectors locally (no extra round-trip).
+ * Runs the `@cf/baai/bge-m3` text-embedding model via the `env.AI` binding,
+ * then scores guesses by computing cosine similarity between the target
+ * and guess vectors locally (no extra round-trip).
  *
  * Vocabulary: the curated `words-data.js` list (google-10k) doubles as our
  * in/out-of-vocabulary set — anything outside it is treated as OOV so players
@@ -13,7 +13,9 @@
 import { randomLine } from "./wordlist.js";
 import WORDS from "./words-data.js";
 
-const DEFAULT_MODEL = "@cf/baai/bge-small-en-v1.5";
+// BGE-M3: multilingual, 1024 dimensions, 1075 Neurons per M input tokens —
+// cheaper than bge-small-en-v1.5 (1841 N/M) and matches the doantu sibling.
+const DEFAULT_MODEL = "@cf/baai/bge-m3";
 
 // O(1) membership lookup for OOV detection. Built once per isolate.
 const VOCAB = new Set(WORDS);
