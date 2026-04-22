@@ -56,6 +56,23 @@ function isFinished(game) {
 }
 
 /**
+ * Recompute comparison rows for each stored guess against the current target.
+ * Guesses that no longer resolve (e.g. champion removed from loldle.net) are
+ * dropped silently — an edge case for stale rounds spanning a data refresh.
+ */
+function rehydrateGuesses(game) {
+  const target = champions.find((c) => c.championName === game.target);
+  if (!target) return [];
+  const rows = [];
+  for (const name of game.guesses) {
+    const guess = champions.find((c) => c.championName === name);
+    if (!guess) continue;
+    rows.push({ champion: name, results: compareChampions(guess, target) });
+  }
+  return rows;
+}
+
+/**
  * Load existing round, or create + persist a fresh random one.
  * A previously-finished round is discarded and replaced with a fresh one so
  * the game auto-continues without needing a manual "new round" command.
@@ -112,13 +129,14 @@ export async function handleLoldle(ctx, db) {
 
   if (!arg) {
     const header = `Guess ${game.guesses.length}/${MAX_GUESSES}. Use <code>/loldle &lt;champion&gt;</code>.`;
-    return ctx.reply(`${header}\n\n${renderBoard(game.guesses)}`, { parse_mode: "HTML" });
+    const board = renderBoard(rehydrateGuesses(game));
+    return ctx.reply(`${header}\n\n${board}`, { parse_mode: "HTML" });
   }
 
   const guess = findChampion(champions, arg);
   if (!guess) return ctx.reply(`Champion not found: "${arg}".`);
 
-  if (game.guesses.some((g) => g.champion === guess.championName)) {
+  if (game.guesses.includes(guess.championName)) {
     return ctx.reply(
       `🔁 <b>${escapeHtml(guess.championName)}</b> was already guessed this round — try another champion.`,
       { parse_mode: "HTML" },
@@ -134,7 +152,7 @@ export async function handleLoldle(ctx, db) {
     );
   }
   const results = compareChampions(guess, target);
-  game.guesses.push({ champion: guess.championName, results });
+  game.guesses.push(guess.championName);
   const won = guess.championName === target.championName;
   if (won) game.solved = true;
   await saveGame(db, subject, game);
