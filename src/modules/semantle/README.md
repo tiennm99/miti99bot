@@ -29,15 +29,22 @@ ignored (no cost, no stat inflation).
   carries at least one edge.
 
 Because ConceptNet has no random-word endpoint, the target pool ships in
-`words-data.js` — ~8k common English words (4–10 ASCII letters) derived
-from Google Ngram frequency via the public
-[google-10000-english](https://github.com/first20hours/google-10000-english)
-list, with the top-200 most frequent function words stripped.
-Each new round picks locally, verifies via the concept endpoint, and falls
-back to an unverified pick after a few misses.
+`words-data.js` — the full
+[google-10000-english-no-swears](https://github.com/first20hours/google-10000-english)
+list (~9.9k entries), ordered by Google Ngram frequency, normalized to
+lowercase and deduped but otherwise unfiltered.
 
-Regenerate the list with `npm run build:semantle-words` (chained into the
-main `npm run build` that `npm run deploy` invokes).
+`wordlist.js` exposes three accessors over the imported array:
+- `LINE_COUNT` — total entries
+- `randomLine()` — uniform random pick
+- `getLine(n)` — read the nth entry (n is the frequency rank)
+
+Each new round picks via `randomLine()`, verifies the candidate via
+ConceptNet's concept endpoint, and falls back to an unverified pick after
+a few misses (see `api-client.js`).
+
+Regenerate with `npm run build:semantle-words` (chained into the main
+`npm run build` that `npm run deploy` invokes).
 
 Every guess costs **two** ConceptNet calls (concept edges + relatedness)
 issued in parallel. Typical latency ~300–600ms round-trip from Cloudflare
