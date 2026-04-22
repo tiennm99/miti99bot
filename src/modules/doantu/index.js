@@ -1,10 +1,11 @@
 /**
  * @file Doantu module — Vietnamese semantle.
  *
- * Targets from a curated local wordlist (duyet/vietnamese-wordlist Viet22K);
- * similarity scores from api.conceptnet.io's `/relatedness` endpoint against
- * `/c/vi/<term>` concept URIs. All commands are `protected` — listed in
- * /help but hidden from Telegram's native / autocomplete menu.
+ * Targets from a curated local wordlist (duyet/vietnamese-wordlist Viet22K —
+ * same list doubles as the vocabulary for OOV detection). Similarity scores
+ * come from cosine distance between `@cf/baai/bge-m3` multilingual embeddings
+ * produced by the `env.AI` binding. All commands are `protected` — listed
+ * in /help but hidden from Telegram's native / autocomplete menu.
  */
 
 import { createClient } from "./api-client.js";
@@ -18,9 +19,9 @@ let client = null;
 /** @type {import("../registry.js").BotModule} */
 const doantuModule = {
   name: "doantu",
-  init: async ({ db: store }) => {
+  init: async ({ db: store, env }) => {
     db = store;
-    client = createClient();
+    client = createClient(env.AI);
   },
   commands: [
     {
