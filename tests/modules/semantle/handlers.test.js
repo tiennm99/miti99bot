@@ -113,7 +113,8 @@ describe("semantle/handlers", () => {
 
       expect(ctx.reply).toHaveBeenCalledOnce();
       expect(ctx.replies[0].text).toContain("orange");
-      expect(ctx.replies[0].text).toContain("+45");
+      // raw 0.45 is below FLOOR of 0.40 (just barely above) → calibrate ≈ 08
+      expect(ctx.replies[0].text).toContain("08");
     });
 
     it("solves when guess equals target (case-insensitive)", async () => {

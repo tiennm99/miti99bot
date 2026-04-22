@@ -8,7 +8,7 @@
  */
 
 import { escapeHtml } from "../../util/escape-html.js";
-import { formatWarmth, warmthEmoji } from "./format.js";
+import { calibrate, formatWarmth, warmthEmoji } from "./format.js";
 
 const MAX_ROWS = 15;
 const LATEST_MARKER = "➡️";
@@ -30,11 +30,12 @@ export function renderBoard(guesses, latestCanonical = null) {
   const sorted = [...guesses].sort((a, b) => b.similarity - a.similarity).slice(0, MAX_ROWS);
   const wordWidth = Math.min(20, Math.max(...sorted.map((g) => g.canonical.length)));
   const rows = sorted.map((g, i) => {
+    const score = Math.round(calibrate(g.similarity));
     const marker = g.canonical === latestCanonical ? LATEST_MARKER : PLAIN_MARKER;
     const rank = String(i + 1).padStart(2);
-    const warmth = formatWarmth(g.similarity).padStart(3);
+    const warmth = formatWarmth(score).padStart(3);
     const word = escapeHtml(g.canonical.padEnd(wordWidth));
-    return `${marker} ${rank}  ${warmth}  ${word} ${warmthEmoji(g.similarity)}`;
+    return `${marker} ${rank}  ${warmth}  ${word} ${warmthEmoji(score)}`;
   });
 
   const hidden = count - sorted.length;
@@ -47,5 +48,6 @@ export function renderBoard(guesses, latestCanonical = null) {
  * @param {SemantleGuess} guess
  */
 export function renderGuess(guess) {
-  return `<code>${escapeHtml(guess.canonical)}</code> → ${formatWarmth(guess.similarity)} ${warmthEmoji(guess.similarity)}`;
+  const score = Math.round(calibrate(guess.similarity));
+  return `<code>${escapeHtml(guess.canonical)}</code> → ${formatWarmth(score)} ${warmthEmoji(score)}`;
 }
