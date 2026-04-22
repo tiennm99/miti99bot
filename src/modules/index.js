@@ -16,4 +16,5 @@ export const moduleRegistry = {
   trading: () => import("./trading/index.js"),
   lolschedule: () => import("./lolschedule/index.js"),
   semantle: () => import("./semantle/index.js"),
+  doantu: () => import("./doantu/index.js"),
 };

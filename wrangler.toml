@@ -5,7 +5,7 @@ compatibility_date = "2025-10-01"
 # Enabled modules at runtime. Comma-separated. Must match static-map keys in src/modules/index.js.
 # Also duplicate this value into .env.deploy so scripts/register.js derives the same public command list.
 [vars]
-MODULES = "util,wordle,loldle,misc,trading,lolschedule,semantle"
+MODULES = "util,wordle,loldle,misc,trading,lolschedule,semantle,doantu"
 
 # KV namespace holding all module state. Each module auto-prefixes its keys via createStore().
 # Production-only — no preview namespace. Create with:
