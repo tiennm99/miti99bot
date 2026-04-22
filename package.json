@@ -9,8 +9,9 @@
   },
   "scripts": {
     "dev": "wrangler dev",
-    "build": "npm run build:wordle-data",
+    "build": "npm run build:wordle-data && npm run build:semantle-words",
     "build:wordle-data": "node scripts/build-wordle-data.js",
+    "build:semantle-words": "node scripts/build-semantle-words.js",
     "scrape:loldle-data": "node scripts/scrape-loldle-data.js",
     "deploy": "npm run build && wrangler deploy && npm run db:migrate && npm run register",
     "db:migrate": "node scripts/migrate.js",
