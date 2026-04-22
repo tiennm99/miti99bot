@@ -6,10 +6,9 @@
  *   group/supergroup chat  → chat id (shared game — everyone plays together)
  *
  * Commands:
- *   /semantle              → show the board (or start a round)
+ *   /semantle              → show the board (or lazy-start a round)
  *   /semantle <word>       → submit a guess
- *   /semantle_new          → abandon current round + start fresh
- *   /semantle_giveup       → reveal target and end current round
+ *   /semantle_giveup       → reveal target and end current round (next /semantle starts fresh)
  *   /semantle_stats        → show per-subject stats
  */
 
@@ -85,6 +84,14 @@ async function submitGuess(ctx, { db, client }, subject, game, arg) {
   if (!isValidShape(guess)) {
     return ctx.reply("Please provide a single letter-only word.");
   }
+  // Fast-path duplicate check: normalized guess matches a prior raw input
+  // or a prior canonical form. Avoids a wasted API call on repeat submissions.
+  if (game.guesses.some((g) => g.word === guess || g.canonical === guess)) {
+    return ctx.reply(
+      `🔁 <b>${escapeHtml(guess)}</b> was already guessed this round — try another word.`,
+      { parse_mode: "HTML" },
+    );
+  }
   let res;
   try {
     res = await client.similarity(game.target, guess);
@@ -103,9 +110,14 @@ async function submitGuess(ctx, { db, client }, subject, game, arg) {
     canonical: String(res.canonical_b ?? guess).toLowerCase(),
     similarity: Number(res.similarity),
   };
-  // Dedupe: re-submitting the same word shouldn't inflate the board or stats.
-  const isDuplicate = game.guesses.some((g) => g.canonical === entry.canonical);
-  if (!isDuplicate) game.guesses.push(entry);
+  // Post-API dedup: a different input can canonicalize to a prior canonical.
+  if (game.guesses.some((g) => g.canonical === entry.canonical)) {
+    return ctx.reply(
+      `🔁 <b>${escapeHtml(entry.canonical)}</b> was already guessed this round — try another word.`,
+      { parse_mode: "HTML" },
+    );
+  }
+  game.guesses.push(entry);
   if (game.startedAt === null) game.startedAt = Date.now();
 
   if (entry.canonical === game.target) {
@@ -122,29 +134,6 @@ async function submitGuess(ctx, { db, client }, subject, game, arg) {
   await saveGame(db, subject, game);
   const body = `${renderGuess(entry)}\n${renderBoard(game.guesses, entry.canonical)}`;
   return ctx.reply(body, { parse_mode: "HTML" });
-}
-
-export async function handleNew(ctx, { db, client }) {
-  const subject = getSubject(ctx);
-  if (subject == null) return ctx.reply("Cannot identify chat.");
-  const existing = await loadGame(db, subject);
-  if (existing && existing.guesses.length > 0 && !existing.solved) {
-    await recordResult(db, subject, {
-      solved: false,
-      guessCount: existing.guesses.length,
-    });
-  }
-  // startFreshGame overwrites via saveGame; don't pre-clear or a failing /random
-  // would leave the subject with no game at all.
-  try {
-    await startFreshGame(db, client, subject);
-  } catch (err) {
-    logFail("random", err);
-    return ctx.reply(UPSTREAM_FAIL);
-  }
-  return ctx.reply("🆕 New round started — reply with <code>/semantle &lt;word&gt;</code>.", {
-    parse_mode: "HTML",
-  });
 }
 
 export async function handleGiveup(ctx, { db }) {

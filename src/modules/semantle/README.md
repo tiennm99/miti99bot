@@ -10,12 +10,13 @@ scored by cosine similarity against the target. Unlimited guesses per round
 | Command | Visibility | Description |
 |---------|-----------|-------------|
 | `/semantle` | public | Show current board or submit a word guess |
-| `/semantle_new` | public | Abandon current round and start a fresh one |
-| `/semantle_giveup` | public | Reveal the answer and end the round |
+| `/semantle_giveup` | public | Reveal the answer and end the round (next `/semantle` starts a fresh one) |
 | `/semantle_stats` | public | Show wins / best count / averages |
 
 Submit with `/semantle <word>` (e.g. `/semantle ocean`). Matching is
 case-insensitive. Out-of-vocabulary words don't count toward the guess tally.
+Repeating a prior guess replies with a `🔁 already guessed` notice and is
+ignored (no cost, no stat inflation).
 
 ## Data source
 

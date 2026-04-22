@@ -3,7 +3,6 @@ import { createStore } from "../../../src/db/create-store.js";
 import { Word2SimError } from "../../../src/modules/semantle/api-client.js";
 import {
   handleGiveup,
-  handleNew,
   handleSemantle,
   handleStats,
 } from "../../../src/modules/semantle/handlers.js";
@@ -191,7 +190,7 @@ describe("semantle/handlers", () => {
       expect(game.guesses.length).toBe(0);
     });
 
-    it("deduplicates re-submitted words", async () => {
+    it("replies already-guessed and skips API on re-submit", async () => {
       client.randomWord.mockResolvedValue({ word: "apple", rank: 1000 });
       client.similarity.mockResolvedValue({
         a: "apple",
@@ -204,14 +203,51 @@ describe("semantle/handlers", () => {
 
       const ctx1 = makeCtx(1, "private", "/semantle orange");
       await handleSemantle(ctx1, { db, client });
+      expect(client.similarity).toHaveBeenCalledTimes(1);
 
       const ctx2 = makeCtx(1, "private", "/semantle orange");
       await handleSemantle(ctx2, { db, client });
 
+      // Fast-path dedup: no second API call.
+      expect(client.similarity).toHaveBeenCalledTimes(1);
+      expect(ctx2.replies[0].text).toContain("already guessed");
+      expect(ctx2.replies[0].text).toContain("🔁");
+
       const { loadGame } = await import("../../../src/modules/semantle/state.js");
       const game = await loadGame(db, 1);
       expect(game.guesses.length).toBe(1);
-      expect(ctx2.replies[0].text).toContain("1 guess");
+    });
+
+    it("post-API dedup when canonical collides with a prior canonical", async () => {
+      client.randomWord.mockResolvedValue({ word: "apple", rank: 1000 });
+      // First guess "running" → canonical "run" recorded.
+      client.similarity.mockResolvedValueOnce({
+        a: "apple",
+        b: "running",
+        in_vocab_a: true,
+        in_vocab_b: true,
+        canonical_b: "run",
+        similarity: 0.3,
+      });
+      // Second guess "runs" (different word) → also canonical "run" — should reject.
+      client.similarity.mockResolvedValueOnce({
+        a: "apple",
+        b: "runs",
+        in_vocab_a: true,
+        in_vocab_b: true,
+        canonical_b: "run",
+        similarity: 0.3,
+      });
+
+      const ctx1 = makeCtx(1, "private", "/semantle running");
+      await handleSemantle(ctx1, { db, client });
+      const ctx2 = makeCtx(1, "private", "/semantle runs");
+      await handleSemantle(ctx2, { db, client });
+
+      expect(ctx2.replies[0].text).toContain("already guessed");
+      const { loadGame } = await import("../../../src/modules/semantle/state.js");
+      const game = await loadGame(db, 1);
+      expect(game.guesses.length).toBe(1);
     });
 
     it("sets startedAt on first guess", async () => {
@@ -319,76 +355,6 @@ describe("semantle/handlers", () => {
       await handleSemantle(ctx, { db, client });
 
       expect(client.similarity).toHaveBeenCalledWith("apple", "orange");
-    });
-  });
-
-  describe("handleNew", () => {
-    it("starts fresh game with no prior game", async () => {
-      client.randomWord.mockResolvedValue({ word: "apple", rank: 1000 });
-
-      const ctx = makeCtx(1, "private", "/semantle_new");
-      await handleNew(ctx, { db, client });
-
-      expect(ctx.reply).toHaveBeenCalledOnce();
-      expect(ctx.replies[0].text).toContain("🆕 New round started");
-    });
-
-    it("abandons unsolved game and records non-solve", async () => {
-      client.randomWord.mockResolvedValue({ word: "apple", rank: 1000 });
-      client.similarity.mockResolvedValue({
-        a: "apple",
-        b: "orange",
-        in_vocab_a: true,
-        in_vocab_b: true,
-        canonical_b: "orange",
-        similarity: 0.45,
-      });
-
-      const ctx1 = makeCtx(1, "private", "/semantle orange");
-      await handleSemantle(ctx1, { db, client });
-
-      client.randomWord.mockResolvedValueOnce({ word: "banana", rank: 1000 });
-      const ctx2 = makeCtx(1, "private", "/semantle_new");
-      await handleNew(ctx2, { db, client });
-
-      const { loadStats } = await import("../../../src/modules/semantle/state.js");
-      const stats = await loadStats(db, 1);
-      expect(stats.played).toBe(1);
-      expect(stats.solved).toBe(0);
-      expect(stats.totalGuesses).toBe(1);
-    });
-
-    it("does not record result if game had zero guesses", async () => {
-      client.randomWord.mockResolvedValue({ word: "apple", rank: 1000 });
-
-      const ctx1 = makeCtx(1, "private", "/semantle");
-      await handleSemantle(ctx1, { db, client });
-
-      client.randomWord.mockResolvedValueOnce({ word: "banana", rank: 1000 });
-      const ctx2 = makeCtx(1, "private", "/semantle_new");
-      await handleNew(ctx2, { db, client });
-
-      const { loadStats } = await import("../../../src/modules/semantle/state.js");
-      const stats = await loadStats(db, 1);
-      expect(stats.played).toBe(0);
-    });
-
-    it("replies UPSTREAM_FAIL on randomWord error", async () => {
-      client.randomWord.mockRejectedValue(new Word2SimError("timeout"));
-
-      const ctx = makeCtx(1, "private", "/semantle_new");
-      await handleNew(ctx, { db, client });
-
-      expect(ctx.replies[0].text).toContain("⚠️ Upstream hiccup");
-    });
-
-    it("handles group chat", async () => {
-      client.randomWord.mockResolvedValue({ word: "apple", rank: 1000 });
-
-      const ctx = makeCtx(-123456, "group", "/semantle_new");
-      await handleNew(ctx, { db, client });
-
-      expect(ctx.reply).toHaveBeenCalledOnce();
     });
   });
 
