@@ -1,15 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
-import {
-  UpstreamError,
-  Word2SimError,
-  createClient,
-} from "../../../src/modules/semantle/api-client.js";
+import { UpstreamError, createClient } from "../../../src/modules/semantle/api-client.js";
 
 /**
- * Build a deterministic 768-dim vector from a seed so cosine scores are
- * reproducible in tests without hardcoding 768 floats.
+ * Build a deterministic 384-dim vector (bge-small output size) from a seed
+ * so cosine scores are reproducible without hardcoding 384 floats.
  */
-function fakeVector(seed, dim = 768) {
+function fakeVector(seed, dim = 384) {
   const out = new Array(dim);
   for (let i = 0; i < dim; i++) out[i] = Math.sin(seed * (i + 1));
   return out;
@@ -38,10 +34,6 @@ describe("semantle/api-client", () => {
       const err = new UpstreamError("wrapper", { cause });
       expect(err.cause).toBe(cause);
     });
-
-    it("is re-exported as Word2SimError alias for legacy callers", () => {
-      expect(Word2SimError).toBe(UpstreamError);
-    });
   });
 
   describe("createClient", () => {
@@ -53,7 +45,7 @@ describe("semantle/api-client", () => {
 
     it("similarity batches target + guess in a single run() call", async () => {
       const ai = fakeAi(async (_model, { text }) => ({
-        shape: [text.length, 768],
+        shape: [text.length, 384],
         data: text.map((_, i) => fakeVector(i + 1)),
       }));
       const client = createClient(ai);
@@ -115,7 +107,7 @@ describe("semantle/api-client", () => {
     });
 
     it("similarity returns null score when a vector norm is zero", async () => {
-      const zero = new Array(768).fill(0);
+      const zero = new Array(384).fill(0);
       const ai = fakeAi(async () => ({ data: [zero, fakeVector(1)] }));
       const client = createClient(ai);
       const res = await client.similarity("apple", "orange");

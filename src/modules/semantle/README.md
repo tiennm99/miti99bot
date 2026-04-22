@@ -1,9 +1,9 @@
 # Semantle Module
 
 Semantic-similarity guessing game. A secret word is picked from a local
-curated pool and validated against ConceptNet; each guess is scored by
-ConceptNet's relatedness API against the target. Unlimited guesses per
-round — you play until you get the exact word (case-insensitive).
+curated pool and each guess is scored by cosine similarity between
+embedding vectors produced by Cloudflare Workers AI. Unlimited guesses
+per round — you play until you get the exact word (case-insensitive).
 
 ## Commands
 
@@ -20,47 +20,34 @@ ignored (no cost, no stat inflation).
 
 ## Data source
 
-**[ConceptNet 5](https://api.conceptnet.io/)** — free public API, no auth,
-~300k English concepts including multi-word phrases. Two endpoints:
-
-- `GET /relatedness?node1=/c/en/X&node2=/c/en/Y` — per-guess similarity,
-  returns `{ value: number ∈ [-1, 1] }`.
-- `GET /c/en/{term}` — vocabulary check: term is in vocab iff the response
-  carries at least one edge.
-
-Because ConceptNet has no random-word endpoint, the target pool ships in
-`words-data.js` — the full
-[google-10000-english-no-swears](https://github.com/first20hours/google-10000-english)
+**Target + vocabulary:** `words-data.js` ships the full
+[google-10000-english](https://github.com/first20hours/google-10000-english)
 list (~9.9k entries), ordered by Google Ngram frequency, normalized to
-lowercase and deduped but otherwise unfiltered.
+lowercase and deduped but otherwise unfiltered. The **same list is both
+the target pool and the vocabulary** — so every legal guess could itself
+have been the answer, and OOV detection is an O(1) `Set.has()` with no
+upstream round-trip. Regenerate with `node scripts/build-semantle-words.js`.
 
-`wordlist.js` exposes three accessors over the imported array:
-- `LINE_COUNT` — total entries
-- `randomLine()` — uniform random pick
-- `getLine(n)` — read the nth entry (n is the frequency rank)
+**Similarity:** `@cf/baai/bge-small-en-v1.5` text embeddings via the
+`env.AI` binding. Each in-vocab guess runs one inference call batching
+target + guess (384-dim vectors) and the module scores them with local
+cosine similarity. At ~0.0037 Neurons per guess, the Workers Free plan
+cap of 10k Neurons/day covers ~2.7M guesses/day.
 
-Each new round picks via `randomLine()`, verifies the candidate via
-ConceptNet's concept endpoint, and falls back to an unverified pick after
-a few misses (see `api-client.js`).
-
-Regenerate with `npm run build:semantle-words` (chained into the main
-`npm run build` that `npm run deploy` invokes).
-
-Every guess costs **two** ConceptNet calls (concept edges + relatedness)
-issued in parallel. Typical latency ~300–600ms round-trip from Cloudflare
-Workers; `api-client.js` enforces a 5s timeout and surfaces a "Upstream
-hiccup" message on failure.
+OOV guesses short-circuit before inference — the player sees
+"isn't in the vocabulary" instead of a noisy subword-based score.
 
 ## Architecture
 
-- `api-client.js` — ConceptNet HTTP wrapper (`randomWord`, `similarity`,
-  plus lower-level `concept` / `relatedness`) with `UpstreamError` metadata.
-  Preserves the earlier word2sim response shape so the rest of the module
-  didn't need rewriting.
-- `words-data.js` — auto-generated dictionary (regenerate via `npm run build:semantle-words`).
-- `wordlist.js` — thin wrapper exposing `TARGET_POOL` and `pickFromPool()` over the dictionary.
+- `api-client.js` — Workers AI wrapper: `randomWord()` picks from the
+  local pool, `similarity(a, b)` runs `env.AI.run()` and returns
+  `{ in_vocab_b, similarity }` along with canonical forms.
+  `UpstreamError` carries status/body metadata when inference fails.
+- `words-data.js` — auto-generated dictionary (~9.9k entries).
+- `wordlist.js` — one-function module exposing `randomLine()`.
 - `state.js` — KV persistence for game + stats. Target stored lowercased.
-- `lookup.js` — guess normalization and shape validation.
+- `lookup.js` — guess normalization (`trim + lowercase + collapse spaces`)
+  and shape validation (`/^[a-z]+$/`, max 64 chars).
 - `format.js` — warmth-percent and emoji-bucket formatters.
 - `render.js` — Telegram HTML `<pre>` monospace board, sorted by similarity
   desc, capped at top 15 rows to stay under Telegram's message-length limit.
@@ -79,24 +66,22 @@ KV namespace prefix: `semantle:`
 | `game:<subject>` | `{ target, startedAt, solved, guesses[] }` — active round (TTL 7 days). `target` stored lowercased. |
 | `stats:<subject>` | `{ played, solved, totalGuesses, bestGuessCount, lastResultAt }` |
 
-Each `guesses[]` entry is `{ word, canonical, similarity }`. The canonical
-form is lowercased on write so the solve check is a single string compare.
+Each `guesses[]` entry is `{ word, canonical, similarity }`.
 
 ## Config
 
-No env vars. ConceptNet's public API base (`https://api.conceptnet.io`) is
-hardcoded in `api-client.js`; pass an override to `createClient(url)` if you
-need to point at a mirror or test double.
+No env vars. Model defaults to `@cf/baai/bge-small-en-v1.5`; override with
+`createClient(env.AI, { model: "@cf/baai/bge-base-en-v1.5" })` in a test
+or alternative deploy.
 
 ## Why unlimited guesses?
 
 Classic Semantle offers up to 100s of guesses per day, and the fun is in
-the hunt — not the timer. We keep rounds open indefinitely (TTL 7 days on
-KV) and measure skill via `bestGuessCount`, the fewest guesses to solve
-across all rounds.
+the hunt — not the timer. Rounds stay open (TTL 7 days on KV) and skill is
+tracked via `bestGuessCount` — fewest guesses to solve across all rounds.
 
 ## Credits
 
-- Similarity + vocabulary: [ConceptNet 5](https://conceptnet.io) by Robyn Speer et al.
+- Embeddings: [`@cf/baai/bge-small-en-v1.5`](https://developers.cloudflare.com/workers-ai/models/bge-small-en-v1.5/) on Cloudflare Workers AI.
 - Target dictionary: [google-10000-english](https://github.com/first20hours/google-10000-english) by Josh Kaufman, derived from Peter Norvig's Google Ngram analysis.
 - Game concept: [Semantle](https://semantle.com/) by David Turner.

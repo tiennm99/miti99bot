@@ -1,9 +1,9 @@
 /**
  * @file Guess normalization + shape validation.
  *
- * Keeps obviously-bad input from hitting the API. The /random endpoint
- * already filters its output to ASCII letters only, so any guess outside
- * that shape can never equal the target — fail fast.
+ * Keeps obviously-bad input out of the VOCAB lookup and the embedding call.
+ * The wordlist is ASCII-letter-only at build time, so any guess outside
+ * that shape is guaranteed OOV — fail fast.
  */
 
 /** @param {string} raw */

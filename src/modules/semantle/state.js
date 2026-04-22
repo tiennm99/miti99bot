@@ -4,7 +4,7 @@
  *
  * Target is stored lowercased so the case-insensitive equality check
  * is a single compare. Unlimited guesses — no MAX cap; rounds end only
- * on solve, giveup, or `/semantle_new`.
+ * on solve or giveup.
  *
  * Key layout (inside the module-prefixed store):
  *   game:<subject>   -> { target, startedAt, solved, guesses[] }
