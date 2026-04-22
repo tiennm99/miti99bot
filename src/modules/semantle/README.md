@@ -1,9 +1,9 @@
 # Semantle Module
 
-Word2vec similarity guessing game. A secret word is picked from our hosted
-[word2sim](https://github.com/tiennm99/word2sim) instance; each guess is
-scored by cosine similarity against the target. Unlimited guesses per round
-— you play until you get the exact word (case-insensitive).
+Semantic-similarity guessing game. A secret word is picked from a local
+curated pool and validated against ConceptNet; each guess is scored by
+ConceptNet's relatedness API against the target. Unlimited guesses per
+round — you play until you get the exact word (case-insensitive).
 
 ## Commands
 
@@ -20,28 +20,38 @@ ignored (no cost, no stat inflation).
 
 ## Data source
 
-Target words and similarity scores come from **[word2sim](https://word2sim.sg.miti99.com)**,
-our hosted FastAPI service over the GoogleNews pretrained word2vec model
-(3M tokens × 300 dims). Two endpoints are used:
+**[ConceptNet 5](https://api.conceptnet.io/)** — free public API, no auth,
+~300k English concepts including multi-word phrases. Two endpoints:
 
-- `GET /random` — round-start target pick, filtered to game-friendly words.
-- `GET /similarity?a&b` — per-guess cosine similarity.
+- `GET /relatedness?node1=/c/en/X&node2=/c/en/Y` — per-guess similarity,
+  returns `{ value: number ∈ [-1, 1] }`.
+- `GET /c/en/{term}` — vocabulary check: term is in vocab iff the response
+  carries at least one edge.
 
-No local model — every guess is a network round-trip. Typical latency
-~200–400ms; `api-client.js` enforces a 5s timeout and surfaces a
-"Upstream hiccup" message on failure.
+Because ConceptNet has no random-word endpoint, the target pool ships in
+`wordlist.js` (~250 curated English words, 4–10 letters, all alphabetic).
+Each new round picks locally, verifies via the concept endpoint, and falls
+back to an unverified pick after a few misses.
+
+Every guess costs **two** ConceptNet calls (concept edges + relatedness)
+issued in parallel. Typical latency ~300–600ms round-trip from Cloudflare
+Workers; `api-client.js` enforces a 5s timeout and surfaces a "Upstream
+hiccup" message on failure.
 
 ## Architecture
 
-- `api-client.js` — word2sim HTTP wrapper (`randomWord`, `similarity`) plus
-  `Word2SimError` with `{status, body, cause}` metadata.
+- `api-client.js` — ConceptNet HTTP wrapper (`randomWord`, `similarity`,
+  plus lower-level `concept` / `relatedness`) with `UpstreamError` metadata.
+  Preserves the earlier word2sim response shape so the rest of the module
+  didn't need rewriting.
+- `wordlist.js` — curated local target pool and `pickFromPool()`.
 - `state.js` — KV persistence for game + stats. Target stored lowercased.
 - `lookup.js` — guess normalization and shape validation.
 - `format.js` — warmth-percent and emoji-bucket formatters.
 - `render.js` — Telegram HTML `<pre>` monospace board, sorted by similarity
   desc, capped at top 15 rows to stay under Telegram's message-length limit.
 - `handlers.js` — subject resolution (user in DMs, chat in groups) + the
-  four command entry points.
+  three command entry points.
 
 Subject resolution: private chats track per-user games; groups track
 per-chat shared games. Mirrors `loldle`/`wordle`.
@@ -60,12 +70,9 @@ form is lowercased on write so the solve check is a single string compare.
 
 ## Config
 
-| Env var | Default | Meaning |
-|---------|---------|---------|
-| `WORD2SIM_API_URL` | `https://word2sim.sg.miti99.com` | word2sim base URL; override for local word2sim or self-hosted |
-
-Set in `wrangler.toml` `[vars]`. For local `wrangler dev`, optionally add
-to `.dev.vars` (gitignored).
+No env vars. ConceptNet's public API base (`https://api.conceptnet.io`) is
+hardcoded in `api-client.js`; pass an override to `createClient(url)` if you
+need to point at a mirror or test double.
 
 ## Why unlimited guesses?
 
@@ -76,6 +83,5 @@ across all rounds.
 
 ## Credits
 
-- Embedding model: Google's pretrained word2vec (3M tokens, 300 dims, trained on Google News).
-- Hosting layer: [tiennm99/word2sim](https://github.com/tiennm99/word2sim).
+- Similarity + vocabulary: [ConceptNet 5](https://conceptnet.io) by Robyn Speer et al.
 - Game concept: [Semantle](https://semantle.com/) by David Turner.

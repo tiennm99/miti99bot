@@ -1,15 +1,14 @@
 /**
- * @file Semantle module — word2vec similarity guessing game.
+ * @file Semantle module — similarity guessing game backed by ConceptNet.
  *
- * Target words come from our own hosted word2sim instance
- * (default: https://word2sim.sg.miti99.com). Override via env var
- * `WORD2SIM_API_URL` for local dev or self-hosting.
+ * Targets come from a curated local wordlist (ConceptNet has no /random).
+ * Similarity scores come from `api.conceptnet.io/relatedness`. The ConceptNet
+ * base URL is hardcoded in the client; tests can still override via
+ * `createClient(url)` if needed.
  */
 
 import { createClient } from "./api-client.js";
 import { handleGiveup, handleSemantle, handleStats } from "./handlers.js";
-
-const DEFAULT_API_URL = "https://word2sim.sg.miti99.com";
 
 /** @type {import("../../db/kv-store-interface.js").KVStore | null} */
 let db = null;
@@ -19,10 +18,9 @@ let client = null;
 /** @type {import("../registry.js").BotModule} */
 const semantleModule = {
   name: "semantle",
-  init: async ({ db: store, env }) => {
+  init: async ({ db: store }) => {
     db = store;
-    const base = env?.WORD2SIM_API_URL || DEFAULT_API_URL;
-    client = createClient(base);
+    client = createClient();
   },
   commands: [
     {

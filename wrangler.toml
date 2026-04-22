@@ -6,8 +6,6 @@ compatibility_date = "2025-10-01"
 # Also duplicate this value into .env.deploy so scripts/register.js derives the same public command list.
 [vars]
 MODULES = "util,wordle,loldle,misc,trading,lolschedule,semantle"
-# Base URL for the hosted word2sim similarity API (semantle module).
-WORD2SIM_API_URL = "https://word2sim.sg.miti99.com"
 
 # KV namespace holding all module state. Each module auto-prefixes its keys via createStore().
 # Production-only — no preview namespace. Create with:
