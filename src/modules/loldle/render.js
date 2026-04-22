@@ -9,7 +9,7 @@ import { escapeHtml } from "../../util/escape-html.js";
 
 const MARKER = { correct: "✅", partial: "🟨", wrong: "❌" };
 const ARROW = { up: "⬆️", down: "⬇️" };
-const NAME_LABEL = "Name";
+const NAME_LABEL = "Champion";
 const NAME_MARKER = "🎯";
 
 /**

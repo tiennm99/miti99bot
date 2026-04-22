@@ -6,14 +6,15 @@
  * range_type) are arrays, and `release_date` is an ISO "YYYY-MM-DD" string.
  */
 
+// Labels match loldle.net's classic-mode grid headers verbatim.
 export const CLASSIC_ATTRIBUTES = [
   { key: "gender", label: "Gender", type: "exact" },
   { key: "species", label: "Species", type: "multi" },
-  { key: "range_type", label: "Range", type: "multi" },
+  { key: "range_type", label: "Range type", type: "multi" },
   { key: "resource", label: "Resource", type: "exact" },
-  { key: "regions", label: "Region", type: "multi" },
-  { key: "positions", label: "Lane", type: "multi" },
-  { key: "release_date", label: "Year", type: "year" },
+  { key: "regions", label: "Region(s)", type: "multi" },
+  { key: "positions", label: "Position(s)", type: "multi" },
+  { key: "release_date", label: "Release year", type: "year" },
 ];
 
 /**
