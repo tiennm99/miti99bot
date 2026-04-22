@@ -16,8 +16,8 @@
     "db:migrate": "node scripts/migrate.js",
     "register": "node --env-file-if-exists=.env.deploy scripts/register.js",
     "register:dry": "node --env-file-if-exists=.env.deploy scripts/register.js --dry-run",
-    "lint": "biome check src tests scripts && eslint src",
-    "format": "biome format --write src tests scripts",
+    "lint": "biome check . && eslint src",
+    "format": "biome format --write .",
     "test": "vitest run"
   },
   "dependencies": {
