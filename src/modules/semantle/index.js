@@ -7,7 +7,7 @@
  */
 
 import { createClient } from "./api-client.js";
-import { handleGiveup, handleNew, handleSemantle, handleStats } from "./handlers.js";
+import { handleGiveup, handleSemantle, handleStats } from "./handlers.js";
 
 const DEFAULT_API_URL = "https://word2sim.sg.miti99.com";
 
@@ -32,15 +32,9 @@ const semantleModule = {
       handler: (ctx) => handleSemantle(ctx, { db, client }),
     },
     {
-      name: "semantle_new",
-      visibility: "public",
-      description: "Abandon the current semantle round and start a fresh one",
-      handler: (ctx) => handleNew(ctx, { db, client }),
-    },
-    {
       name: "semantle_giveup",
       visibility: "public",
-      description: "Reveal the current semantle answer",
+      description: "Reveal the current semantle answer (auto-starts a fresh round)",
       handler: (ctx) => handleGiveup(ctx, { db, client }),
     },
     {
