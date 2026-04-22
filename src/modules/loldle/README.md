@@ -26,13 +26,15 @@ opens a PR whenever the data changes.
 | Command | Visibility | Description |
 |---------|-----------|-------------|
 | `/loldle` | public | Show current board, or submit a champion guess |
-| `/loldle_giveup` | public | Reveal the answer and auto-start a fresh round |
+| `/loldle_giveup` | public | Reveal the answer and end the round |
 | `/loldle_stats` | public | Show your wins / streak |
 
 Submit a guess with `/loldle <champion>` (e.g. `/loldle Ahri`). Names match
 case/space/punctuation-insensitive with a unique-prefix fallback. A round
-that ends (solved, gave up, or out of guesses) is immediately replaced by a
-fresh one — no manual "new round" command.
+that ends (solved, gave up, or out of guesses) is cleared; the next round
+is created lazily on the first `/loldle` call, and the timer (`startedAt`)
+only starts when the player submits their first actual guess — viewing an
+empty board gives no hints, so it shouldn't count against the clock.
 
 ## Architecture
 

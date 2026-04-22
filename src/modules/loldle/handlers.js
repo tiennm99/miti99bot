@@ -5,10 +5,15 @@
  *   private chat → user id (per-user game)
  *   group/supergroup chat → chat id (shared game — everyone plays together)
  *
+ * Round lifecycle: a round is created lazily on the first /loldle call after
+ * the previous round ended, and the timer (`startedAt`) only starts when the
+ * player submits their first actual guess — viewing an empty board gives no
+ * hints, so it shouldn't count against the clock.
+ *
  * Commands:
  *   /loldle              → show the current board (or start a round)
  *   /loldle <champion>   → submit a guess
- *   /loldle_giveup       → reveal the answer and auto-start a fresh round
+ *   /loldle_giveup       → reveal the answer and end the round
  *   /loldle_stats        → show wins / streak for the current subject
  */
 
@@ -18,13 +23,14 @@ import { compareChampions } from "./compare.js";
 import { attemptFlavor, formatDuration } from "./flavor.js";
 import { findChampion } from "./lookup.js";
 import { renderBoard, renderGuess } from "./render.js";
-import { MAX_GUESSES, loadGame, loadStats, recordResult, saveGame } from "./state.js";
+import { MAX_GUESSES, clearGame, loadGame, loadStats, recordResult, saveGame } from "./state.js";
 import { GIVEUP_STICKERS, LOSE_STICKERS, WIN_STICKERS, pickSticker } from "./stickers.js";
 
 /** @type {Array<Record<string, any>>} */
 const champions = championsData;
 
-const NEW_ROUND_HINT = "🆕 New round started. Use <code>/loldle &lt;champion&gt;</code> to guess.";
+const NEW_ROUND_HINT =
+  "🆕 Send <code>/loldle</code> or <code>/loldle &lt;champion&gt;</code> to start a new round.";
 
 function getSubject(ctx) {
   const type = ctx.chat?.type;
@@ -61,7 +67,9 @@ function rehydrateGuesses(game) {
 
 async function startFreshGame(db, subject) {
   const target = pickRandomChampion();
-  const fresh = { target: target.championName, guesses: [], startedAt: Date.now() };
+  // startedAt stays null until the player actually submits their first guess —
+  // seeing an empty board gives no hints, so the round hasn't really begun.
+  const fresh = { target: target.championName, guesses: [], startedAt: null };
   await saveGame(db, subject, fresh);
   return fresh;
 }
@@ -113,13 +121,15 @@ export async function handleLoldle(ctx, db) {
   const target = findByName(game.target);
   // champions.json can be refreshed between rounds — an active target may disappear.
   if (!target) {
-    await startFreshGame(db, subject);
-    return ctx.reply(
-      "Champion data was updated since this round started. Starting a fresh round — try again.",
-    );
+    await clearGame(db, subject);
+    return ctx.reply(`Champion data was updated since this round started. ${NEW_ROUND_HINT}`, {
+      parse_mode: "HTML",
+    });
   }
 
   const results = compareChampions(guess, target);
+  // Stamp the clock on the first guess — prior /loldle views don't count.
+  if (game.startedAt == null) game.startedAt = Date.now();
   game.guesses.push(guess.championName);
   const won = guess.championName === target.championName;
 
@@ -129,7 +139,7 @@ export async function handleLoldle(ctx, db) {
 
   if (won) {
     const s = await recordResult(db, subject, true);
-    await startFreshGame(db, subject);
+    await clearGame(db, subject);
     await trySendSticker(ctx, WIN_STICKERS);
     const flavor = attemptFlavor(game.guesses.length, MAX_GUESSES);
     return ctx.reply(
@@ -140,7 +150,7 @@ export async function handleLoldle(ctx, db) {
 
   if (game.guesses.length >= MAX_GUESSES) {
     await recordResult(db, subject, false);
-    await startFreshGame(db, subject);
+    await clearGame(db, subject);
     await trySendSticker(ctx, LOSE_STICKERS);
     return ctx.reply(`${reply}\n\n❌ Out of guesses. Answer was ${champ}.\n${NEW_ROUND_HINT}`, {
       parse_mode: "HTML",
@@ -160,12 +170,16 @@ export async function handleLoldle(ctx, db) {
 export async function handleGiveup(ctx, db) {
   const subject = getSubject(ctx);
   if (subject == null) return ctx.reply("Cannot identify chat.");
-  const game = await getOrInitGame(db, subject);
+  const existing = await loadGame(db, subject);
+  // No active round — nothing to give up on.
+  if (!existing) {
+    return ctx.reply(`No active round. ${NEW_ROUND_HINT}`, { parse_mode: "HTML" });
+  }
   await recordResult(db, subject, false);
-  const target = findByName(game.target);
-  await startFreshGame(db, subject);
+  const target = findByName(existing.target);
+  await clearGame(db, subject);
   await trySendSticker(ctx, GIVEUP_STICKERS);
-  const answer = target ? escapeHtml(target.championName) : escapeHtml(game.target);
+  const answer = target ? escapeHtml(target.championName) : escapeHtml(existing.target);
   return ctx.reply(`🏳️ Answer was ${answer}.\n${NEW_ROUND_HINT}`, { parse_mode: "HTML" });
 }
 
