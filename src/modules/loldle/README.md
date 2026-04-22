@@ -2,9 +2,9 @@
 
 Classic-mode League of Legends champion guessing game — ported from
 [`tiennm99/loldle`](https://github.com/tiennm99/loldle) (`lib/classic-mode.js`).
-Champion data is synced from
-[`tiennm99/loldle-data`](https://github.com/tiennm99/loldle-data) via a
-GitHub Actions workflow that regenerates `champions-data.js`.
+Champion data is scraped weekly from [loldle.net](https://loldle.net/classic)'s
+JS bundle into `champions.json` via `.github/workflows/scrape-loldle-data.yml`
+(runs `node scripts/scrape-loldle-data.js`).
 
 ## Commands
 
@@ -22,7 +22,7 @@ immediately rolls into a fresh round — no manual "new round" command needed.
 ## Architecture
 
 - `compare.js` — pure attribute comparison across 7 classic-mode attributes
-  (gender, genre, range, resource, region, lane, year). Returns `correct`,
+  (gender, species, range, resource, region, lane, year). Returns `correct`,
   `partial`, or `wrong` per attribute, plus a `direction` hint for year.
 - `lookup.js` — normalizes user input and resolves it to a champion record.
 - `daily.js` — `pickRandom` / `pickDaily` (djb2-hashed date seed for future
@@ -33,8 +33,9 @@ immediately rolls into a fresh round — no manual "new round" command needed.
   streak tracking.
 - `handlers.js` — wires subject resolution (user id in DMs, chat id in groups)
   to the pure functions above.
-- `champions-data.js` — auto-generated ES-module wrapper over `champions.json`
-  (do not edit by hand; regenerate with `node scripts/build-loldle-data.js`).
+- `champions.json` — auto-generated from loldle.net (do not edit by hand;
+  regenerate with `npm run scrape:loldle-data`). Imported directly via
+  `with { type: "json" }`.
 
 Subject resolution: private chats track per-user games; groups track per-chat
 shared games (everyone plays the same round).

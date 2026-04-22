@@ -8,8 +8,8 @@
  * at `<script src="js/index.<hash>.js">`, one record per champion with the
  * exact shape the bot needs. No CryptoJS decoding, no ddragon merge.
  *
- * Writes both champions.json (authoring format) and champions-data.js (ESM
- * wrapper consumed by the bot).
+ * Writes src/modules/loldle/champions.json. The bot imports this JSON
+ * directly via `with { type: "json" }` (Node 24 + wrangler 4.x).
  *
  * Usage:
  *   node scripts/scrape-loldle-data.js
@@ -94,21 +94,10 @@ async function scrapeLoldle() {
 
 const root = resolve(import.meta.dirname, "..");
 const jsonPath = resolve(root, "src/modules/loldle/champions.json");
-const esmPath = resolve(root, "src/modules/loldle/champions-data.js");
 
 console.log("scraping loldle.net…");
 const records = await scrapeLoldle();
 console.log(`  parsed ${records.length} champions`);
 
-const json = JSON.stringify(records, null, 4);
-writeFileSync(jsonPath, `${json}\n`);
+writeFileSync(jsonPath, `${JSON.stringify(records, null, 4)}\n`);
 console.log(`wrote ${jsonPath}`);
-
-const esm = [
-  "// Auto-generated from champions.json — do NOT edit by hand.",
-  "// Regenerate with: node scripts/scrape-loldle-data.js",
-  `export default ${json};`,
-  "",
-].join("\n");
-writeFileSync(esmPath, esm);
-console.log(`wrote ${esmPath}`);

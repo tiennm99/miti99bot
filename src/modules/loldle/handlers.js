@@ -16,7 +16,7 @@
  */
 
 import { escapeHtml } from "../../util/escape-html.js";
-import championsData from "./champions-data.js";
+import championsData from "./champions.json" with { type: "json" };
 import { compareChampions } from "./compare.js";
 import { pickRandom } from "./daily.js";
 import { attemptFlavor, formatDuration } from "./flavor.js";
