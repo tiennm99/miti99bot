@@ -22,7 +22,8 @@ const statsKey = (subject) => `stats:${subject}`;
  * @typedef {object} GameState
  * @property {string} target — hidden champion's championName
  * @property {string[]} guesses — championNames already tried this round
- * @property {number} startedAt — epoch ms
+ * @property {number|null} startedAt — epoch ms; null until the first guess is
+ *   submitted (viewing an empty board shouldn't start the clock)
  */
 
 /**
@@ -41,6 +42,18 @@ export async function loadGame(db, subject) {
  */
 export async function saveGame(db, subject, state) {
   await db.putJSON(gameKey(subject), state, { expirationTtl: GAME_TTL_SECONDS });
+}
+
+/**
+ * Remove the stored game so the next /loldle call creates a fresh round.
+ * Used after win / loss / giveup — the new round's timer should start on the
+ * player's next interaction, not at the moment the previous round ended.
+ *
+ * @param {import("../../db/kv-store-interface.js").KVStore} db
+ * @param {number|string} subject
+ */
+export async function clearGame(db, subject) {
+  await db.delete(gameKey(subject));
 }
 
 export { MAX_GUESSES };
