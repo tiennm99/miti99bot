@@ -141,7 +141,7 @@ export async function handleLoldle(ctx, db) {
 
   const reply = renderGuess(guess.name, results);
   const elapsed = formatDuration(Date.now() - (game.startedAt ?? Date.now()));
-  const champ = `${escapeHtml(target.name)} — ${escapeHtml(target.title)}`;
+  const champ = escapeHtml(target.name);
 
   if (won) {
     const s = await recordResult(db, subject, true);
@@ -181,9 +181,7 @@ export async function handleGiveup(ctx, db) {
   const target = champions.find((c) => c.id === game.target);
   await startFreshGame(db, subject);
   await trySendSticker(ctx, GIVEUP_STICKERS);
-  const answer = target
-    ? `${escapeHtml(target.name)} — ${escapeHtml(target.title)}`
-    : escapeHtml(game.target);
+  const answer = target ? escapeHtml(target.name) : escapeHtml(game.target);
   return ctx.reply(`🏳️ Answer was ${answer}.\n${NEW_ROUND_HINT}`, { parse_mode: "HTML" });
 }
 
