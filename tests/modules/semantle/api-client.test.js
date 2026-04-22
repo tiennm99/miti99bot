@@ -2,10 +2,10 @@ import { describe, expect, it, vi } from "vitest";
 import { UpstreamError, createClient } from "../../../src/modules/semantle/api-client.js";
 
 /**
- * Build a deterministic 384-dim vector (bge-small output size) from a seed
- * so cosine scores are reproducible without hardcoding 384 floats.
+ * Build a deterministic 1024-dim vector (bge-m3 output size) from a seed
+ * so cosine scores are reproducible without hardcoding 1024 floats.
  */
-function fakeVector(seed, dim = 384) {
+function fakeVector(seed, dim = 1024) {
   const out = new Array(dim);
   for (let i = 0; i < dim; i++) out[i] = Math.sin(seed * (i + 1));
   return out;
@@ -45,14 +45,14 @@ describe("semantle/api-client", () => {
 
     it("similarity batches target + guess in a single run() call", async () => {
       const ai = fakeAi(async (_model, { text }) => ({
-        shape: [text.length, 384],
+        shape: [text.length, 1024],
         data: text.map((_, i) => fakeVector(i + 1)),
       }));
       const client = createClient(ai);
       await client.similarity("apple", "orange");
       expect(ai.run).toHaveBeenCalledTimes(1);
       const [model, input] = ai.run.mock.calls[0];
-      expect(model).toBe("@cf/baai/bge-small-en-v1.5");
+      expect(model).toBe("@cf/baai/bge-m3");
       expect(input).toEqual({ text: ["apple", "orange"] });
     });
 
@@ -107,7 +107,7 @@ describe("semantle/api-client", () => {
     });
 
     it("similarity returns null score when a vector norm is zero", async () => {
-      const zero = new Array(384).fill(0);
+      const zero = new Array(1024).fill(0);
       const ai = fakeAi(async () => ({ data: [zero, fakeVector(1)] }));
       const client = createClient(ai);
       const res = await client.similarity("apple", "orange");

@@ -28,11 +28,12 @@ the target pool and the vocabulary** — so every legal guess could itself
 have been the answer, and OOV detection is an O(1) `Set.has()` with no
 upstream round-trip. Regenerate with `node scripts/build-semantle-words.js`.
 
-**Similarity:** `@cf/baai/bge-small-en-v1.5` text embeddings via the
+**Similarity:** `@cf/baai/bge-m3` multilingual text embeddings via the
 `env.AI` binding. Each in-vocab guess runs one inference call batching
-target + guess (384-dim vectors) and the module scores them with local
-cosine similarity. At ~0.0037 Neurons per guess, the Workers Free plan
-cap of 10k Neurons/day covers ~2.7M guesses/day.
+target + guess (1024-dim vectors) and the module scores them with local
+cosine similarity. At 1075 Neurons per M input tokens (~0.002 N/guess
+for short words), the Workers Free plan cap of 10k Neurons/day covers
+~4.6M guesses/day. Same model as `doantu` so both share the binding.
 
 OOV guesses short-circuit before inference — the player sees
 "isn't in the vocabulary" instead of a noisy subword-based score.
@@ -70,8 +71,8 @@ Each `guesses[]` entry is `{ word, canonical, similarity }`.
 
 ## Config
 
-No env vars. Model defaults to `@cf/baai/bge-small-en-v1.5`; override with
-`createClient(env.AI, { model: "@cf/baai/bge-base-en-v1.5" })` in a test
+No env vars. Model defaults to `@cf/baai/bge-m3`; override with
+`createClient(env.AI, { model: "@cf/baai/bge-small-en-v1.5" })` in a test
 or alternative deploy.
 
 ## Why unlimited guesses?
@@ -82,6 +83,6 @@ tracked via `bestGuessCount` — fewest guesses to solve across all rounds.
 
 ## Credits
 
-- Embeddings: [`@cf/baai/bge-small-en-v1.5`](https://developers.cloudflare.com/workers-ai/models/bge-small-en-v1.5/) on Cloudflare Workers AI.
+- Embeddings: [`@cf/baai/bge-m3`](https://developers.cloudflare.com/workers-ai/models/bge-m3/) on Cloudflare Workers AI (multilingual).
 - Target dictionary: [google-10000-english](https://github.com/first20hours/google-10000-english) by Josh Kaufman, derived from Peter Norvig's Google Ngram analysis.
 - Game concept: [Semantle](https://semantle.com/) by David Turner.
