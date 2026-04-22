@@ -1,11 +1,9 @@
 /**
- * @file Classic-mode champion comparison against the raw loldle.net schema.
- * Pure functions, no DOM/React.
+ * @file Classic-mode champion comparison.
  *
- * Champion records use the shape emitted by scripts/scrape-loldle-data.js
- * (identical to loldle.net's JS bundle): gender is a string ("Male"), the
- * multi-value axes (positions, species, regions, range_type) are arrays,
- * and release_date is an ISO "YYYY-MM-DD" string.
+ * Champion records use loldle.net's raw schema: `gender` is a string
+ * ("Male"/"Female"/"Other"), multi-value axes (positions, species, regions,
+ * range_type) are arrays, and `release_date` is an ISO "YYYY-MM-DD" string.
  */
 
 export const CLASSIC_ATTRIBUTES = [
@@ -19,62 +17,51 @@ export const CLASSIC_ATTRIBUTES = [
 ];
 
 /**
- * Compare a guess champion against the target.
+ * Compare a guess champion against the target, returning one row per attribute.
  * @param {Record<string, unknown>} guess
  * @param {Record<string, unknown>} target
  */
 export function compareChampions(guess, target) {
   return CLASSIC_ATTRIBUTES.map((attr) => {
-    const guessVal = guess[attr.key];
-    const targetVal = target[attr.key];
+    const g = guess[attr.key];
+    const t = target[attr.key];
 
-    switch (attr.type) {
-      case "exact":
-        return {
-          ...attr,
-          guessValue: formatValue(guessVal),
-          targetValue: formatValue(targetVal),
-          result:
-            String(guessVal ?? "").toLowerCase() === String(targetVal ?? "").toLowerCase()
-              ? "correct"
-              : "wrong",
-        };
-      case "multi":
-        return {
-          ...attr,
-          guessValue: formatValue(guessVal),
-          targetValue: formatValue(targetVal),
-          result: compareMultiValue(guessVal, targetVal),
-        };
-      case "year":
-        return {
-          ...attr,
-          guessValue: parseYear(guessVal) || "?",
-          targetValue: parseYear(targetVal) || "?",
-          ...compareYear(guessVal, targetVal),
-        };
-      default:
-        return { ...attr, guessValue: guessVal, targetValue: targetVal, result: "wrong" };
+    if (attr.type === "year") {
+      return {
+        ...attr,
+        guessValue: parseYear(g) || "?",
+        targetValue: parseYear(t) || "?",
+        ...compareYear(g, t),
+      };
     }
+
+    const row = {
+      ...attr,
+      guessValue: formatValue(g),
+      targetValue: formatValue(t),
+    };
+    row.result =
+      attr.type === "exact"
+        ? String(g ?? "").toLowerCase() === String(t ?? "").toLowerCase()
+          ? "correct"
+          : "wrong"
+        : compareMultiValue(g, t);
+    return row;
   });
 }
 
 function compareMultiValue(guess, target) {
-  const guessSet = toSet(guess);
-  const targetSet = toSet(target);
-
-  if (guessSet.size === 0 && targetSet.size === 0) return "correct";
-  if (guessSet.size === 0 || targetSet.size === 0) return "wrong";
-  if (setsEqual(guessSet, targetSet)) return "correct";
-  for (const val of guessSet) {
-    if (targetSet.has(val)) return "partial";
-  }
+  const a = toSet(guess);
+  const b = toSet(target);
+  if (a.size === 0 && b.size === 0) return "correct";
+  if (a.size === 0 || b.size === 0) return "wrong";
+  if (setsEqual(a, b)) return "correct";
+  for (const v of a) if (b.has(v)) return "partial";
   return "wrong";
 }
 
 function parseYear(val) {
-  if (!val) return 0;
-  const m = String(val).match(/^(\d{4})/);
+  const m = String(val ?? "").match(/^(\d{4})/);
   return m ? Number(m[1]) : 0;
 }
 

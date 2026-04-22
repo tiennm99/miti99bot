@@ -1,34 +1,28 @@
 /**
- * @file Game state in KV, keyed by "subject" (user in DM, chat in groups).
+ * @file Game + stats persistence in KV, keyed by "subject"
+ * (user id in DMs, chat id in groups — so a group shares one round).
  *
- * One active round per subject at a time. Rounds are self-paced: players
- * can /loldle_giveup to reveal (a fresh round auto-starts). Streak = consecutive wins.
+ * Key layout (inside the module-prefixed store):
+ *   game:<subject>   -> { target, guesses, startedAt }
+ *   stats:<subject>  -> { played, wins, streak, bestStreak }
  *
- * Key layout (inside module-prefixed store):
- *   game:<subject>   -> { target, guesses[championName...], solved, giveup, startedAt }
- *   stats:<subject>  -> { played, wins, streak, bestStreak, lastResultAt }
- *
- * Only championName strings are stored in `guesses` — comparison rows are
- * recomputed at render time from the live champions.json. This keeps payloads
- * tiny and avoids stale results if loldle.net data shifts mid-round.
+ * `guesses` is a string[] of championNames — comparison rows are recomputed
+ * at render time, so the board always reflects the live champions.json.
  */
 
 const MAX_GUESSES = 8;
-// 7 days — a round can't linger forever, but is far longer than typical play.
+// Upper bound for a round — long enough for any real session, short enough
+// that stale KV entries get reclaimed automatically.
 const GAME_TTL_SECONDS = 60 * 60 * 24 * 7;
 
-/** @param {number|string} subject */
 const gameKey = (subject) => `game:${subject}`;
-/** @param {number|string} subject */
 const statsKey = (subject) => `stats:${subject}`;
 
 /**
  * @typedef {object} GameState
- * @property {string} target — championName of the hidden champion
+ * @property {string} target — hidden champion's championName
  * @property {string[]} guesses — championNames already tried this round
- * @property {boolean} solved
- * @property {boolean} [giveup]
- * @property {number} [startedAt] — epoch ms
+ * @property {number} startedAt — epoch ms
  */
 
 /**
@@ -62,14 +56,13 @@ export async function loadStats(db, subject) {
       wins: 0,
       streak: 0,
       bestStreak: 0,
-      lastResultAt: null,
     }
   );
 }
 
 /**
- * Record a finished round (win/loss/giveup) and update streaks.
- * Streak increments on each win, resets to 0 on any non-win.
+ * Record a finished round and update the streak. Streak increments on each
+ * win and resets to 0 on any non-win.
  *
  * @param {import("../../db/kv-store-interface.js").KVStore} db
  * @param {number|string} subject
@@ -85,7 +78,6 @@ export async function recordResult(db, subject, won) {
   } else {
     s.streak = 0;
   }
-  s.lastResultAt = Date.now();
   await db.putJSON(statsKey(subject), s);
   return s;
 }

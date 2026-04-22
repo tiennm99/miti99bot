@@ -1,58 +1,67 @@
 # Loldle Module
 
-Classic-mode League of Legends champion guessing game — ported from
-[`tiennm99/loldle`](https://github.com/tiennm99/loldle) (`lib/classic-mode.js`).
-Champion data is scraped weekly from [loldle.net](https://loldle.net/classic)'s
-JS bundle into `champions.json` via `.github/workflows/scrape-loldle-data.yml`
-(runs `node scripts/scrape-loldle-data.js`).
+Classic-mode League of Legends champion guessing game. Players get 8 guesses
+to identify a hidden champion; each guess is compared across 7 attributes
+and the board is rendered as a monospace Telegram table.
+
+## Data source
+
+All champion data comes from **[loldle.net](https://loldle.net/classic)**.
+The site embeds its classic-mode dataset in plaintext inside its JS bundle,
+so we scrape and store it verbatim — no transformation, no external merge.
+
+`scripts/scrape-loldle-data.js` fetches `loldle.net/classic`, extracts the
+hashed `js/index.<hash>.js` bundle URL, pulls every champion record via a
+single regex, and writes the array to `src/modules/loldle/champions.json`.
+
+The bot imports that JSON directly (`with { type: "json" }`). No build step,
+no wrapper module.
+
+**Regenerate manually:** `npm run scrape:loldle-data`
+**Weekly refresh:** `.github/workflows/scrape-loldle-data.yml` (Mon 06:00 UTC)
+opens a PR whenever the data changes.
 
 ## Commands
 
 | Command | Visibility | Description |
 |---------|-----------|-------------|
-| `/loldle` | public | Show current board, start a game, or submit a champion guess when an argument is provided |
-| `/loldle_giveup` | public | Reveal the current loldle answer (auto-starts a fresh round) |
-| `/loldle_stats` | public | Show your loldle stats (wins, streak) |
+| `/loldle` | public | Show current board, or submit a champion guess |
+| `/loldle_giveup` | public | Reveal the answer and auto-start a fresh round |
+| `/loldle_stats` | public | Show your wins / streak |
 
-Submit a guess with `/loldle <champion>` — e.g. `/loldle Ahri`. Champion names
-are matched case/space/punctuation-insensitive with a unique-prefix fallback
-(see `lookup.js`). A round that ends (solved, gave up, or ran out of guesses)
-immediately rolls into a fresh round — no manual "new round" command needed.
+Submit a guess with `/loldle <champion>` (e.g. `/loldle Ahri`). Names match
+case/space/punctuation-insensitive with a unique-prefix fallback. A round
+that ends (solved, gave up, or out of guesses) is immediately replaced by a
+fresh one — no manual "new round" command.
 
 ## Architecture
 
-- `compare.js` — pure attribute comparison across 7 classic-mode attributes
-  matching loldle.net's raw schema (`gender`, `species`, `range_type`,
-  `resource`, `regions`, `positions`, `release_date`). Returns `correct`,
-  `partial`, or `wrong` per attribute, plus a `direction` hint for year.
-- `lookup.js` — normalizes user input and resolves it to a champion record.
-- `daily.js` — `pickRandom` / `pickDaily` (djb2-hashed date seed for future
-  daily-mode use).
-- `render.js` — Telegram HTML `<pre>` monospace table with auto-widthed label
-  column (✅/🟨/❌ markers and ⬆️/⬇️ year direction hints).
-- `state.js` — KV persistence with `MAX_GUESSES = 8`, per-subject stats with
-  streak tracking.
-- `handlers.js` — wires subject resolution (user id in DMs, chat id in groups)
-  to the pure functions above.
-- `champions.json` — auto-generated from loldle.net (do not edit by hand;
-  regenerate with `npm run scrape:loldle-data`). Imported directly via
-  `with { type: "json" }`.
+- `compare.js` — attribute comparison across 7 axes from loldle.net's raw
+  schema (`gender`, `species`, `range_type`, `resource`, `regions`,
+  `positions`, `release_date`). Returns `correct` / `partial` / `wrong` per
+  row, plus an up/down `direction` hint for the year.
+- `lookup.js` — normalizes user input to a champion record.
+- `render.js` — Telegram HTML `<pre>` monospace table with auto-widthed
+  label column.
+- `state.js` — KV persistence (`MAX_GUESSES = 8`, per-subject stats).
+- `handlers.js` — subject resolution (user id in DMs, chat id in groups) +
+  command flow.
+- `flavor.js` — win-message text helpers.
+- `stickers.js` — Telegram sticker pools per outcome.
+- `champions.json` — auto-generated data (never edit by hand).
 
-Subject resolution: private chats track per-user games; groups track per-chat
-shared games (everyone plays the same round).
+Subject resolution: private chats track per-user games; groups track
+per-chat shared games.
 
-## Database
+## Storage
 
 KV namespace prefix: `loldle:`
 
-| Key | Type | Description |
-|-----|------|-------------|
-| `game:<subject>` | JSON | Active round: target champion id, guesses, solved/giveup flags, startedAt |
-| `stats:<subject>` | JSON | Aggregate stats: played, wins, streak, bestStreak, lastResultAt |
-
-Active rounds expire after 7 days if untouched.
+| Key | Value |
+|-----|-------|
+| `game:<subject>` | `{ target, guesses, startedAt }` — active round (TTL 7 days). `guesses` is a championName array; comparison rows are recomputed at render time. |
+| `stats:<subject>` | `{ played, wins, streak, bestStreak }` |
 
 ## Credits
 
-Champion data © Riot Games. The comparison attribute definitions and scoring
-rules are ported from the original `tiennm99/loldle` project.
+Champion data © Riot Games, via loldle.net.

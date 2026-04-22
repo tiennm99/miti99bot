@@ -42,9 +42,7 @@ jobs:
           title: "data: weekly loldle.net champion refresh"
           body: |
             Automated weekly refresh of `src/modules/loldle/champions.json`
-            from loldle.net's JS bundle — the canonical source for all
-            classic-mode fields (`gender`, `species`, `resource`,
-            `attackType`, `region`, `lane`, `releaseDate`).
+            from loldle.net's JS bundle.
 
             Review the diff, merge, then run `npm run deploy` to ship.
           add-paths: src/modules/loldle/champions.json

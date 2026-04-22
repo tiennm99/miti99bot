@@ -1,8 +1,6 @@
 /**
  * @file Loldle module — classic-mode champion guessing game.
- *
- * Ported from tiennm99/loldle (lib/classic-mode.js). Data sourced from
- * tiennm99/loldle-data's champions.json (synced via GH Actions).
+ * Champion data is scraped weekly from loldle.net.
  */
 
 import { handleGiveup, handleLoldle, handleStats } from "./handlers.js";

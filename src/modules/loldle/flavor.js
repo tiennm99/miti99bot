@@ -1,8 +1,5 @@
 /**
- * @file Small text helpers for the loldle win message.
- *
- * Kept separate so handlers.js stays under the 200-LoC guideline and so these
- * pure functions are easy to unit-test without a grammY context.
+ * @file Win-message text helpers — one-word reaction + elapsed-time format.
  */
 
 /**

@@ -1,24 +1,20 @@
 /**
- * @file Command handlers for loldle module.
+ * @file Loldle command handlers.
  *
  * Subject resolution:
  *   private chat → user id (per-user game)
- *   group/supergroup chat → chat id (shared game — all members play together)
+ *   group/supergroup chat → chat id (shared game — everyone plays together)
  *
  * Commands:
- *   /loldle              → show board / start puzzle
+ *   /loldle              → show the current board (or start a round)
  *   /loldle <champion>   → submit a guess
- *   /loldle_giveup       → reveal answer, end round (a fresh round auto-starts)
- *   /loldle_stats        → show stats (per-user in DM, per-group in groups)
- *
- * A finished round (solved, gave up, or out of guesses) is immediately
- * replaced by a fresh round, so the user can just keep playing.
+ *   /loldle_giveup       → reveal the answer and auto-start a fresh round
+ *   /loldle_stats        → show wins / streak for the current subject
  */
 
 import { escapeHtml } from "../../util/escape-html.js";
 import championsData from "./champions.json" with { type: "json" };
 import { compareChampions } from "./compare.js";
-import { pickRandom } from "./daily.js";
 import { attemptFlavor, formatDuration } from "./flavor.js";
 import { findChampion } from "./lookup.js";
 import { renderBoard, renderGuess } from "./render.js";
@@ -28,19 +24,10 @@ import { GIVEUP_STICKERS, LOSE_STICKERS, WIN_STICKERS, pickSticker } from "./sti
 /** @type {Array<Record<string, any>>} */
 const champions = championsData;
 
-// Sent inside HTML parse_mode replies — must be HTML-safe.
-// `<champion>` as a literal tag would make Telegram reject the whole message.
 const NEW_ROUND_HINT = "🆕 New round started. Use <code>/loldle &lt;champion&gt;</code> to guess.";
 
-/**
- * Returns the stable subject identifier for the current chat.
- * In private chat: user id. In groups: chat id (shared across all members).
- * @param {import("grammy").Context} ctx
- * @returns {number|null}
- */
 function getSubject(ctx) {
   const type = ctx.chat?.type;
-  if (type === "private") return ctx.from?.id ?? null;
   if (type === "group" || type === "supergroup") return ctx.chat.id;
   return ctx.from?.id ?? null;
 }
@@ -51,68 +38,48 @@ function argAfterCommand(text) {
   return idx === -1 ? "" : text.slice(idx + 1).trim();
 }
 
-function isFinished(game) {
-  return game.solved || game.giveup || game.guesses.length >= MAX_GUESSES;
+function pickRandomChampion() {
+  return champions[Math.floor(Math.random() * champions.length)];
 }
 
-/**
- * Recompute comparison rows for each stored guess against the current target.
- * Guesses that no longer resolve (e.g. champion removed from loldle.net) are
- * dropped silently — an edge case for stale rounds spanning a data refresh.
- */
+function findByName(name) {
+  return champions.find((c) => c.championName === name);
+}
+
+/** Recompute comparison rows for each stored guess against the current target. */
 function rehydrateGuesses(game) {
-  const target = champions.find((c) => c.championName === game.target);
+  const target = findByName(game.target);
   if (!target) return [];
   const rows = [];
   for (const name of game.guesses) {
-    const guess = champions.find((c) => c.championName === name);
+    const guess = findByName(name);
     if (!guess) continue;
     rows.push({ champion: name, results: compareChampions(guess, target) });
   }
   return rows;
 }
 
-/**
- * Load existing round, or create + persist a fresh random one.
- * A previously-finished round is discarded and replaced with a fresh one so
- * the game auto-continues without needing a manual "new round" command.
- * @param {import("../../db/kv-store-interface.js").KVStore} db
- * @param {number} subject
- */
-async function getOrInitGame(db, subject) {
-  const existing = await loadGame(db, subject);
-  if (existing && !isFinished(existing)) return existing;
-  return startFreshGame(db, subject);
-}
-
 async function startFreshGame(db, subject) {
-  const target = pickRandom(champions);
-  const fresh = {
-    target: target.championName,
-    guesses: [],
-    solved: false,
-    giveup: false,
-    startedAt: Date.now(),
-  };
+  const target = pickRandomChampion();
+  const fresh = { target: target.championName, guesses: [], startedAt: Date.now() };
   await saveGame(db, subject, fresh);
   return fresh;
 }
 
-/**
- * Send a random sticker from the pool, swallowing errors so a rotten file_id
- * (Telegram rejection) never blocks the follow-up text reply.
- *
- * @param {import("grammy").Context} ctx
- * @param {readonly string[]} pool
- */
+async function getOrInitGame(db, subject) {
+  const existing = await loadGame(db, subject);
+  if (existing && existing.guesses.length < MAX_GUESSES) return existing;
+  return startFreshGame(db, subject);
+}
+
+/** Send a sticker, swallowing errors so a bad file_id never blocks the reply. */
 async function trySendSticker(ctx, pool) {
   const sticker = pickSticker(pool);
   if (!sticker) return;
   try {
     await ctx.replyWithSticker(sticker);
   } catch {
-    // Ignore — the outcome text reply is what matters. An invalid file_id
-    // or transient Telegram error must not derail the game flow.
+    // Invalid file_id or transient Telegram error — the outcome text is what matters.
   }
 }
 
@@ -143,7 +110,7 @@ export async function handleLoldle(ctx, db) {
     );
   }
 
-  const target = champions.find((c) => c.championName === game.target);
+  const target = findByName(game.target);
   // champions.json can be refreshed between rounds — an active target may disappear.
   if (!target) {
     await startFreshGame(db, subject);
@@ -151,14 +118,13 @@ export async function handleLoldle(ctx, db) {
       "Champion data was updated since this round started. Starting a fresh round — try again.",
     );
   }
+
   const results = compareChampions(guess, target);
   game.guesses.push(guess.championName);
   const won = guess.championName === target.championName;
-  if (won) game.solved = true;
-  await saveGame(db, subject, game);
 
   const reply = renderGuess(guess.championName, results);
-  const elapsed = formatDuration(Date.now() - (game.startedAt ?? Date.now()));
+  const elapsed = formatDuration(Date.now() - game.startedAt);
   const champ = escapeHtml(target.championName);
 
   if (won) {
@@ -171,6 +137,7 @@ export async function handleLoldle(ctx, db) {
       { parse_mode: "HTML" },
     );
   }
+
   if (game.guesses.length >= MAX_GUESSES) {
     await recordResult(db, subject, false);
     await startFreshGame(db, subject);
@@ -179,6 +146,8 @@ export async function handleLoldle(ctx, db) {
       parse_mode: "HTML",
     });
   }
+
+  await saveGame(db, subject, game);
   return ctx.reply(`${reply}\n\nGuess ${game.guesses.length}/${MAX_GUESSES}.`, {
     parse_mode: "HTML",
   });
@@ -192,11 +161,8 @@ export async function handleGiveup(ctx, db) {
   const subject = getSubject(ctx);
   if (subject == null) return ctx.reply("Cannot identify chat.");
   const game = await getOrInitGame(db, subject);
-  // getOrInitGame guarantees the returned game is unfinished, so mark + record.
-  game.giveup = true;
-  await saveGame(db, subject, game);
   await recordResult(db, subject, false);
-  const target = champions.find((c) => c.championName === game.target);
+  const target = findByName(game.target);
   await startFreshGame(db, subject);
   await trySendSticker(ctx, GIVEUP_STICKERS);
   const answer = target ? escapeHtml(target.championName) : escapeHtml(game.target);

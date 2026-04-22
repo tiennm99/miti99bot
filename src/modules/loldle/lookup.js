@@ -1,7 +1,6 @@
 /**
- * @file Champion name lookup — normalizes user input to a champion record.
- * Matches championName case/space/punct-insensitive. Falls back to prefix
- * match when unique.
+ * @file Champion name lookup — resolve user input to a champion record.
+ * Match is case/space/punctuation-insensitive with a unique-prefix fallback.
  */
 
 function normalize(s) {
