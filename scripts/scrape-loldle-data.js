@@ -1,19 +1,13 @@
 #!/usr/bin/env node
 /**
- * @file scrape-loldle-data — rebuilds src/modules/loldle/champions.json from
- * loldle.net's JS bundle, the canonical source for the classic-mode axes:
- * gender, species, resource, attackType, region, lane, releaseDate.
+ * @file Rebuilds src/modules/loldle/champions.json from loldle.net's JS
+ * bundle. The bundle embeds the full champion array in plaintext — one
+ * record per champion with fields: _id, championId, championName, gender,
+ * positions, species, resource, range_type, regions, release_date.
  *
- * loldle.net embeds the full champion array in plaintext inside its JS bundle
- * at `<script src="js/index.<hash>.js">`, one record per champion with the
- * exact shape the bot needs. No CryptoJS decoding, no ddragon merge.
+ * The bot imports the resulting JSON directly via `with { type: "json" }`.
  *
- * Writes src/modules/loldle/champions.json. The bot imports this JSON
- * directly via `with { type: "json" }` (Node 24 + wrangler 4.x).
- *
- * Usage:
- *   node scripts/scrape-loldle-data.js
- *
+ * Usage:   node scripts/scrape-loldle-data.js
  * Schedule: weekly via .github/workflows/scrape-loldle-data.yml
  */
 

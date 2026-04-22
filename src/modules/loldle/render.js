@@ -1,13 +1,8 @@
 /**
- * @file Render comparison results as a monospace-aligned table.
+ * @file Render comparison results as a monospace-aligned Telegram HTML table.
  *
- * Output uses Telegram HTML parse mode wrapped in <pre> so columns line up
- * in Telegram's fixed-width font. The label column auto-widths based on the
- * longest label in the block, so new attributes drop in without re-tuning.
- *
- * Markers:
- *   🎯 the guessed champion (name row header)
- *   ✅ correct · 🟨 partial · ❌ wrong · ⬆️ / ⬇️ direction hint for year
+ * Markers: 🎯 guessed champion · ✅ correct · 🟨 partial · ❌ wrong
+ *          ⬆️ / ⬇️ year direction hint.
  */
 
 import { escapeHtml } from "../../util/escape-html.js";
