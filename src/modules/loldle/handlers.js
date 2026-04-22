@@ -71,7 +71,7 @@ async function getOrInitGame(db, subject) {
 async function startFreshGame(db, subject) {
   const target = pickRandom(champions);
   const fresh = {
-    target: target.id,
+    target: target.championName,
     guesses: [],
     solved: false,
     giveup: false,
@@ -118,14 +118,14 @@ export async function handleLoldle(ctx, db) {
   const guess = findChampion(champions, arg);
   if (!guess) return ctx.reply(`Champion not found: "${arg}".`);
 
-  if (game.guesses.some((g) => g.champion === guess.name)) {
+  if (game.guesses.some((g) => g.champion === guess.championName)) {
     return ctx.reply(
-      `🔁 <b>${escapeHtml(guess.name)}</b> was already guessed this round — try another champion.`,
+      `🔁 <b>${escapeHtml(guess.championName)}</b> was already guessed this round — try another champion.`,
       { parse_mode: "HTML" },
     );
   }
 
-  const target = champions.find((c) => c.id === game.target);
+  const target = champions.find((c) => c.championName === game.target);
   // champions.json can be refreshed between rounds — an active target may disappear.
   if (!target) {
     await startFreshGame(db, subject);
@@ -134,14 +134,14 @@ export async function handleLoldle(ctx, db) {
     );
   }
   const results = compareChampions(guess, target);
-  game.guesses.push({ champion: guess.name, results });
-  const won = guess.id === target.id;
+  game.guesses.push({ champion: guess.championName, results });
+  const won = guess.championName === target.championName;
   if (won) game.solved = true;
   await saveGame(db, subject, game);
 
-  const reply = renderGuess(guess.name, results);
+  const reply = renderGuess(guess.championName, results);
   const elapsed = formatDuration(Date.now() - (game.startedAt ?? Date.now()));
-  const champ = escapeHtml(target.name);
+  const champ = escapeHtml(target.championName);
 
   if (won) {
     const s = await recordResult(db, subject, true);
@@ -178,10 +178,10 @@ export async function handleGiveup(ctx, db) {
   game.giveup = true;
   await saveGame(db, subject, game);
   await recordResult(db, subject, false);
-  const target = champions.find((c) => c.id === game.target);
+  const target = champions.find((c) => c.championName === game.target);
   await startFreshGame(db, subject);
   await trySendSticker(ctx, GIVEUP_STICKERS);
-  const answer = target ? escapeHtml(target.name) : escapeHtml(game.target);
+  const answer = target ? escapeHtml(target.championName) : escapeHtml(game.target);
   return ctx.reply(`🏳️ Answer was ${answer}.\n${NEW_ROUND_HINT}`, { parse_mode: "HTML" });
 }
 

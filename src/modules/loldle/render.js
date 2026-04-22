@@ -28,7 +28,7 @@ function buildRows(championName, results) {
   for (const r of results) {
     const marker = MARKER[r.result] ?? MARKER.wrong;
     let value = String(r.guessValue ?? "");
-    if (r.key === "releaseDate" && r.result !== "correct" && r.direction) {
+    if (r.key === "release_date" && r.result !== "correct" && r.direction) {
       const arrow = ARROW[r.direction];
       if (arrow) value = `${value} ${arrow}`;
     }

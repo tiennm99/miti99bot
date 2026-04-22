@@ -22,7 +22,8 @@ immediately rolls into a fresh round — no manual "new round" command needed.
 ## Architecture
 
 - `compare.js` — pure attribute comparison across 7 classic-mode attributes
-  (gender, species, range, resource, region, lane, year). Returns `correct`,
+  matching loldle.net's raw schema (`gender`, `species`, `range_type`,
+  `resource`, `regions`, `positions`, `release_date`). Returns `correct`,
   `partial`, or `wrong` per attribute, plus a `direction` hint for year.
 - `lookup.js` — normalizes user input and resolves it to a champion record.
 - `daily.js` — `pickRandom` / `pickDaily` (djb2-hashed date seed for future
