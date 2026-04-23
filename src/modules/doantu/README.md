@@ -27,7 +27,9 @@ ignored (no cost, no stat inflation).
 Target words + similarity scores come from our self-hosted **phow2sim**
 instance (default: `https://phow2sim.sg.miti99.com`). Wraps two endpoints:
 
-- `GET /random` — pick a secret Vietnamese word at round start.
+- `GET /random` — pick a secret Vietnamese word at round start. Targets
+  are filtered to the top-frequency band (`min_rank=100`, `max_rank=1000`)
+  so rounds stay guessable for casual players.
 - `GET /similarity?a=…&b=…` — cosine similarity + canonical forms +
   `in_vocab_a` / `in_vocab_b` flags.
 
