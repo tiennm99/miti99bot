@@ -19,7 +19,7 @@
  */
 
 import { buildRegistry, resetRegistry } from "../src/modules/registry.js";
-import { stubKv } from "./stub-kv.js";
+import { stubAi, stubKv } from "./stub-kv.js";
 
 const TELEGRAM_API = "https://api.telegram.org";
 
@@ -72,7 +72,7 @@ async function main() {
   // Build the registry against the same code the Worker uses. Stub KV
   // satisfies the binding so createStore() does not throw.
   resetRegistry();
-  const reg = await buildRegistry({ MODULES: modules, KV: stubKv });
+  const reg = await buildRegistry({ MODULES: modules, KV: stubKv, AI: stubAi });
 
   const commands = [...reg.publicCommands.values()].map(({ cmd }) => ({
     command: cmd.name,
