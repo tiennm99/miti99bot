@@ -13,6 +13,7 @@ native `/` autocomplete menu.
 | Command | Visibility | Description |
 |---------|-----------|-------------|
 | `/doantu` | public | Show current board or submit a word guess |
+| `/doantu_hint` | public | Reveal 3 related words (not the answer) as a nudge |
 | `/doantu_giveup` | public | Reveal the answer and end the round (next `/doantu` starts a fresh one) |
 | `/doantu_stats` | public | Show per-subject stats |
 
@@ -32,6 +33,10 @@ instance (default: `https://phow2sim.sg.miti99.com`). Wraps two endpoints:
   so rounds stay guessable for casual players.
 - `GET /similarity?a=…&b=…` — cosine similarity + canonical forms +
   `in_vocab_a` / `in_vocab_b` flags.
+- `GET /neighbors?word=…&topn=100` — top-N nearest words (used by
+  `/doantu_hint`). Results are filtered locally to skip capitalized
+  foreign place names that leak in from the corpus, then 3 are sampled
+  from the "warm but not hot" tail (skip the top 20%).
 
 Override the base URL for local dev via `PHOW2SIM_API_URL`.
 

@@ -142,6 +142,74 @@ async function submitGuess(ctx, { db, client }, subject, game, arg) {
   return ctx.reply(body, { parse_mode: "HTML" });
 }
 
+// Corpus leaks foreign place names (mixed-case Latin — "al-Qantara",
+// "Nam_Afrin") into neighbors. Keep only lowercase tokens that look
+// Vietnamese: either a diacritic (non-ASCII) or a compound marker (`_`).
+const PLAYABLE_WORD = /^[\p{Ll}\p{M}_]+$/u;
+
+/** @param {string} word — true if it has a diacritic or underscore compound. */
+function looksVietnamese(word) {
+  if (word.includes("_")) return true;
+  for (let i = 0; i < word.length; i++) {
+    if (word.charCodeAt(i) > 0x7f) return true;
+  }
+  return false;
+}
+
+function pickHintWords(target, neighbors, alreadyGuessed, count) {
+  const guessedSet = new Set(alreadyGuessed);
+  const playable = neighbors.filter(
+    (n) =>
+      PLAYABLE_WORD.test(n.word) &&
+      looksVietnamese(n.word) &&
+      !n.word.includes(target) &&
+      !target.includes(n.word) &&
+      !guessedSet.has(n.word),
+  );
+  // "Warm but not hot" — skip the top 20% so a hint doesn't hand the answer away.
+  const skip = Math.min(Math.floor(playable.length * 0.2), 20);
+  const pool = playable.slice(skip);
+  if (pool.length === 0) return [];
+  // Fisher-Yates-ish sample without replacement.
+  const picks = [];
+  const used = new Set();
+  const want = Math.min(count, pool.length);
+  while (picks.length < want) {
+    const i = Math.floor(Math.random() * pool.length);
+    if (used.has(i)) continue;
+    used.add(i);
+    picks.push(pool[i]);
+  }
+  return picks;
+}
+
+export async function handleHint(ctx, { db, client }) {
+  const subject = getSubject(ctx);
+  if (subject == null) return ctx.reply("Cannot identify chat.");
+  const game = await loadGame(db, subject);
+  if (!game || game.solved) {
+    return ctx.reply("No active round. Send <code>/doantu</code> to start one.", {
+      parse_mode: "HTML",
+    });
+  }
+  let res;
+  try {
+    res = await client.neighbors(game.target, 100);
+  } catch (err) {
+    logFail("neighbors", err);
+    return ctx.reply(UPSTREAM_FAIL);
+  }
+  const alreadyGuessed = game.guesses.map((g) => g.canonical);
+  const picks = pickHintWords(game.target, res?.neighbors ?? [], alreadyGuessed, 3);
+  if (picks.length === 0) {
+    return ctx.reply("🤷 No usable hints available for this round.");
+  }
+  const list = picks.map((p) => `• <code>${escapeHtml(p.word)}</code>`).join("\n");
+  return ctx.reply(`💡 <b>Hints</b> — related words (not the answer):\n${list}`, {
+    parse_mode: "HTML",
+  });
+}
+
 export async function handleGiveup(ctx, { db }) {
   const subject = getSubject(ctx);
   if (subject == null) return ctx.reply("Cannot identify chat.");

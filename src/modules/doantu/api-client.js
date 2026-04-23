@@ -89,5 +89,17 @@ export function createClient(apiBase, { timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
     similarity(a, b) {
       return fetchJson(buildUrl(apiBase, "/similarity", { a, b }), timeoutMs);
     },
+    /**
+     * Top-N nearest neighbors by cosine similarity.
+     * @param {string} word
+     * @param {number} [topn]
+     * @returns {Promise<{
+     *   word: string, canonical: string|null, in_vocab: boolean,
+     *   neighbors: { word: string, similarity: number }[]
+     * }>}
+     */
+    neighbors(word, topn = 100) {
+      return fetchJson(buildUrl(apiBase, "/neighbors", { word, topn }), timeoutMs);
+    },
   };
 }
