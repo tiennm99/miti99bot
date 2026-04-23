@@ -7,7 +7,7 @@
  */
 
 import { createClient } from "./api-client.js";
-import { handleDoantu, handleGiveup, handleStats } from "./handlers.js";
+import { handleDoantu, handleGiveup, handleHint, handleStats } from "./handlers.js";
 
 const DEFAULT_API_URL = "https://phow2sim.sg.miti99.com";
 
@@ -30,6 +30,12 @@ const doantuModule = {
       visibility: "public",
       description: "Đoán từ — Vietnamese semantic word guessing (unlimited tries)",
       handler: (ctx) => handleDoantu(ctx, { db, client }),
+    },
+    {
+      name: "doantu_hint",
+      visibility: "public",
+      description: "Reveal 3 related words (not the answer) to nudge your guessing",
+      handler: (ctx) => handleHint(ctx, { db, client }),
     },
     {
       name: "doantu_giveup",
