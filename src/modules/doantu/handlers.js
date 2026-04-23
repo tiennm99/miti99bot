@@ -19,6 +19,9 @@ import { renderBoard, renderGuess } from "./render.js";
 import { clearGame, loadGame, loadStats, recordResult, saveGame } from "./state.js";
 
 const UPSTREAM_FAIL = "⚠️ Upstream hiccup — try again in a few seconds.";
+// Keep targets inside the top-frequency band so the game stays guessable.
+// phow2sim ranks by corpus frequency; lower rank = more common.
+const RANDOM_FILTERS = { min_rank: 100, max_rank: 1000 };
 
 function getSubject(ctx) {
   const type = ctx.chat?.type;
@@ -43,7 +46,7 @@ function logFail(stage, err) {
 }
 
 async function startFreshGame(db, client, subject) {
-  const picked = await client.randomWord();
+  const picked = await client.randomWord(RANDOM_FILTERS);
   const target = String(picked?.word ?? "").toLowerCase();
   if (!target) throw new UpstreamError("empty target from randomWord");
   const fresh = { target, startedAt: null, solved: false, guesses: [] };
