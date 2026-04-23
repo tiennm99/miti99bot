@@ -43,10 +43,11 @@ Override the base URL for local dev via `PHOW2SIM_API_URL`.
 - `state.js` — KV persistence for game + stats. Same shape as semantle.
 - `lookup.js` — guess normalization + shape validation. Accepts Unicode
   letters + combining marks + single internal spaces.
-- `format.js` — warmth-percent and emoji-bucket formatters. Calibration
-  constants differ from semantle/format.js: phow2sim (word2vec) has a
-  wider cosine distribution than bge-m3's narrow transformer cone, so
-  `FLOOR=0.1`, `CENTER=0.4`, `SCALE=6` here vs 0.4/0.6/8 there.
+- `format.js` — warmth-percent + emoji-bucket formatters. Linear
+  `round(raw * 100)` — phow2sim (word2vec) cosines already span a
+  game-friendly range (unrelated ~0.0, synonyms 0.6+), so no sigmoid
+  remap. Contrast with semantle/format.js which needs a sigmoid to
+  spread bge-m3's narrow transformer cone.
 - `render.js` — Telegram HTML `<pre>` monospace board with a 🇻🇳 header.
 - `handlers.js` — subject resolution + the three command entry points.
   Fast-path dedup (exact text OR prior canonical) skips wasted API calls
