@@ -5,8 +5,7 @@
  *   private chat           → user id (per-user game)
  *   group/supergroup chat  → chat id (shared game)
  *
- * Commands (all protected — listed in /help but not pushed to the Telegram
- * native / menu):
+ * Commands:
  *   /doantu              → show the board (or lazy-start a round)
  *   /doantu <word>       → submit a guess
  *   /doantu_giveup       → reveal target (next /doantu auto-starts fresh)

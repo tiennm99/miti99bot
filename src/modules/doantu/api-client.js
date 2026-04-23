@@ -1,29 +1,16 @@
 /**
- * @file Cloudflare Workers AI client for the doantu module (Vietnamese semantle).
+ * @file phow2sim HTTP API client for the doantu module (Vietnamese semantle).
  *
- * Mirrors semantle/api-client.js but uses `@cf/baai/bge-m3` — BAAI's
- * multilingual embedding model — because the English-only BGE variants
- * can't produce meaningful Vietnamese vectors (their tokenizer is
- * English-centric and Vietnamese diacritics get shredded into noisy
- * byte-level subwords).
+ * Wraps two endpoints:
+ *   GET /random      → pick a secret Vietnamese word at round start
+ *   GET /similarity  → cosine similarity between target and guess per turn
  *
- * Vocabulary: the curated `words-data.js` list (duyet/vietnamese-wordlist
- * Viet22K) doubles as the in/out-of-vocabulary set. Lookups are O(1) via
- * Set.has(), so OOV detection needs no extra round-trip.
- *
- * The returned `similarity(a, b)` shape matches the semantle sibling so
- * handlers/render/state can be reused unchanged.
+ * Stateless. No caching layer — phow2sim is cheap enough, and caching per-pair
+ * scores in KV would pollute the namespace without measurable gain.
  */
 
-import { randomLine } from "./wordlist.js";
-import WORDS from "./words-data.js";
-
-// BGE-M3: multilingual (194 languages incl. Vietnamese), 1024 dimensions,
-// ~1,075 Neurons per M input tokens — cheaper than bge-small-en-v1.5.
-const DEFAULT_MODEL = "@cf/baai/bge-m3";
-
-// O(1) membership lookup for OOV detection. Built once per isolate.
-const VOCAB = new Set(WORDS);
+const DEFAULT_TIMEOUT_MS = 5000;
+const USER_AGENT = "miti99bot/doantu";
 
 export class UpstreamError extends Error {
   /** @param {string} message @param {{status?: number, body?: string, cause?: unknown}} [meta] */
@@ -36,70 +23,71 @@ export class UpstreamError extends Error {
   }
 }
 
-function cosineSimilarity(a, b) {
-  if (!a || !b || a.length !== b.length) return null;
-  let dot = 0;
-  let normA = 0;
-  let normB = 0;
-  for (let i = 0; i < a.length; i++) {
-    dot += a[i] * b[i];
-    normA += a[i] * a[i];
-    normB += b[i] * b[i];
+function buildUrl(base, path, params) {
+  const normalized = String(base).replace(/\/+$/, "");
+  const url = new URL(`${normalized}${path}`);
+  for (const [k, v] of Object.entries(params)) {
+    if (v === undefined || v === null) continue;
+    url.searchParams.set(k, String(v));
   }
-  const denom = Math.sqrt(normA) * Math.sqrt(normB);
-  return denom === 0 ? null : dot / denom;
+  return url.toString();
+}
+
+async function fetchJson(url, timeoutMs) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  let res;
+  try {
+    res = await fetch(url, {
+      headers: { "User-Agent": USER_AGENT, Accept: "application/json" },
+      signal: controller.signal,
+    });
+  } catch (err) {
+    clearTimeout(timer);
+    throw new UpstreamError("phow2sim fetch failed", { cause: err });
+  }
+  clearTimeout(timer);
+  const text = await res.text();
+  if (!res.ok) {
+    throw new UpstreamError(`phow2sim HTTP ${res.status}`, {
+      status: res.status,
+      body: text.slice(0, 500),
+    });
+  }
+  try {
+    return JSON.parse(text);
+  } catch (err) {
+    throw new UpstreamError("phow2sim non-JSON response", { cause: err });
+  }
 }
 
 /**
- * @param {{ run: (model: string, input: { text: string[] }) => Promise<{ data: number[][] }> }} ai
- *   — Workers AI binding (`env.AI`). Tests pass a fake with the same `.run()` shape.
- * @param {{ model?: string }} [opts]
+ * @param {string} apiBase — e.g. "https://phow2sim.sg.miti99.com"
+ * @param {{ timeoutMs?: number }} [opts]
  */
-export function createClient(ai, { model = DEFAULT_MODEL } = {}) {
-  if (!ai || typeof ai.run !== "function") {
-    throw new TypeError("createClient: ai binding with .run(model, input) is required");
-  }
-
-  async function embedPair(a, b) {
-    let resp;
-    try {
-      resp = await ai.run(model, { text: [a, b] });
-    } catch (err) {
-      throw new UpstreamError("workers-ai embedding failed", { cause: err });
-    }
-    const data = resp?.data;
-    if (!Array.isArray(data) || data.length < 2) {
-      throw new UpstreamError("workers-ai returned malformed embedding payload");
-    }
-    return [data[0], data[1]];
-  }
-
+export function createClient(apiBase, { timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
   return {
     /**
-     * Pick a target word from the local Vietnamese pool. The pool IS the
-     * vocabulary, so every pick is trivially verified.
-     * @returns {Promise<{ word: string, verified: boolean }>}
+     * Pick a random vocab word matching filters.
+     * @param {Record<string, string|number|boolean>} [filters]
+     * @returns {Promise<{ word: string, rank?: number }>}
      */
-    async randomWord() {
-      return { word: randomLine(), verified: true };
+    randomWord(filters = {}) {
+      return fetchJson(buildUrl(apiBase, "/random", filters), timeoutMs);
     },
-
     /**
-     * Cosine similarity between `a` (target) and `b` (guess). Uses the local
-     * Vietnamese wordlist as vocabulary — unknown words return
-     * `in_vocab_b: false` with `similarity: null` and skip inference.
-     *
+     * Cosine similarity between two words.
      * @param {string} a
      * @param {string} b
+     * @returns {Promise<{
+     *   a: string, b: string,
+     *   canonical_a: string|null, canonical_b: string|null,
+     *   in_vocab_a: boolean, in_vocab_b: boolean,
+     *   similarity: number|null
+     * }>}
      */
-    async similarity(a, b) {
-      const base = { a, b, canonical_a: a, canonical_b: b, in_vocab_a: true };
-      if (!VOCAB.has(b)) {
-        return { ...base, in_vocab_b: false, similarity: null };
-      }
-      const [vecA, vecB] = await embedPair(a, b);
-      const sim = cosineSimilarity(vecA, vecB);
-      return { ...base, in_vocab_b: true, similarity: sim };
+    similarity(a, b) {
+      return fetchJson(buildUrl(apiBase, "/similarity", { a, b }), timeoutMs);
     },
   };
 }
