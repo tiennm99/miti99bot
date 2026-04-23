@@ -94,7 +94,19 @@ async function submitGuess(ctx, { db, client }, subject, game, arg) {
     logFail("similarity", err);
     return ctx.reply(UPSTREAM_FAIL);
   }
-  if (!res?.in_vocab_b || res.similarity == null) {
+  // Target OOV means the round was seeded before phow2sim owned the vocab
+  // (pre-refactor Worker, or an old rank-40k+ pick). Reset the round instead
+  // of letting the player type forever against a ghost target.
+  if (!res?.in_vocab_a) {
+    logFail("target_oov", new UpstreamError(`target ${game.target} not in phow2sim vocab`));
+    await clearGame(db, subject);
+    return ctx.reply(
+      "⚠️ This round's target is no longer valid (upstream vocabulary changed). " +
+        "Send <code>/doantu</code> again to start a fresh round.",
+      { parse_mode: "HTML" },
+    );
+  }
+  if (!res.in_vocab_b || res.similarity == null) {
     return ctx.reply(`🤔 <code>${escapeHtml(guess)}</code> isn't in the vocabulary.`, {
       parse_mode: "HTML",
     });
