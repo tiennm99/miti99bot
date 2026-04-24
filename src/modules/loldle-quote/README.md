@@ -30,6 +30,10 @@ Dragon's champion endpoint. Each entry is:
 
 The champion's own name is redacted with `___` so it isn't a giveaway.
 
+Credits:
+- Game concept inspired by [loldle.net](https://loldle.net/)'s quote mode.
+- Lore text © Riot Games, served from their public Data Dragon CDN.
+
 ## Design notes
 
 - **No audio hint** — serving MP3s from Workers would eat the bundle budget,

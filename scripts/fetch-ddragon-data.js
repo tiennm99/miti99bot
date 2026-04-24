@@ -218,6 +218,174 @@ async function buildQuotes() {
   return out;
 }
 
+// ───── shared DDragon per-champion cache ─────
+// Ability and splash builders both need per-champion details. One fetch
+// cycle populates a shared cache to avoid 340 redundant HTTP requests.
+
+async function mapWithConcurrency(items, limit, fn) {
+  const out = new Array(items.length);
+  let next = 0;
+  const workers = Array.from({ length: limit }, async () => {
+    while (true) {
+      const i = next++;
+      if (i >= items.length) return;
+      out[i] = await fn(items[i], i);
+    }
+  });
+  await Promise.all(workers);
+  return out;
+}
+
+async function fetchDdragonDetails() {
+  const versions = await fetchJson("https://ddragon.leagueoflegends.com/api/versions.json");
+  const v = versions[0];
+  console.log(`  DDragon version: ${v}`);
+  const summary = await fetchJson(
+    `https://ddragon.leagueoflegends.com/cdn/${v}/data/en_US/champion.json`,
+  );
+  const summaryByKey = summary.data;
+  const normMap = new Map();
+  for (const k of Object.keys(summaryByKey)) {
+    normMap.set(k.toLowerCase().replace(/[^a-z0-9]/g, ""), k);
+  }
+  function resolveKey(championName) {
+    const attempted = ddragonKey(championName);
+    if (summaryByKey[attempted]) return attempted;
+    const norm = attempted.toLowerCase().replace(/[^a-z0-9]/g, "");
+    return normMap.get(norm) ?? null;
+  }
+  // Fetch per-champion in parallel with a polite concurrency cap. ~172
+  // requests to a CDN — finishes in ~15-25s.
+  const tasks = championsData.map((c) => ({ champ: c, key: resolveKey(c.championName) }));
+  console.log(`  fetching ${tasks.length} champion details (concurrency 10)…`);
+  const details = await mapWithConcurrency(tasks, 10, async ({ champ, key }) => {
+    if (!key) return { champ, key: null, data: null };
+    const full = await fetchJson(
+      `https://ddragon.leagueoflegends.com/cdn/${v}/data/en_US/champion/${key}.json`,
+    );
+    return { champ, key, data: full.data[key] };
+  });
+  return { version: v, details };
+}
+
+// ───── loldle.net splash-pool scrape ─────
+
+async function scrapeLoldleSplashPool() {
+  const pageRes = await fetch("https://loldle.net/splash");
+  const page = await pageRes.text();
+  const bundleMatch = page.match(/js\/index\.[^"]+\.js/);
+  if (!bundleMatch) throw new Error("loldle.net: could not find index.js bundle");
+  const bundleRes = await fetch(`https://loldle.net/${bundleMatch[0]}`);
+  const bundle = await bundleRes.text();
+  // `Ad=[{championName:"…",splashes:[{name:"…",translations:[…]}…]}…]` —
+  // the bundle's splash pool used by loldle.net's guess validator. We pull
+  // names only; translations and champion order can be ignored.
+  const championStart = bundle.indexOf('Ad=[{championName:"Aatrox"');
+  if (championStart < 0) {
+    throw new Error("loldle.net: splash pool variable `Ad` not found — bundle format drifted");
+  }
+  // Each champion block has nested translations arrays, so a naïve
+  // non-greedy `[…]` match terminates too early. Instead, slice the
+  // splash-pool region and split on `championName:"` — each segment is
+  // one champion's block; skin names inside are `{name:"…",translations:`.
+  const endMarker = bundle.indexOf("];", championStart);
+  if (endMarker < 0) throw new Error("loldle.net: could not find end of splash pool");
+  const region = bundle.slice(championStart + 3, endMarker); // skip `Ad=` prefix
+  const championRx = /championName:"([^"]+)"/g;
+  const pool = new Map();
+  const championMatches = [...region.matchAll(championRx)];
+  for (let i = 0; i < championMatches.length; i++) {
+    const name = championMatches[i][1];
+    const start = championMatches[i].index;
+    const end = i + 1 < championMatches.length ? championMatches[i + 1].index : region.length;
+    const slice = region.slice(start, end);
+    const skinNames = [...slice.matchAll(/\{name:"([^"]+)",translations:/g)].map((x) => x[1]);
+    pool.set(name, skinNames);
+  }
+  if (pool.size === 0) {
+    throw new Error("loldle.net: parsed zero splash entries — regex drifted");
+  }
+  console.log(`  scraped ${pool.size} champions from loldle.net splash pool`);
+  return pool;
+}
+
+// ───── abilities.json builder ─────
+
+function abilityIconUrl(version, imageFull, isPassive) {
+  const segment = isPassive ? "passive" : "spell";
+  return `https://ddragon.leagueoflegends.com/cdn/${version}/img/${segment}/${imageFull}`;
+}
+
+function buildAbilities(version, details) {
+  const out = [];
+  const missing = [];
+  const SLOTS = ["Q", "W", "E", "R"];
+  for (const { champ, key, data } of details) {
+    if (!data) {
+      missing.push(champ.championName);
+      continue;
+    }
+    const abilities = [
+      {
+        slot: "P",
+        name: data.passive.name,
+        icon: abilityIconUrl(version, data.passive.image.full, true),
+      },
+    ];
+    data.spells.slice(0, 4).forEach((s, i) => {
+      abilities.push({
+        slot: SLOTS[i],
+        name: s.name,
+        icon: abilityIconUrl(version, s.image.full, false),
+      });
+    });
+    out.push({ championName: champ.championName, key, abilities });
+  }
+  if (missing.length) console.warn(`  WARN: abilities missing for ${missing.join(", ")}`);
+  return out.sort((a, b) => a.championName.localeCompare(b.championName));
+}
+
+// ───── splashes.json builder ─────
+
+function splashUrl(championKey, skinNum) {
+  // DDragon splash URLs have NO version segment. Stable across patches.
+  return `https://ddragon.leagueoflegends.com/cdn/img/champion/splash/${championKey}_${skinNum}.jpg`;
+}
+
+function buildSplashes(details, loldlePool) {
+  const out = [];
+  const missing = [];
+  for (const { champ, key, data } of details) {
+    if (!data) {
+      missing.push(champ.championName);
+      continue;
+    }
+    // Loldle's pool defines WHICH skins are in play (names). DDragon gives
+    // URL num + "default" skin normalization. Normalize both to match.
+    const allowedNames = loldlePool.get(champ.championName);
+    const norm = (s) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+    const allowedSet = allowedNames ? new Set(allowedNames.map(norm)) : null;
+    const skins = [];
+    for (const s of data.skins) {
+      // DDragon labels base skin "default" — loldle.net calls it "Default".
+      const displayName = s.name === "default" ? "Default" : s.name;
+      if (allowedSet && !allowedSet.has(norm(displayName))) continue;
+      skins.push({
+        id: Number(s.num),
+        name: displayName,
+        url: splashUrl(key, s.num),
+      });
+    }
+    if (skins.length === 0) {
+      missing.push(`${champ.championName} (no skins matched pool)`);
+      continue;
+    }
+    out.push({ championName: champ.championName, skins });
+  }
+  if (missing.length) console.warn(`  WARN: splashes missing for ${missing.join(", ")}`);
+  return out.sort((a, b) => a.championName.localeCompare(b.championName));
+}
+
 // ───── main ─────
 
 const root = resolve(import.meta.dirname, "..");
@@ -237,3 +405,21 @@ const quotesPath = resolve(root, "src/modules/loldle-quote/quotes.json");
 mkdirSync(resolve(quotesPath, ".."), { recursive: true });
 writeFileSync(quotesPath, `${JSON.stringify(quotes, null, 4)}\n`);
 console.log(`wrote ${quotesPath} (${quotes.length} champions)`);
+
+console.log("fetching DDragon champion details (spells, passives, skins)…");
+const { version: ddragonVersion, details } = await fetchDdragonDetails();
+
+const abilities = buildAbilities(ddragonVersion, details);
+const abilitiesPath = resolve(root, "src/modules/loldle-ability/abilities.json");
+mkdirSync(resolve(abilitiesPath, ".."), { recursive: true });
+writeFileSync(abilitiesPath, `${JSON.stringify(abilities, null, 4)}\n`);
+console.log(`wrote ${abilitiesPath} (${abilities.length} champions)`);
+
+console.log("scraping loldle.net splash pool…");
+const loldleSplashPool = await scrapeLoldleSplashPool();
+
+const splashes = buildSplashes(details, loldleSplashPool);
+const splashesPath = resolve(root, "src/modules/loldle-splash/splashes.json");
+mkdirSync(resolve(splashesPath, ".."), { recursive: true });
+writeFileSync(splashesPath, `${JSON.stringify(splashes, null, 4)}\n`);
+console.log(`wrote ${splashesPath} (${splashes.length} champions)`);

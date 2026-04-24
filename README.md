@@ -68,6 +68,8 @@ src/
 │   ├── loldle/              # classic-mode LoL champion guessing (KV storage)
 │   ├── loldle-emoji/        # emoji-clue LoL champion guessing (KV storage)
 │   ├── loldle-quote/        # lore-blurb LoL champion guessing (KV storage)
+│   ├── loldle-ability/      # ability-icon LoL champion guessing (KV storage)
+│   ├── loldle-splash/       # splash-art LoL champion guessing (KV storage)
 │   └── misc/                # stub (KV storage)
 └── util/
     └── escape-html.js
@@ -197,6 +199,14 @@ TL;DR:
 | `command conflict: /foo ...` at deploy | Two modules register the same command name. Rename one. |
 | `npm run register` exits `missing env: X` | Add `X` to `.env.deploy`. |
 | `--env-file` flag not recognized | Node < 20.6. Upgrade Node. |
+
+## Credits
+
+The `loldle` module family (classic, emoji, quote, ability, splash) is
+inspired by [**loldle.net**](https://loldle.net/). Classic's champion
+metadata and splash mode's skin pool are scraped from their JS bundle;
+other modes derive or generate data from [Riot Data Dragon](https://ddragon.leagueoflegends.com/).
+League of Legends, champion art, and ability icons are © Riot Games.
 
 ## Further reading
 
