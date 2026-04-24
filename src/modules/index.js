@@ -17,4 +17,5 @@ export const moduleRegistry = {
   lolschedule: () => import("./lolschedule/index.js"),
   semantle: () => import("./semantle/index.js"),
   doantu: () => import("./doantu/index.js"),
+  twentyq: () => import("./twentyq/index.js"),
 };
