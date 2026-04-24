@@ -27,6 +27,9 @@ async function getWebhookHandler(env) {
   const bot = await getBot(env);
   cachedWebhookHandler = webhookCallback(bot, "cloudflare-mod", {
     secretToken: env.TELEGRAM_WEBHOOK_SECRET,
+    // Default is 10s — too short for LLM calls (Gemma 4 cold-start can exceed).
+    // Workers wall-clock limit is 30s; leave 5s headroom.
+    timeoutMilliseconds: 25000,
   });
   return cachedWebhookHandler;
 }
