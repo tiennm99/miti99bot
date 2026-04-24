@@ -1,6 +1,6 @@
 ---
 name: loldle-new-modes
-status: mvp-shipped
+status: completed
 created: 2026-04-24
 updated: 2026-04-24
 slug: loldle-new-modes
@@ -44,9 +44,9 @@ All `public`. Conflict-checked at registry load time.
 | 01 | [Shared scrape + lookup helpers](phase-01-shared-helpers.md) | **done** | — |
 | 02 | [Emoji module](phase-02-emoji-module.md) | **done** | 01 |
 | 03 | [Quote module (text-only)](phase-03-quote-module.md) | **done** | 01 |
-| 04 | [Ability module (Data Dragon)](phase-04-ability-module.md) | **deferred** | 01 |
-| 05 | [Splash module (Data Dragon)](phase-05-splash-module.md) | **deferred** | 01 |
-| 06 | [Tests + docs sync](phase-06-tests-docs.md) | **done** | 02,03 |
+| 04 | [Ability module (Data Dragon)](phase-04-ability-module.md) | **done** | 01 |
+| 05 | [Splash module (Data Dragon)](phase-05-splash-module.md) | **done** | 01 |
+| 06 | [Tests + docs sync](phase-06-tests-docs.md) | **done** | 02,03,04,05 |
 
 **Shipping plan (validated):**
 - **Now:** 01 → 02 + 03 in parallel → 06 (tests for emoji + quote only).
@@ -98,6 +98,23 @@ All `public`. Conflict-checked at registry load time.
 - Generator: `scripts/fetch-ddragon-data.js` (new). Handles both JSONs.
   `scrape-loldle-data.js` left untouched (classic only).
 - 35 new tests, 484 total passing. Lint clean.
+
+**Shipped 2026-04-24 (deferred phases — ability + splash).**
+- Phase 04/05 complete. Plan now fully shipped.
+- **Bundle re-probe:** loldle.net's bundle DOES ship the full splash pool
+  (var `Ad=[...]` — 172 champs × skin-name lists with translations).
+  Scraped it (regex-split on `championName:"…"` markers to handle the
+  nested translations arrays). Ability pool still not in bundle — pulled
+  from DDragon per-champion (172 parallel fetches, concurrency 10).
+- `fetch-ddragon-data.js` extended: now writes all four JSONs in one run
+  (emojis, quotes, abilities, splashes). Single DDragon per-champion
+  fetch cycle shared between abilities + splash skin IDs.
+- Splash pool mirrors loldle.net exactly (non-chroma skins, 1939 total
+  skins across 172 champions). URLs from Riot Data Dragon CDN (no
+  version segment — stable across patches).
+- Credits added to all four loldle-family READMEs + main README.
+- 19 more tests (503 total). Lint clean. register:dry shows 12 new
+  public commands across the 4 modes with no conflicts.
 
 ## Validation Log
 

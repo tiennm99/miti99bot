@@ -29,3 +29,8 @@ emoji mapping table. Re-runs are idempotent.
 emoji code points — emoji sequences live encrypted in a daily-rotating
 cache, not a full pool. Deriving from metadata gives us all 170+ champions
 deterministically with no brittle scrape.
+
+Credits:
+- Game concept inspired by [loldle.net](https://loldle.net/)'s emoji mode.
+- Emoji mappings are ours (not scraped from loldle.net); any similarity to
+  their per-champion sequences is coincidental.
