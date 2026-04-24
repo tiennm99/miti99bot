@@ -1,11 +1,11 @@
 /**
  * @file Twentyq module — reverse-Akinator yes/no guessing game.
  *
- * Bot picks a secret object from a hand-curated seed list (./seeds.js) and
- * gives an initial hint. Each user input is judged by Workers AI
- * (@cf/google/gemma-4-26b-a4b-it) via function calling — the model returns
- * { is_guess, answer, hint }. Round ends on a correct guess or /twentyq_giveup.
- * Unlimited turns. Per-subject state in KV (user id in DMs, chat id in groups).
+ * Bot picks a secret keyword from ./seeds.js. Workers AI
+ * (@cf/google/gemma-4-26b-a4b-it) generates {category, initialHint} at
+ * round start and emits a one-line JSON {is_guess, answer, hint} per turn.
+ * Round ends on a correct guess or /twentyq_giveup. Unlimited turns.
+ * Per-subject state in KV (user id in DMs, chat id in groups).
  *
  * `init` captures both the prefixed KV store AND the raw env so handlers can
  * reach env.AI per request without changing the dispatcher contract.

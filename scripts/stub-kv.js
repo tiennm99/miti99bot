@@ -7,7 +7,7 @@
  * These stubs satisfy the shape without doing any real IO. All init hooks
  * are assumed read-only (or tolerant of missing state) at registration time.
  * If a future module writes inside init(), update the matching stub to
- * swallow writes or gate the write on a `process.env.REGISTER_DRYRUN` flag.
+ * swallow writes safely.
  */
 
 /** @type {KVNamespace} */

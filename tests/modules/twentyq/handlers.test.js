@@ -137,6 +137,7 @@ describe("twentyq/handlers", () => {
       mockJudgement(ai, { is_guess: false, answer: "yes", hint: "yes hint" });
       const ctx = makeCtx(1, "private", "/twentyq is it big?");
       await handleTwentyq(ctx, { db, env });
+      expect(ai.run).toHaveBeenCalledTimes(2); // roundstart + judge
       expect(ctx.reply).toHaveBeenCalledTimes(2); // intro + turn
       expect(ctx.replies[0].text).toMatch(/I'm thinking/);
       expect(ctx.replies[1].text).toMatch(/Yes/);
@@ -164,6 +165,7 @@ describe("twentyq/handlers", () => {
       const ctx = makeCtx(99, "group", "/twentyq is it big?");
       ctx.chat.id = 12345;
       await handleTwentyq(ctx, { db, env });
+      expect(ai.run).toHaveBeenCalledTimes(2); // roundstart + judge
       // Game saved under chat id (12345), not user id (99)
       expect(await loadGame(db, 12345)).not.toBeNull();
       expect(await loadGame(db, 99)).toBeNull();
@@ -190,11 +192,9 @@ describe("twentyq/handlers", () => {
   });
 
   describe("handleStats", () => {
-    it("renders stats summary", async () => {
-      await saveGame(db, 1, sampleGame());
+    it("renders empty-stats message when no rounds finished", async () => {
       const ctx = makeCtx(1);
       await handleStats(ctx, { db });
-      // No games played yet -> "no twentyq games"
       expect(ctx.replies[0].text).toMatch(/no.*games/i);
     });
   });

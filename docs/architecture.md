@@ -17,28 +17,38 @@ For authoring a new plugin module, see [`adding-a-module.md`](./adding-a-module.
 
 ```
 src/
-├── index.js                 ── fetch router: POST /webhook + GET / health
+├── index.js                 ── fetch + scheduled handlers
 ├── bot.js                   ── memoized grammY Bot factory, lazy dispatcher install
 ├── db/
-│   ├── kv-store-interface.js   ── JSDoc typedefs only — the contract
+│   ├── kv-store-interface.js   ── KVStore contract (JSDoc)
 │   ├── cf-kv-store.js          ── Cloudflare KV adapter
-│   └── create-store.js         ── per-module prefixing factory
+│   ├── create-store.js         ── KV per-module prefixing factory
+│   ├── sql-store-interface.js  ── SqlStore contract (JSDoc)
+│   ├── cf-sql-store.js         ── Cloudflare D1 adapter
+│   └── create-sql-store.js     ── D1 per-module prefixing factory
 ├── modules/
 │   ├── index.js             ── static import map (add new modules here)
 │   ├── registry.js          ── loader + builder + conflict detection + memoization
 │   ├── dispatcher.js        ── bot.command() for every visibility
-│   ├── validate-command.js  ── shared validators
-│   ├── util/                ── fully implemented: /info + /help
-│   ├── trading/             ── paper trading: VN stocks (dynamic symbol resolution)
-│   ├── wordle/              ── 5-letter guessing game (KV storage)
-│   ├── loldle/              ── classic-mode LoL champion guesser (KV storage)
-│   └── misc/                ── stub that exercises the DB (ping/mstats)
+│   ├── cron-dispatcher.js   ── routes scheduled events to matching module crons
+│   ├── validate-command.js  ── command contract validator
+│   ├── validate-cron.js     ── cron contract validator
+│   ├── util/                ── /info + /help
+│   ├── misc/                ── stub: /ping + /mstats
+│   ├── trading/             ── paper trading: VN stocks (D1 + KV, daily cron)
+│   ├── wordle/              ── 5-letter guessing game (KV)
+│   ├── loldle/              ── classic-mode LoL champion guesser (KV)
+│   ├── lolschedule/         ── LoL esports schedule + daily digest subscriptions (KV, cron)
+│   ├── semantle/            ── English semantic word guess (KV, word2sim)
+│   ├── doantu/              ── Vietnamese semantle (KV, phow2sim)
+│   └── twentyq/             ── reverse-Akinator yes/no game (KV + Workers AI)
 └── util/
     └── escape-html.js
 
 scripts/
 ├── register.js              ── post-deploy: setWebhook + setMyCommands
-└── stub-kv.js               ── no-op KV binding for deploy-time registry build
+├── migrate.js               ── apply D1 migrations
+└── stub-kv.js               ── no-op KV + AI bindings for deploy-time registry build
 ```
 
 ## 3. Cold-start and the bot factory
@@ -104,11 +114,15 @@ Cloudflare Workers bundle statically via wrangler. A dynamic import from a varia
 ```js
 // src/modules/index.js
 export const moduleRegistry = {
-  util:    () => import("./util/index.js"),
-  wordle:  () => import("./wordle/index.js"),
-  loldle:  () => import("./loldle/index.js"),
-  misc:    () => import("./misc/index.js"),
-  trading: () => import("./trading/index.js"),
+  util:        () => import("./util/index.js"),
+  wordle:      () => import("./wordle/index.js"),
+  loldle:      () => import("./loldle/index.js"),
+  misc:        () => import("./misc/index.js"),
+  trading:     () => import("./trading/index.js"),
+  lolschedule: () => import("./lolschedule/index.js"),
+  semantle:    () => import("./semantle/index.js"),
+  doantu:      () => import("./doantu/index.js"),
+  twentyq:     () => import("./twentyq/index.js"),
 };
 ```
 

@@ -25,12 +25,11 @@ binding = "DB"
 database_name = "miti99bot-db"
 database_id = "261b54e7-0fdb-4fe7-8ed9-2e8a8bcf459c"
 
-# Workers AI — inference binding used by semantle + doantu for
-# @cf/baai/bge-m3 multilingual text embeddings. Accessed as `env.AI`
-# in handlers. Included on the Workers Free plan: 10,000 Neurons/day at
-# no charge (hard-stops — no billing on Free plan).
-# bge-m3 is 1075 Neurons per M input tokens → ~0.002 N/guess (2 short
-# words), ~4.6M guesses/day within the cap.
+# Workers AI inference binding, accessed as `env.AI` in handlers.
+# Used by:
+#   - semantle / doantu → @cf/baai/bge-m3 multilingual embeddings
+#   - twentyq           → @cf/google/gemma-4-26b-a4b-it text generation
+# Workers Free plan: 10,000 Neurons/day, hard-stops (no billing on Free).
 # Pricing: https://developers.cloudflare.com/workers-ai/platform/pricing/
 [ai]
 binding = "AI"

@@ -1,10 +1,12 @@
 # Twentyq Module
 
-A reverse-Akinator yes/no guessing game. The bot picks a secret object from a
-hand-curated seed list, gives an opening hint, then judges every user input
-with a Workers AI LLM (`@cf/google/gemma-4-26b-a4b-it`) via function calling.
-Each turn the model returns `{ is_guess, answer, hint }`. Round ends on a
-correct guess (`is it an organ?` matches secret) or `/twentyq_giveup`.
+A reverse-Akinator yes/no guessing game. The bot picks a secret keyword from
+a flat seed list. At round-start, a Workers AI LLM
+(`@cf/google/gemma-4-26b-a4b-it`) generates a category + cryptic opening
+hint. Each turn the same model judges the user's input and returns
+`{ is_guess, answer, hint }` as one-line JSON (parsed out of response text —
+no function calling, no tools array). Round ends on a correct guess or
+`/twentyq_giveup`.
 
 **Visibility: `public`** — commands appear in both `/help` and Telegram's
 native `/` autocomplete menu.
@@ -60,16 +62,19 @@ AI request) + one request per turn, well under the cap for normal play volume.
 
 ## Architecture
 
-- `seeds.js` — `SEEDS` array + `getRandomSeed(rng)`. Targets are lowercased.
+- `seeds.js` — flat `SEEDS` string array of target keywords + `getRandomSeed(rng)`.
 - `state.js` — KV persistence for game + stats. Subject = user id (DM) or
   chat id (group). 7-day TTL on the active round.
-- `prompts.js` — `buildSystemPrompt(state)` injects secret + history;
-  `ANSWER_FUNCTION_SCHEMA` declares the `submit_answer` tool.
+- `prompts.js` — `buildStartRoundPrompt(target)` (opens a round) and
+  `buildSystemPrompt(state)` (per-turn judging). Both include HINT STYLE
+  rules to keep hints cryptic.
 - `validate-input.js` — pre-AI regex check; rejects open-ended starters,
   empty/oversized input. Saves Neurons.
-- `ai-client.js` — wraps `env.AI.run`, parses both Cloudflare-traditional and
-  OpenAI-style tool-call shapes, normalizes payload, redacts the secret from
-  hints (defense-in-depth). `UpstreamError` wraps any failure.
+- `ai-client.js` — wraps `env.AI.run`. `generateRoundStart(env, target)`
+  produces `{category, initialHint}`; `judge(env, state, userInput)` produces
+  `{is_guess, answer, hint}`. Both parse one-line JSON from response text,
+  redact the secret word from any generated hint, and throw `UpstreamError`
+  on upstream failure.
 - `render.js` — five Telegram-HTML formatters; all user-derived text
   HTML-escaped.
 - `handlers.js` — three command entry points + subject resolver + repeat
