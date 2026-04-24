@@ -3,11 +3,7 @@
  * Match is case/space/punctuation-insensitive with a unique-prefix fallback.
  */
 
-function normalize(s) {
-  return String(s || "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]/g, "");
-}
+import { normalize } from "../../util/normalize-name.js";
 
 /**
  * @param {Array<Record<string, any>>} champions

@@ -66,6 +66,8 @@ src/
 │   │       └── 0001_trades.sql
 │   ├── wordle/              # 5-letter guessing game (KV storage, 14k-word dict)
 │   ├── loldle/              # classic-mode LoL champion guessing (KV storage)
+│   ├── loldle-emoji/        # emoji-clue LoL champion guessing (KV storage)
+│   ├── loldle-quote/        # lore-blurb LoL champion guessing (KV storage)
 │   └── misc/                # stub (KV storage)
 └── util/
     └── escape-html.js
