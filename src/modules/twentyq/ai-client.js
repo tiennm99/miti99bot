@@ -126,8 +126,7 @@ export function redactSecret(hint, target) {
   if (!target) return hint;
   const escaped = target.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const re = new RegExp(`\\b${escaped}\\b`, "ig");
-  const out = hint.replace(re, "(redacted)");
-  return out.length > 0 ? out : "the hint was redacted to avoid revealing the answer";
+  return hint.replace(re, "(redacted)");
 }
 
 /**

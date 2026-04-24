@@ -2,7 +2,7 @@
 
 ## Overview
 
-Telegram bot on Cloudflare Workers with a plug-n-play module system. grammY handles Telegram API; modules register commands with three visibility levels. Data stored in Cloudflare KV behind a prefixed `KVStore` interface.
+Telegram bot on Cloudflare Workers with a plug-n-play module system. grammY handles Telegram API; modules register commands with three visibility levels. Data stored in Cloudflare KV (behind a prefixed `KVStore` interface) or D1 (behind `SqlStore` interface).
 
 ## Tech Stack
 
@@ -10,21 +10,25 @@ Telegram bot on Cloudflare Workers with a plug-n-play module system. grammY hand
 |-------|-----------|
 | Runtime | Cloudflare Workers (V8 isolates) |
 | Bot framework | grammY 1.x |
-| Storage | Cloudflare KV |
+| Storage | Cloudflare KV + D1 |
+| AI inference | Workers AI binding (`env.AI`) |
 | Linter/Formatter | Biome |
 | Tests | Vitest |
 | Deploy | Wrangler CLI |
 
 ## Active Modules
 
-| Module | Status | Commands | Storage | Crons | Description |
-|--------|--------|----------|---------|-------|-------------|
-| `util` | Complete | `/info`, `/help`, `/stickerid` (private) | — | — | Bot info, command help renderer, and sticker file_id echo helper |
-| `trading` | Complete | `/trade_topup`, `/trade_buy`, `/trade_sell`, `/trade_convert`, `/trade_stats`, `/history` | D1 (trades) + KV (portfolio, symbol cache) | Daily 5PM trim | Paper trading — VN stocks with dynamic symbol resolution. Crypto/gold/forex coming soon. |
-| `wordle` | Complete | `/wordle`, `/wordle_new`, `/wordle_giveup`, `/wordle_stats` | KV (game, stats) | — | Classic 5-letter word game. 14,855-word dict sourced from [dracos's gist](https://gist.github.com/dracos/dd0668f281e685bad51479e5acaadb93). |
-| `loldle` | Complete | `/loldle`, `/loldle_giveup`, `/loldle_stats` | KV (game, stats) | — | Classic-mode LoL champion guesser (auto-starts a new round after solve/giveup). Champion data synced from `tiennm99/loldle-data`. |
-| `twentyq` | Complete | `/twentyq`, `/twentyq_giveup`, `/twentyq_stats` | KV (game, stats) | — | Reverse-Akinator yes/no game. Workers AI (`@cf/google/gemma-4-26b-a4b-it`) judges each question via function calling + generates fresh hints. |
-| `misc` | Stub | `/ping`, `/mstats`, `/fortytwo` | KV | — | Health check + DB demo |
+| Module | Commands | Storage | Crons | Description |
+|--------|----------|---------|-------|-------------|
+| `util` | `/info`, `/help`, `/stickerid` (private) | — | — | Bot info, command help renderer, sticker file_id echo helper |
+| `misc` | `/ping`, `/mstats`, `/fortytwo` | KV | — | Health check + DB demo stub |
+| `trading` | `/trade_topup`, `/trade_buy`, `/trade_sell`, `/trade_convert`, `/trade_stats`, `/history` | D1 (trades) + KV (portfolio, symbol cache) | Daily 5PM trim | Paper trading — VN stocks with dynamic symbol resolution |
+| `wordle` | `/wordle`, `/wordle_new`, `/wordle_giveup`, `/wordle_stats` | KV | — | 5-letter word guessing game. 14,855-word dict |
+| `loldle` | `/loldle`, `/loldle_giveup`, `/loldle_stats` | KV | — | Classic-mode LoL champion guesser. Data synced from `tiennm99/loldle-data` |
+| `lolschedule` | `/lolschedule_today`, `/lolschedule_week`, `/lolschedule_subscribe`, `/lolschedule_unsubscribe` | KV | Daily 01:00 UTC | LoL esports schedule + daily digest subscriptions |
+| `semantle` | `/semantle`, `/semantle_giveup`, `/semantle_stats` | KV | — | English semantic word guessing via hosted word2sim service |
+| `doantu` | `/doantu`, `/doantu_hint`, `/doantu_giveup`, `/doantu_stats` | KV | — | Vietnamese semantle via hosted phow2sim service |
+| `twentyq` | `/twentyq`, `/twentyq_giveup`, `/twentyq_stats` | KV | — | Reverse-Akinator yes/no game. Workers AI (`@cf/google/gemma-4-26b-a4b-it`) generates round-start category+hint and judges each turn via one-line JSON |
 
 ## Key Data Flows
 
@@ -62,23 +66,13 @@ npm run deploy
 |-----------|---------|---------|
 | `grammy` | Telegram Bot API framework | ^1.30.0 |
 | `@biomejs/biome` | Linting + formatting (dev) | ^1.9.0 |
-| `vitest` | Test runner (dev) | ^2.1.0 |
-| `wrangler` | Cloudflare Workers CLI (dev) | ^3.90.0 |
+| `vitest` | Test runner (dev) | ^4.1.4 |
+| `wrangler` | Cloudflare Workers CLI (dev) | ^4.84.0 |
 
 ## Module Documentation
 
 Each module maintains its own `README.md` with commands, data model, and implementation details. See `src/modules/<name>/README.md`.
 
-## Test Coverage
+## Tests
 
-200 tests across 21 test files (run via `npm test` — ~2s):
-
-| Area | Tests | What's Covered |
-|------|-------|---------------|
-| DB layer (KV) | 19 | KV store, prefixing, JSON helpers, pagination |
-| DB layer (D1) | — | Fake D1 in-memory implementation (fake-d1.js) backs trading tests |
-| Module framework | 33 | Registry, dispatcher, validators, help renderer, cron validation |
-| Utilities | 4 | HTML escaping |
-| Trading module | 79 | Symbol resolution, formatters, flat portfolio CRUD, command handlers, history/retention |
-| Loldle module | 18 | Classic-mode champion comparison, champion lookup, daily picker |
-| Wordle module | 13 | Duplicate-letter two-pass comparison, guess validation |
+`npm test` runs the full vitest suite (run in a few seconds — ~450 tests). Structure: one folder per module under `tests/modules/<name>/`, shared fakes under `tests/fakes/` (fake-kv-namespace, fake-d1, fake-bot, fake-modules, fake-ai). No workerd, no Telegram fixtures — pure-logic unit tests with injected fakes.
