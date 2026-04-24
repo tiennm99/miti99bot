@@ -13,6 +13,7 @@
     "build:wordle-data": "node scripts/build-wordle-data.js",
     "build:semantle-words": "node scripts/build-semantle-words.js",
     "scrape:loldle-data": "node scripts/scrape-loldle-data.js",
+    "fetch:ddragon-data": "node scripts/fetch-ddragon-data.js",
     "deploy": "npm run build && wrangler deploy && npm run db:migrate && npm run register",
     "db:migrate": "node scripts/migrate.js",
     "register": "node --env-file-if-exists=.env.deploy scripts/register.js",
