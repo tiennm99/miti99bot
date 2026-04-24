@@ -45,17 +45,18 @@ Hint: it uses wind through pipes to create sound.
 
 ## Data source
 
-- **Secret pool:** `seeds.js` — ~60 hand-curated objects across 6 categories
-  (instrument, animal, food, vehicle, sport, household). Each entry ships with
-  a non-revealing initial hint.
-- **Yes/no judging + hint generation:** Workers AI binding `env.AI` calling
-  `@cf/google/gemma-4-26b-a4b-it` with traditional function calling. The model
-  receives the secret + recent history each turn and emits a single
-  `submit_answer` tool call.
+- **Secret pool:** `seeds.js` — flat array of keyword strings (~50+ nouns).
+  No hand-curated categories or hints — drop in any noun, the LLM figures out
+  the right category and produces a cryptic opening clue at round-start.
+- **Round-start + per-turn responses:** Workers AI binding `env.AI` calling
+  `@cf/google/gemma-4-26b-a4b-it`. Prompts instruct the model to emit one-line
+  JSON that `parseJudgementJson` extracts even if wrapped in prose/fences.
+  - Round start: `generateRoundStart(env, target)` → `{category, initialHint}`
+  - Each turn:  `judge(env, state, userInput)`    → `{is_guess, answer, hint}`
 
 The Gemma 4 26B A4B model runs on the Workers Free plan (10k Neurons/day).
-Pricing: $0.10/M input + $0.30/M output. Each turn is ~250 input + ~50 output
-tokens, well under the cap for normal play volume.
+Pricing: $0.10/M input + $0.30/M output. Each round is one start call (~1
+AI request) + one request per turn, well under the cap for normal play volume.
 
 ## Architecture
 

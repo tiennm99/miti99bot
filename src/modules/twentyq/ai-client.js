@@ -11,7 +11,7 @@
  * Rich logging on failure paths so wrangler tail surfaces the actual cause.
  */
 
-import { buildSystemPrompt } from "./prompts.js";
+import { buildStartRoundPrompt, buildSystemPrompt } from "./prompts.js";
 
 export const MODEL_ID = "@cf/google/gemma-4-26b-a4b-it";
 
@@ -167,6 +167,7 @@ export async function judge(env, state, userInput) {
       JSON.stringify({
         msg: "twentyq_ai_unparseable",
         model: MODEL_ID,
+        stage: "judge",
         preview: text.slice(0, 200),
       }),
     );
@@ -174,4 +175,61 @@ export async function judge(env, state, userInput) {
   const judgement = normalizeJudgement(payload);
   judgement.hint = redactSecret(judgement.hint, state.target);
   return judgement;
+}
+
+/**
+ * Generate { category, initialHint } for a fresh round's target keyword.
+ * Uses the same JSON-in-content approach as judge(). On parse failure,
+ * returns a safe generic fallback so the round can still start.
+ *
+ * @param {{ AI: { run: (model: string, body: object) => Promise<any> } }} env
+ * @param {string} target
+ * @returns {Promise<{ category: string, initialHint: string }>}
+ */
+export async function generateRoundStart(env, target) {
+  if (!env?.AI?.run) {
+    throw new UpstreamError("Workers AI binding not available");
+  }
+  const messages = [
+    { role: "system", content: buildStartRoundPrompt(target) },
+    { role: "user", content: "begin" },
+  ];
+  let response;
+  try {
+    response = await env.AI.run(MODEL_ID, { messages });
+  } catch (err) {
+    console.log(
+      JSON.stringify({
+        msg: "twentyq_ai_throw",
+        model: MODEL_ID,
+        stage: "roundstart",
+        err: err instanceof Error ? { name: err.name, message: err.message } : String(err),
+      }),
+    );
+    throw new UpstreamError("env.AI.run threw (roundstart)", { cause: err });
+  }
+
+  const text = extractText(response);
+  const payload = parseJudgementJson(text);
+  if (!payload || typeof payload.category !== "string" || typeof payload.initialHint !== "string") {
+    console.log(
+      JSON.stringify({
+        msg: "twentyq_ai_unparseable",
+        model: MODEL_ID,
+        stage: "roundstart",
+        preview: text.slice(0, 200),
+      }),
+    );
+    return {
+      category: "object",
+      initialHint: "it is something you might encounter in everyday life",
+    };
+  }
+  const category = payload.category.trim() || "object";
+  const rawHint =
+    payload.initialHint.trim() || "it is something you might encounter in everyday life";
+  return {
+    category,
+    initialHint: redactSecret(rawHint, target),
+  };
 }

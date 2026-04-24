@@ -2,29 +2,16 @@ import { describe, expect, it } from "vitest";
 import { SEEDS, getRandomSeed } from "../../../src/modules/twentyq/seeds.js";
 
 describe("twentyq/seeds", () => {
-  it("every seed has non-empty category, target, initialHint", () => {
+  it("every seed is a non-empty lowercase string", () => {
     for (const s of SEEDS) {
-      expect(s.category).toBeTruthy();
-      expect(s.target).toBeTruthy();
-      expect(s.initialHint).toBeTruthy();
-      expect(typeof s.category).toBe("string");
-      expect(typeof s.target).toBe("string");
-      expect(typeof s.initialHint).toBe("string");
+      expect(typeof s).toBe("string");
+      expect(s.length).toBeGreaterThan(0);
+      expect(s).toBe(s.toLowerCase());
     }
   });
 
-  it("all targets are lowercase", () => {
-    for (const s of SEEDS) {
-      expect(s.target).toBe(s.target.toLowerCase());
-    }
-  });
-
-  it("initialHint never contains the target word", () => {
-    for (const s of SEEDS) {
-      const hintLower = s.initialHint.toLowerCase();
-      const re = new RegExp(`\\b${s.target}\\b`, "i");
-      expect(re.test(hintLower)).toBe(false);
-    }
+  it("no duplicate seeds", () => {
+    expect(new Set(SEEDS).size).toBe(SEEDS.length);
   });
 
   it("getRandomSeed returns a member of SEEDS", () => {

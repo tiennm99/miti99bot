@@ -3,12 +3,13 @@ import {
   MODEL_ID,
   UpstreamError,
   extractText,
+  generateRoundStart,
   judge,
   normalizeJudgement,
   parseJudgementJson,
   redactSecret,
 } from "../../../src/modules/twentyq/ai-client.js";
-import { makeFakeAi, mockFailure, mockJudgement } from "../../fakes/fake-ai.js";
+import { makeFakeAi, mockFailure, mockJudgement, mockRoundStart } from "../../fakes/fake-ai.js";
 
 const baseState = () => ({
   category: "instrument",
@@ -166,6 +167,50 @@ describe("twentyq/ai-client", () => {
       const [, body] = ai.run.mock.calls[0];
       expect(body.tools).toBeUndefined();
       expect(body.messages).toBeDefined();
+    });
+  });
+
+  describe("generateRoundStart", () => {
+    it("returns parsed { category, initialHint } on happy path", async () => {
+      const ai = makeFakeAi();
+      mockRoundStart(ai, { category: "instrument", initialHint: "cryptic clue about organs" });
+      const r = await generateRoundStart({ AI: ai }, "organ");
+      expect(r.category).toBe("instrument");
+      expect(r.initialHint).toBe("cryptic clue about organs");
+    });
+
+    it("redacts the target word from the generated hint", async () => {
+      const ai = makeFakeAi();
+      mockRoundStart(ai, {
+        category: "instrument",
+        initialHint: "an organ is what you should think of",
+      });
+      const r = await generateRoundStart({ AI: ai }, "organ");
+      expect(r.initialHint).not.toContain("organ");
+    });
+
+    it("falls back to safe defaults when model output is unparseable", async () => {
+      const ai = makeFakeAi();
+      ai.run.mockResolvedValueOnce({ response: "no json here" });
+      const r = await generateRoundStart({ AI: ai }, "organ");
+      expect(r.category).toBeTruthy();
+      expect(r.initialHint).toBeTruthy();
+    });
+
+    it("falls back when model returns partial payload", async () => {
+      const ai = makeFakeAi();
+      ai.run.mockResolvedValueOnce({
+        response: JSON.stringify({ category: "instrument" }),
+      });
+      const r = await generateRoundStart({ AI: ai }, "organ");
+      expect(r.category).toBeTruthy();
+      expect(r.initialHint).toBeTruthy();
+    });
+
+    it("wraps AI exception in UpstreamError", async () => {
+      const ai = makeFakeAi();
+      mockFailure(ai, new Error("boom"));
+      await expect(generateRoundStart({ AI: ai }, "organ")).rejects.toBeInstanceOf(UpstreamError);
     });
   });
 });
