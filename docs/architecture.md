@@ -19,6 +19,7 @@ For authoring a new plugin module, see [`adding-a-module.md`](./adding-a-module.
 src/
 ├── index.js                 ── fetch + scheduled handlers
 ├── bot.js                   ── memoized grammY Bot factory, lazy dispatcher install
+├── types.js                 ── central JSDoc typedefs (Env, Module, Command, Cron, …)
 ├── db/
 │   ├── kv-store-interface.js   ── KVStore contract (JSDoc)
 │   ├── cf-kv-store.js          ── Cloudflare KV adapter
