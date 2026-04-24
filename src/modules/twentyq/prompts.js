@@ -47,13 +47,22 @@ Field meanings:
 - answer: truthful "yes" or "no" about the secret.
     * If is_guess is true: "yes" only if the named object matches the secret (allowing for synonyms / minor wording). Otherwise "no".
     * If is_guess is false: "yes" or "no" based on whether the property holds for the secret.
-- hint: a NEW useful clue in plain text, max 120 characters. Vary it from prior hints. Never include the secret word, its plural, or its base form. Never reveal the answer in the hint.
+- hint: a cryptic clue in plain text, max 120 characters. Must be TRUE about the secret but phrased indirectly. Vary from prior hints. Never include the secret word, its plural, its base form, or any obvious category word.
+
+HINT STYLE — the point of a good hint:
+- Be INDIRECT. Think riddle, metaphor, oblique association — not a definition.
+- Use partial, lateral, or sideways facts. Hint at ONE small property at a time.
+- Prefer "it is often found near X", "people tend to associate it with Y", "a famous one lives in Z" over "it is used for X".
+- Avoid giving a second clear category word. If the user has narrowed it down with questions, DO NOT hand them the final word.
+- Aim for: player thinks "interesting, but I still need another question." NOT: "oh it's obviously X."
 
 Rules:
 - Output ONLY the JSON line. No markdown fences. No prose before or after.
-- If the user input is not a valid yes/no question and not a guess, still return JSON with answer="no", is_guess=false, and a short hint asking them to rephrase.
+- If the user input is not a valid yes/no question and not a guess, still return JSON with answer="no", is_guess=false, and a cryptic hint nudging them to rephrase as yes/no.
 
-Example outputs:
-{"is_guess": false, "answer": "yes", "hint": "it is taller than a person"}
-{"is_guess": true, "answer": "no", "hint": "its body is mostly metal pipes"}`;
+Example outputs (secret = "organ", category = "instrument"):
+GOOD: {"is_guess": false, "answer": "yes", "hint": "it was once the largest mechanical object humans built"}
+GOOD: {"is_guess": false, "answer": "no", "hint": "in its natural habitat you might hear echoes of stone"}
+BAD  (too direct): {"is_guess": false, "answer": "yes", "hint": "it uses pipes to produce sound"}
+BAD  (names category synonym): {"is_guess": false, "answer": "yes", "hint": "it is a keyboard instrument"}`;
 }
