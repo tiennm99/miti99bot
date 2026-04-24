@@ -23,6 +23,7 @@ Telegram bot on Cloudflare Workers with a plug-n-play module system. grammY hand
 | `trading` | Complete | `/trade_topup`, `/trade_buy`, `/trade_sell`, `/trade_convert`, `/trade_stats`, `/history` | D1 (trades) + KV (portfolio, symbol cache) | Daily 5PM trim | Paper trading — VN stocks with dynamic symbol resolution. Crypto/gold/forex coming soon. |
 | `wordle` | Complete | `/wordle`, `/wordle_new`, `/wordle_giveup`, `/wordle_stats` | KV (game, stats) | — | Classic 5-letter word game. 14,855-word dict sourced from [dracos's gist](https://gist.github.com/dracos/dd0668f281e685bad51479e5acaadb93). |
 | `loldle` | Complete | `/loldle`, `/loldle_giveup`, `/loldle_stats` | KV (game, stats) | — | Classic-mode LoL champion guesser (auto-starts a new round after solve/giveup). Champion data synced from `tiennm99/loldle-data`. |
+| `twentyq` | Complete | `/twentyq`, `/twentyq_giveup`, `/twentyq_stats` | KV (game, stats) | — | Reverse-Akinator yes/no game. Workers AI (`@cf/google/gemma-4-26b-a4b-it`) judges each question via function calling + generates fresh hints. |
 | `misc` | Stub | `/ping`, `/mstats`, `/fortytwo` | KV | — | Health check + DB demo |
 
 ## Key Data Flows
