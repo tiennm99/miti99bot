@@ -2,9 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   MODEL_ID,
   UpstreamError,
+  extractText,
   judge,
   normalizeJudgement,
-  parseToolCall,
+  parseJudgementJson,
   redactSecret,
 } from "../../../src/modules/twentyq/ai-client.js";
 import { makeFakeAi, mockFailure, mockJudgement } from "../../fakes/fake-ai.js";
@@ -19,55 +20,64 @@ const baseState = () => ({
 });
 
 describe("twentyq/ai-client", () => {
-  describe("parseToolCall", () => {
-    it("extracts traditional Cloudflare shape", () => {
-      const r = parseToolCall({
-        tool_calls: [
-          { name: "submit_answer", arguments: { is_guess: false, answer: "yes", hint: "x" } },
-        ],
-      });
-      expect(r).toEqual({ is_guess: false, answer: "yes", hint: "x" });
+  describe("extractText", () => {
+    it("reads traditional Workers-AI { response } shape", () => {
+      expect(extractText({ response: "hello" })).toBe("hello");
     });
 
-    it("extracts OpenAI-style nested function shape", () => {
-      const r = parseToolCall({
-        tool_calls: [
-          {
-            function: {
-              name: "submit_answer",
-              arguments: { is_guess: true, answer: "no", hint: "y" },
-            },
-          },
-        ],
-      });
-      expect(r).toEqual({ is_guess: true, answer: "no", hint: "y" });
+    it("reads OpenAI-compatible choices[0].message.content", () => {
+      expect(extractText({ choices: [{ message: { content: "world" } }] })).toBe("world");
     });
 
-    it("parses stringified JSON arguments", () => {
-      const r = parseToolCall({
-        tool_calls: [
-          {
-            function: {
-              name: "submit_answer",
-              arguments: '{"is_guess":false,"answer":"no","hint":"z"}',
-            },
-          },
-        ],
-      });
-      expect(r?.hint).toBe("z");
+    it("concatenates array content parts", () => {
+      expect(
+        extractText({
+          choices: [{ message: { content: [{ text: "a" }, { text: "b" }] } }],
+        }),
+      ).toBe("ab");
     });
 
-    it("returns null when no tool_calls present", () => {
-      expect(parseToolCall({})).toBeNull();
-      expect(parseToolCall({ tool_calls: [] })).toBeNull();
-      expect(parseToolCall(null)).toBeNull();
+    it("passes through strings", () => {
+      expect(extractText("direct")).toBe("direct");
     });
 
-    it("returns null on malformed stringified args", () => {
-      const r = parseToolCall({
-        tool_calls: [{ function: { name: "submit_answer", arguments: "not json" } }],
-      });
-      expect(r).toBeNull();
+    it("empty string on unknown shape", () => {
+      expect(extractText(null)).toBe("");
+      expect(extractText({})).toBe("");
+    });
+  });
+
+  describe("parseJudgementJson", () => {
+    it("parses clean one-line JSON", () => {
+      const r = parseJudgementJson('{"is_guess":false,"answer":"yes","hint":"big"}');
+      expect(r).toEqual({ is_guess: false, answer: "yes", hint: "big" });
+    });
+
+    it("pulls JSON out of surrounding prose", () => {
+      const r = parseJudgementJson(
+        'Sure, here is my answer: {"is_guess":true,"answer":"no","hint":"x"} — hope that helps!',
+      );
+      expect(r?.is_guess).toBe(true);
+    });
+
+    it("strips code fences", () => {
+      const r = parseJudgementJson('```json\n{"is_guess":false,"answer":"yes","hint":"h"}\n```');
+      expect(r?.hint).toBe("h");
+    });
+
+    it("handles nested braces inside strings", () => {
+      const r = parseJudgementJson('{"is_guess":false,"answer":"no","hint":"has {braces}"}');
+      expect(r?.hint).toBe("has {braces}");
+    });
+
+    it("returns null when no JSON object present", () => {
+      expect(parseJudgementJson("no json here")).toBeNull();
+      expect(parseJudgementJson("")).toBeNull();
+      expect(parseJudgementJson(null)).toBeNull();
+    });
+
+    it("returns null on malformed JSON", () => {
+      expect(parseJudgementJson("{not: valid}")).toBeNull();
     });
   });
 
@@ -141,12 +151,21 @@ describe("twentyq/ai-client", () => {
       await expect(judge({}, baseState(), "is it big?")).rejects.toBeInstanceOf(UpstreamError);
     });
 
-    it("uses default fallback when tool_calls absent", async () => {
+    it("uses default fallback when response is empty", async () => {
       const ai = makeFakeAi();
-      ai.run.mockResolvedValueOnce({}); // no tool_calls
+      ai.run.mockResolvedValueOnce({ response: "" });
       const r = await judge({ AI: ai }, baseState(), "is it big?");
       expect(r.is_guess).toBe(false);
       expect(r.answer).toBe("no");
+    });
+
+    it("does NOT send a tools array (drop function calling for Gemma compatibility)", async () => {
+      const ai = makeFakeAi();
+      mockJudgement(ai, { is_guess: false, answer: "yes", hint: "h" });
+      await judge({ AI: ai }, baseState(), "is it big?");
+      const [, body] = ai.run.mock.calls[0];
+      expect(body.tools).toBeUndefined();
+      expect(body.messages).toBeDefined();
     });
   });
 });
