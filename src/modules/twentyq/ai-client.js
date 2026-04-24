@@ -1,16 +1,17 @@
 /**
  * @file Workers AI client — wraps env.AI.run for the twentyq judge.
- * Uses traditional function calling on @cf/google/gemma-4-26b-a4b-it.
  *
- * Returns a structured { is_guess, answer, hint } per turn. On any AI
- * failure, throws UpstreamError so handlers can show a friendly retry
- * message instead of a 500.
+ * Plain JSON-in-content approach: the system prompt instructs the model to
+ * emit one-line JSON, we grep it out of the response. No function calling,
+ * no tools array — maximum compatibility across Workers AI models.
  *
- * Defensive: tolerates both Cloudflare's "traditional" tool-call shape
- * ({ name, arguments }) and OpenAI-style ({ function: { name, arguments } }).
+ * On any AI failure or unparseable output, throws UpstreamError / returns
+ * defensive defaults so handlers can show a friendly retry message.
+ *
+ * Rich logging on failure paths so wrangler tail surfaces the actual cause.
  */
 
-import { ANSWER_FUNCTION_SCHEMA, buildSystemPrompt } from "./prompts.js";
+import { buildSystemPrompt } from "./prompts.js";
 
 export const MODEL_ID = "@cf/google/gemma-4-26b-a4b-it";
 
@@ -31,47 +32,71 @@ export class UpstreamError extends Error {
 }
 
 /**
- * Extract the structured tool-call payload from a Workers AI response.
- * Handles both shapes: `tool_calls[].arguments` (traditional) and
- * `tool_calls[].function.arguments` (OpenAI-style, possibly stringified).
+ * Pull the response text out of whatever shape env.AI.run returned.
+ * Handles { response: "..." } (traditional Workers AI), OpenAI-compatible
+ * { choices: [{ message: { content } }] }, and plain strings.
  *
  * @param {any} response
+ * @returns {string}
+ */
+export function extractText(response) {
+  if (typeof response === "string") return response;
+  if (!response || typeof response !== "object") return "";
+  if (typeof response.response === "string") return response.response;
+  const choice = response.choices?.[0];
+  const content = choice?.message?.content;
+  if (typeof content === "string") return content;
+  if (Array.isArray(content)) {
+    return content.map((part) => (typeof part === "string" ? part : (part?.text ?? ""))).join("");
+  }
+  return "";
+}
+
+/**
+ * Extract the first `{...}` JSON object from a text blob. Tolerates
+ * leading/trailing prose, backtick fences, explanations — even though the
+ * system prompt forbids them.
+ *
+ * @param {string} text
  * @returns {object | null}
  */
-export function parseToolCall(response) {
-  const calls = response?.tool_calls;
-  if (!Array.isArray(calls) || calls.length === 0) return null;
-  const first = calls[0];
-  if (!first) return null;
-
-  // Cloudflare "traditional" shape: { name, arguments: { ... } }
-  if (first.arguments && typeof first.arguments === "object") {
-    return first.arguments;
-  }
-  // OpenAI-style: { function: { name, arguments: "..." | { ... } } }
-  const fnArgs = first.function?.arguments;
-  if (fnArgs && typeof fnArgs === "object") return fnArgs;
-  if (typeof fnArgs === "string") {
-    try {
-      return JSON.parse(fnArgs);
-    } catch {
-      return null;
+export function parseJudgementJson(text) {
+  if (!text || typeof text !== "string") return null;
+  // Strip code fences if the model disobeyed and wrapped the JSON.
+  const unfenced = text.replace(/```(?:json)?\s*/gi, "").replace(/```/g, "");
+  const start = unfenced.indexOf("{");
+  if (start === -1) return null;
+  // Walk brace depth to find the matching close.
+  let depth = 0;
+  let inString = false;
+  let isEscaped = false;
+  for (let i = start; i < unfenced.length; i++) {
+    const ch = unfenced[i];
+    if (inString) {
+      if (isEscaped) isEscaped = false;
+      else if (ch === "\\") isEscaped = true;
+      else if (ch === '"') inString = false;
+      continue;
     }
-  }
-  // Some models return stringified arguments at the top level too.
-  if (typeof first.arguments === "string") {
-    try {
-      return JSON.parse(first.arguments);
-    } catch {
-      return null;
+    if (ch === '"') inString = true;
+    else if (ch === "{") depth++;
+    else if (ch === "}") {
+      depth--;
+      if (depth === 0) {
+        const slice = unfenced.slice(start, i + 1);
+        try {
+          return JSON.parse(slice);
+        } catch {
+          return null;
+        }
+      }
     }
   }
   return null;
 }
 
 /**
- * Coerce any tool-call payload into the canonical { is_guess, answer, hint }
- * shape, applying defaults if fields are missing or malformed.
+ * Coerce any parsed payload into the canonical shape with defaults.
  *
  * @param {any} payload
  * @returns {{ is_guess: boolean, answer: "yes"|"no", hint: string }}
@@ -89,8 +114,9 @@ export function normalizeJudgement(payload) {
 }
 
 /**
- * Strip any case-insensitive substring of the secret from the hint.
- * Defense-in-depth — the system prompt forbids it but we don't trust the model.
+ * Strip any case-insensitive whole-word occurrence of the secret from the
+ * hint. Defense-in-depth — the system prompt forbids it but we don't trust
+ * the model.
  *
  * @param {string} hint
  * @param {string} target
@@ -105,11 +131,11 @@ export function redactSecret(hint, target) {
 }
 
 /**
- * Judge a single user turn.
+ * Judge a single user turn. Throws UpstreamError on AI failure.
  *
  * @param {{ AI: { run: (model: string, body: object) => Promise<any> } }} env
  * @param {import("./state.js").TwentyqGameState} state
- * @param {string} userInput  — already validated/normalized by validate-input.js
+ * @param {string} userInput — validated/normalized
  * @returns {Promise<{ is_guess: boolean, answer: "yes"|"no", hint: string }>}
  */
 export async function judge(env, state, userInput) {
@@ -122,15 +148,29 @@ export async function judge(env, state, userInput) {
   ];
   let response;
   try {
-    response = await env.AI.run(MODEL_ID, {
-      messages,
-      tools: [ANSWER_FUNCTION_SCHEMA],
-      temperature: 0.3,
-    });
+    response = await env.AI.run(MODEL_ID, { messages });
   } catch (err) {
+    console.log(
+      JSON.stringify({
+        msg: "twentyq_ai_throw",
+        model: MODEL_ID,
+        err: err instanceof Error ? { name: err.name, message: err.message } : String(err),
+      }),
+    );
     throw new UpstreamError("env.AI.run threw", { cause: err });
   }
-  const payload = parseToolCall(response);
+
+  const text = extractText(response);
+  const payload = parseJudgementJson(text);
+  if (!payload) {
+    console.log(
+      JSON.stringify({
+        msg: "twentyq_ai_unparseable",
+        model: MODEL_ID,
+        preview: text.slice(0, 200),
+      }),
+    );
+  }
   const judgement = normalizeJudgement(payload);
   judgement.hint = redactSecret(judgement.hint, state.target);
   return judgement;

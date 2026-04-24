@@ -1,9 +1,11 @@
 /**
- * @file System prompt + function-calling schema for the twentyq judge.
+ * @file System prompt + JSON response schema for the twentyq judge.
  *
- * The model receives the secret target + history each turn and emits a single
- * structured `submit_answer({ is_guess, answer, hint })` call. We never let
- * the model reply in free prose — function calling guarantees parseable shape.
+ * We ask the model to emit a SINGLE-LINE JSON object with the keys
+ * {is_guess, answer, hint} — no function calling, no tools array.
+ * Function calling shape differs between models and Workers AI models
+ * sometimes reject unknown params; plain JSON instruction is universal
+ * and battle-tested. ai-client.parseJudgementJson does the parse.
  */
 
 /** @typedef {import("./state.js").TwentyqGameState} TwentyqGameState */
@@ -35,44 +37,23 @@ ${historyText}
 
 The user will send a single message — either a yes/no question (e.g. "is it big?", "does it have wheels?") or a final guess of a specific noun (e.g. "is it an organ?", "is it a piano?").
 
-You MUST call the submit_answer function with:
-  - is_guess (boolean): true ONLY when the user is naming a specific concrete object that is the same as, a synonym of, or extremely close to the secret. Vague descriptors like "is it big?", "is it round?" are NOT guesses. Saying "is it a string instrument?" when the secret is "guitar" is NOT a guess (too broad). Saying "is it a guitar?" IS a guess.
-  - answer ("yes" or "no"): truthful answer about the secret.
-      * If is_guess is true: "yes" only if the named object matches the secret (allowing for synonyms / minor wording). Otherwise "no".
-      * If is_guess is false: "yes" or "no" based on whether the property holds for the secret.
-  - hint (string, max 120 chars): a NEW useful clue. Vary it from prior hints. Never include the secret word, its plural, or its base form. Never reveal the answer in the hint.
+You MUST reply with exactly ONE line of JSON and NOTHING else — no prose, no backticks, no code fences, no explanation.
+
+Schema:
+{"is_guess": boolean, "answer": "yes" | "no", "hint": string}
+
+Field meanings:
+- is_guess: true ONLY when the user is naming a specific concrete object equal to, a synonym of, or extremely close to the secret. Vague descriptors ("is it big?", "is it round?") are NOT guesses. Saying "is it a string instrument?" when the secret is "guitar" is NOT a guess (too broad). Saying "is it a guitar?" IS a guess.
+- answer: truthful "yes" or "no" about the secret.
+    * If is_guess is true: "yes" only if the named object matches the secret (allowing for synonyms / minor wording). Otherwise "no".
+    * If is_guess is false: "yes" or "no" based on whether the property holds for the secret.
+- hint: a NEW useful clue in plain text, max 120 characters. Vary it from prior hints. Never include the secret word, its plural, or its base form. Never reveal the answer in the hint.
 
 Rules:
-- ALWAYS call submit_answer exactly once. Never reply in free text.
-- Stay consistent with prior answers above.
-- If the user input is not a yes/no question and not a guess (e.g. open-ended), still call submit_answer with answer="no", is_guess=false, and a hint asking them to rephrase as a yes/no question.`;
-}
+- Output ONLY the JSON line. No markdown fences. No prose before or after.
+- If the user input is not a valid yes/no question and not a guess, still return JSON with answer="no", is_guess=false, and a short hint asking them to rephrase.
 
-/**
- * Function-calling schema. Traditional Workers-AI format
- * (https://developers.cloudflare.com/workers-ai/features/function-calling/traditional/).
- */
-export const ANSWER_FUNCTION_SCHEMA = {
-  name: "submit_answer",
-  description: "Submit the truthful yes/no answer to the user's question along with a fresh hint.",
-  parameters: {
-    type: "object",
-    properties: {
-      is_guess: {
-        type: "boolean",
-        description:
-          "True ONLY if the user named a specific concrete object that matches or is a synonym of the secret.",
-      },
-      answer: {
-        type: "string",
-        enum: ["yes", "no"],
-        description: "Truthful yes/no answer about the secret.",
-      },
-      hint: {
-        type: "string",
-        description: "A new useful clue (max 120 chars) that does not contain the secret word.",
-      },
-    },
-    required: ["is_guess", "answer", "hint"],
-  },
-};
+Example outputs:
+{"is_guess": false, "answer": "yes", "hint": "it is taller than a person"}
+{"is_guess": true, "answer": "no", "hint": "its body is mostly metal pipes"}`;
+}
