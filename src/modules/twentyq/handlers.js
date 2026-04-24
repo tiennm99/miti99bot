@@ -12,7 +12,7 @@
  *   /twentyq_stats        → show per-subject stats
  */
 
-import { UpstreamError, judge } from "./ai-client.js";
+import { UpstreamError, generateRoundStart, judge } from "./ai-client.js";
 import { formatBoard, formatGiveup, formatIntro, formatStats, formatTurnReply } from "./render.js";
 import { getRandomSeed } from "./seeds.js";
 import { clearGame, loadGame, loadStats, recordResult, saveGame } from "./state.js";
@@ -33,12 +33,13 @@ function argAfterCommand(text) {
   return idx === -1 ? "" : text.slice(idx + 1).trim();
 }
 
-function startFreshGame() {
-  const seed = getRandomSeed();
+async function startFreshGame(env) {
+  const target = getRandomSeed();
+  const { category, initialHint } = await generateRoundStart(env, target);
   return {
-    category: seed.category,
-    target: seed.target,
-    initialHint: seed.initialHint,
+    category,
+    target,
+    initialHint,
     startedAt: Date.now(),
     solved: false,
     turns: [],
@@ -71,7 +72,12 @@ export async function handleTwentyq(ctx, { db, env }) {
   }
 
   if (!game) {
-    game = startFreshGame();
+    try {
+      game = await startFreshGame(env);
+    } catch (err) {
+      logFail("roundstart", err);
+      return ctx.reply(UPSTREAM_FAIL);
+    }
     await saveGame(db, subject, game);
     if (!arg) return ctx.reply(formatIntro(game), { parse_mode: "HTML" });
     // Fresh round + immediate question — show intro then process turn.

@@ -66,3 +66,43 @@ GOOD: {"is_guess": false, "answer": "no", "hint": "in its natural habitat you mi
 BAD  (too direct): {"is_guess": false, "answer": "yes", "hint": "it uses pipes to produce sound"}
 BAD  (names category synonym): {"is_guess": false, "answer": "yes", "hint": "it is a keyboard instrument"}`;
 }
+
+/**
+ * Build the round-start prompt. Given just a target keyword, we ask the
+ * model to emit { category, initialHint } so seeds don't need hand-curated
+ * metadata — drop in any noun, the model fills in the rest.
+ *
+ * @param {string} target
+ * @returns {string}
+ */
+export function buildStartRoundPrompt(target) {
+  return `You are opening a new round of the "20 questions" reverse-Akinator game.
+
+Secret object: "${target}"
+
+Your job: emit ONE line of JSON with these two fields:
+{"category": "<short broad category>", "initialHint": "<cryptic opening clue>"}
+
+Category rules:
+- A SHORT, COMMON category word a player can start narrowing from (e.g. "instrument", "animal", "food", "vehicle", "sport", "household item", "tool", "clothing", "plant"). Prefer single words.
+- Broad enough that many objects fall under it — NOT a narrow sub-category (don't say "brass instrument", say "instrument").
+- Do not include the secret word in the category.
+
+Initial hint rules (same HINT STYLE as the main game):
+- Max 120 characters. TRUE about the secret. Indirect, oblique, riddle-like.
+- Never include the secret word, its plural, its base form, or an obvious category synonym.
+- Hint at ONE lateral property — a cultural association, a habitat, a use context, a historical fact.
+- Player should think "ok that narrows it a bit" NOT "oh that's obviously X".
+
+Examples (secret → output):
+secret="organ"      → {"category": "instrument", "initialHint": "it was once the largest mechanical object humans built"}
+secret="elephant"   → {"category": "animal", "initialHint": "the ancient Greeks believed it was terrified of mice"}
+secret="pizza"      → {"category": "food", "initialHint": "a popular version bears the colors of a national flag"}
+secret="submarine"  → {"category": "vehicle", "initialHint": "the first successful one was made of wood and powered by hand"}
+
+BAD examples (do NOT emit these):
+secret="organ"      → {"category": "keyboard instrument", "initialHint": "it has pipes"}         // category too specific + hint too direct
+secret="elephant"   → {"category": "animal", "initialHint": "it has a long trunk"}               // hint too direct
+
+Output ONLY the JSON line. No fences, no prose.`;
+}

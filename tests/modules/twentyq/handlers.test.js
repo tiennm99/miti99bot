@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createStore } from "../../../src/db/create-store.js";
 import { handleGiveup, handleStats, handleTwentyq } from "../../../src/modules/twentyq/handlers.js";
 import { loadGame, loadStats, saveGame } from "../../../src/modules/twentyq/state.js";
-import { makeFakeAi, mockFailure, mockJudgement } from "../../fakes/fake-ai.js";
+import { makeFakeAi, mockFailure, mockJudgement, mockRoundStart } from "../../fakes/fake-ai.js";
 import { makeFakeKv } from "../../fakes/fake-kv-namespace.js";
 
 function makeCtx(userId = 1, chatType = "private", msgText = "/twentyq") {
@@ -43,6 +43,7 @@ describe("twentyq/handlers", () => {
 
   describe("handleTwentyq", () => {
     it("starts a fresh round and shows intro when no game + no arg", async () => {
+      mockRoundStart(ai, { category: "instrument", initialHint: "cryptic opener" });
       const ctx = makeCtx(1, "private", "/twentyq");
       await handleTwentyq(ctx, { db, env });
       expect(ctx.reply).toHaveBeenCalledOnce();
@@ -50,6 +51,8 @@ describe("twentyq/handlers", () => {
       const game = await loadGame(db, 1);
       expect(game).not.toBeNull();
       expect(game.turns).toEqual([]);
+      expect(game.category).toBe("instrument");
+      expect(game.initialHint).toBe("cryptic opener");
     });
 
     it("shows board when game exists and no arg", async () => {
@@ -123,18 +126,28 @@ describe("twentyq/handlers", () => {
 
     it("starts a fresh round transparently after a solved game", async () => {
       await saveGame(db, 1, sampleGame({ solved: true }));
+      mockRoundStart(ai);
       const ctx = makeCtx(1, "private", "/twentyq");
       await handleTwentyq(ctx, { db, env });
       expect(ctx.replies[0].text).toMatch(/I'm thinking/);
     });
 
     it("starts round and processes turn when /twentyq <text> with no prior game", async () => {
+      mockRoundStart(ai);
       mockJudgement(ai, { is_guess: false, answer: "yes", hint: "yes hint" });
       const ctx = makeCtx(1, "private", "/twentyq is it big?");
       await handleTwentyq(ctx, { db, env });
       expect(ctx.reply).toHaveBeenCalledTimes(2); // intro + turn
       expect(ctx.replies[0].text).toMatch(/I'm thinking/);
       expect(ctx.replies[1].text).toMatch(/Yes/);
+    });
+
+    it("surfaces roundstart UpstreamError as friendly message", async () => {
+      mockFailure(ai, new Error("roundstart down"));
+      const ctx = makeCtx(1, "private", "/twentyq");
+      await handleTwentyq(ctx, { db, env });
+      expect(ctx.replies[0].text).toMatch(/hiccup|try again/i);
+      expect(await loadGame(db, 1)).toBeNull();
     });
 
     it("surfaces UpstreamError as friendly message", async () => {
@@ -146,6 +159,7 @@ describe("twentyq/handlers", () => {
     });
 
     it("uses chat id as subject in groups", async () => {
+      mockRoundStart(ai);
       mockJudgement(ai, { is_guess: false, answer: "no", hint: "h" });
       const ctx = makeCtx(99, "group", "/twentyq is it big?");
       ctx.chat.id = 12345;

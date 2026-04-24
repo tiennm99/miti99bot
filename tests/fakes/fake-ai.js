@@ -23,6 +23,16 @@ export function mockJudgement(ai, { is_guess = false, answer = "no", hint = "def
   });
 }
 
+/**
+ * Configure the next ai.run call to return a round-start response
+ * with { category, initialHint } JSON.
+ */
+export function mockRoundStart(ai, { category = "object", initialHint = "cryptic clue" } = {}) {
+  ai.run.mockResolvedValueOnce({
+    response: JSON.stringify({ category, initialHint }),
+  });
+}
+
 /** Configure the next call to throw (simulate Workers AI outage). */
 export function mockFailure(ai, err = new Error("AI down")) {
   ai.run.mockRejectedValueOnce(err);
