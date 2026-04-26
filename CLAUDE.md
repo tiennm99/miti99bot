@@ -26,7 +26,7 @@ grammY Telegram bot on Cloudflare Workers. Modules are plug-n-play: each module 
 
 **Key abstractions:**
 - `src/modules/registry.js` — loads modules from static import map (`src/modules/index.js`), validates commands, detects name conflicts across all visibility levels, builds four maps (public/protected/private/all). Memoized via `getCurrentRegistry()`.
-- `src/db/create-store.js` — wraps Cloudflare KV with auto-prefixed keys per module (`moduleName:key`). Modules never touch `env.KV` directly.
+- `src/db/create-store.js` — returns a storage interface (either `MongoKVStore` via dual-write wrapper, or direct `MongoKVStore` depending on `STORAGE_PRIMARY` flag) with auto-prefixed keys per module (`moduleName:key`). Modules never touch `env.KV`, `env.DB`, or `env.MONGODB_URI` directly.
 - `scripts/register.js` — post-deploy script that imports the same registry to derive public commands, then calls Telegram `setWebhook` + `setMyCommands`. Uses `stub-kv.js` to satisfy KV binding without real IO.
 
 **Three command visibilities:** public (in Telegram `/` menu + `/help`), protected (in `/help` only), private (hidden easter eggs). All three are registered via `bot.command()` — visibility controls discoverability, not access.

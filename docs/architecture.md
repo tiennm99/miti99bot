@@ -173,9 +173,11 @@ Every command — public, protected, **and private** — is registered via `bot.
 
 There is no custom text-match middleware, no `bot.on("message:text", ...)` handler, no private-command-specific path. One routing path for all three visibilities. This is what reduced the original two-path design (slash + text-match) to one during the revision pass.
 
-## 8. Storage: KVStore and SqlStore
+## 8. Storage: MongoDB + Dual-Write Migration Era
 
-Modules NEVER touch `env.KV` or `env.DB` directly. They receive prefixed stores from the module context.
+**Current state (Phases 01–08):** MongoDB Atlas is the primary store. During migration, a dual-write layer persists to both MongoDB and Cloudflare KV/D1 for safety. Modules NEVER touch `env.KV`, `env.DB`, or `env.MONGODB_URI` directly — they receive prefixed stores from the module context via `createStore()` and `createSqlStore()` factories.
+
+**Post-Phase-07 cutover:** The dual-write layer collapses, Cloudflare KV/D1 are deleted, and `createStore()` returns pure MongoDB stores.
 
 ### KVStore (key-value, fast reads/writes)
 
@@ -203,19 +205,19 @@ getJSON(key)                          // → any | null (swallows corrupt JSON)
 putJSON(key, value, { expirationTtl? })
 ```
 
+**Current implementation:** `createStore("wordle", env)` returns a `MongoKVStore` directly (or `DualKVStore` if `DUAL_WRITE=1` is set). During migration, dual-write sends to both MongoDB and Cloudflare KV. TTL expirations are enforced server-side by MongoDB (via `expiresAt` field) and at read-time by the `MongoKVStore` layer.
+
 #### Prefix mechanics
 
-`createStore("wordle", env)` returns a wrapped store where every key is rewritten:
+All keys are prefixed with `<moduleName>:` before storage:
 
 ```
-module calls:             wrapper sends to CFKVStore:      raw KV key:
-─────────────────────────  ─────────────────────────────    ─────────────
-put("games:42", v)     ──►  put("wordle:games:42", v)  ──►  wordle:games:42
-get("games:42")        ──►  get("wordle:games:42")     ──►  wordle:games:42
-list({prefix:"games:"})──►  list({prefix:"wordle:games:"})  (then strips "wordle:" from returned keys)
+module calls:             store prefixes:              MongoDB collection doc:
+─────────────────────────  ──────────────────────      ────────────────────────
+put("games:42", v)     ──► put("wordle:games:42")  ──► { _id: "wordle:games:42", … }
+get("games:42")        ──► get("wordle:games:42")  ──► (find by _id, return value)
+list({prefix:"games:"})──► (scan, filter prefix)   ──► (keys matching "wordle:games:")
 ```
-
-Two stores for different modules cannot read each other's data unless they reconstruct prefixes by hand — a code-review boundary, not a cryptographic one.
 
 ### SqlStore (relational, scans, append-only history)
 
@@ -224,7 +226,7 @@ For complex queries, aggregates, or audit logs, use `sql` (a `SqlStore`):
 ```js
 // In a module's init:
 init: async ({ sql }) => {
-  sqlStore = sql;  // null if env.DB not bound
+  sqlStore = sql;  // null if not bound
 },
 
 // In a handler or cron:
@@ -240,29 +242,19 @@ The interface (full JSDoc in `src/db/sql-store-interface.js`):
 run(query, ...binds)      // INSERT/UPDATE/DELETE — returns { changes, last_row_id }
 all(query, ...binds)      // SELECT all rows → array of objects
 first(query, ...binds)    // SELECT first row → object | null
-prepare(query, ...binds)  // Prepared statement for batch operations
-batch(statements)         // Execute multiple statements in one round-trip
 ```
 
-All tables must follow the naming convention `{moduleName}_{table}` (e.g., `trading_trades`).
+**Current implementation:** `createSqlStore("trading", env)` returns a `MongoTradesStore` (native MongoDB inserts / queries on `trading_trades` collection). D1 is read-only during migration. Post-cutover, D1 is deleted.
 
-Tables are created via migrations in `src/modules/<name>/migrations/*.sql`. The migration runner (`scripts/migrate.js`) applies them on deploy and tracks them in `_migrations` table.
+### Swapping the backends (post-Phase-07)
 
-### Swapping the backends
-
-To replace Cloudflare KV with a different store (e.g. Upstash Redis, Postgres):
+After cutover, the backend is locked to MongoDB. To replace it:
 
 1. Create a new `src/db/<name>-store.js` that implements the `KVStore` interface.
-2. Change the one `new CFKVStore(env.KV)` line in `src/db/create-store.js` to construct your new adapter.
-3. Update `wrangler.toml` bindings.
+2. Change the one `new MongoKVStore(...)` line in `src/db/create-store.js` to construct your new adapter.
+3. Update `wrangler.toml` bindings if needed.
 
-That's the full change. No module code moves.
-
-To replace D1 with a different SQL backend:
-
-1. Create a new `src/db/<name>-sql-store.js` that implements the `SqlStore` interface.
-2. Change the one `new CFSqlStore(env.DB)` line in `src/db/create-sql-store.js` to construct your new adapter.
-3. Update `wrangler.toml` bindings.
+Similarly for SQL: create `<name>-trades-store.js` implementing the trades interface, update `create-sql-store.js`.
 
 ## 9. HTTP and Scheduled Entry Points
 
