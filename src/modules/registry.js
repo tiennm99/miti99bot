@@ -14,9 +14,33 @@
 
 import { createSqlStore } from "../db/create-sql-store.js";
 import { createStore } from "../db/create-store.js";
+import { MongoTradesStore } from "../db/mongo-trades-store.js";
 import { moduleRegistry as defaultModuleRegistry } from "./index.js";
 import { validateCommand } from "./validate-command.js";
 import { validateCron } from "./validate-cron.js";
+
+/** Sentinel value — when MONGODB_URI equals this, Mongo is disabled. */
+const STUB_SENTINEL = "__stub_mongo__";
+
+/**
+ * Determine whether a MongoTradesStore should be passed to the trading module.
+ * Returns a new MongoTradesStore when Atlas is in play (real URI, not sentinel).
+ * Returns null when only D1 is active.
+ *
+ * @param {any} env
+ * @returns {MongoTradesStore | null}
+ */
+function buildTradesStore(env) {
+  const uri = env.MONGODB_URI;
+  if (!uri || uri === STUB_SENTINEL) return null;
+  const primary = (env.STORAGE_PRIMARY ?? "kv").toLowerCase();
+  const dualWrite = (env.DUAL_WRITE ?? "1") !== "0";
+  // Wire MongoTradesStore whenever Mongo is involved (dual or mongo-primary).
+  if (dualWrite || primary === "mongo") {
+    return new MongoTradesStore(env);
+  }
+  return null;
+}
 
 /**
  * @typedef {import("./validate-command.js").ModuleCommand} ModuleCommand
@@ -155,7 +179,18 @@ export async function buildRegistry(env, importMap) {
   for (const mod of modules) {
     if (typeof mod.init === "function") {
       try {
-        await mod.init({ db: createStore(mod.name, env), sql: createSqlStore(mod.name, env), env });
+        const initCtx = {
+          db: createStore(mod.name, env),
+          sql: createSqlStore(mod.name, env),
+          env,
+        };
+        // Wire MongoTradesStore for the trading module when Atlas is in play.
+        // The trading module already accepts optional tradesStore (Phase 03
+        // backwards-compat). Other modules receive undefined and ignore it.
+        if (mod.name === "trading") {
+          initCtx.tradesStore = buildTradesStore(env);
+        }
+        await mod.init(initCtx);
       } catch (err) {
         throw new Error(
           `module "${mod.name}" init failed: ${err instanceof Error ? err.message : String(err)}`,

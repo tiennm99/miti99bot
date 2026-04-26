@@ -8,6 +8,14 @@
  * are assumed read-only (or tolerant of missing state) at registration time.
  * If a future module writes inside init(), update the matching stub to
  * swallow writes safely.
+ *
+ * `STUB_SENTINEL` is passed as `env.MONGODB_URI` so the create-store /
+ * create-sql-store factories short-circuit BEFORE constructing any MongoClient.
+ * This ensures zero Atlas connections during `npm run register:dry`.
+ *
+ * `stubMongo` is a duck-typed no-op that satisfies the MongoClient surface
+ * used by MongoKVStore. It is NOT a real MongoClient instance. It must never
+ * be used in production — sentinel check in the factories prevents that.
  */
 
 /** @type {KVNamespace} */
@@ -42,5 +50,35 @@ export const stubKv = {
 export const stubAi = {
   async run() {
     return { data: [] };
+  },
+};
+
+/**
+ * Sentinel value passed as `env.MONGODB_URI` during deploy-time registry
+ * builds. Factories check for this value FIRST and return CF-only stores
+ * immediately — no MongoClient is ever constructed.
+ *
+ * @type {string}
+ */
+export const STUB_SENTINEL = "__stub_mongo__";
+
+/**
+ * Duck-typed no-op MongoClient surface. Satisfies the shape used by
+ * MongoKVStore / MongoTradesStore without performing any network IO.
+ * Used only when `env.MONGODB_URI === STUB_SENTINEL`.
+ */
+export const stubMongo = {
+  db() {
+    return {
+      collection() {
+        throw new Error("stubMongo: no IO at deploy time");
+      },
+    };
+  },
+  async connect() {
+    return undefined;
+  },
+  async close() {
+    return undefined;
   },
 };
