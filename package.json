@@ -18,12 +18,13 @@
     "db:migrate": "node scripts/migrate.js",
     "register": "node --env-file-if-exists=.env.deploy scripts/register.js",
     "register:dry": "node --env-file-if-exists=.env.deploy scripts/register.js --dry-run",
-    "lint": "biome check . && eslint src",
+    "lint": "biome check . && eslint src && node scripts/check-secret-leaks.js",
     "format": "biome format --write .",
     "test": "vitest run"
   },
   "dependencies": {
-    "grammy": "^1.30.0"
+    "grammy": "^1.30.0",
+    "mongodb": "^6.21.0"
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.0",

@@ -1,6 +1,10 @@
 name = "miti99bot"
 main = "src/index.js"
 compatibility_date = "2025-10-01"
+# nodejs_compat_v2 enables node:net + node:tls so the official `mongodb` driver
+# can open a TCP socket to Atlas. v1 vs v2 are alternatives, not additive.
+# Adding this flag does not affect existing modules — `src/` has no node: imports.
+compatibility_flags = ["nodejs_compat_v2"]
 
 # Enabled modules at runtime. Comma-separated. Must match static-map keys in src/modules/index.js.
 # Also duplicate this value into .env.deploy so scripts/register.js derives the same public command list.
