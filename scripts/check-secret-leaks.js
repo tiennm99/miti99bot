@@ -31,7 +31,15 @@ const PROJECT_ROOT = resolve(import.meta.dirname, "..");
 const SCAN_DIRS = ["src", "scripts"];
 const SCAN_EXTS = new Set([".js", ".mjs", ".ts"]);
 
-const SECRETS = ["MONGODB_URI", "TELEGRAM_BOT_TOKEN", "TELEGRAM_WEBHOOK_SECRET", "ADMIN_TOKEN"];
+const SECRETS = [
+  "MONGODB_URI",
+  "TELEGRAM_BOT_TOKEN",
+  "TELEGRAM_WEBHOOK_SECRET",
+  "ADMIN_TOKEN",
+  // Phase 05: CF API creds used by backfill scripts — defense-in-depth.
+  "CLOUDFLARE_API_TOKEN",
+  "CLOUDFLARE_ACCOUNT_ID",
+];
 
 // A line is suspicious if it both names a secret AND looks like it's emitting
 // the value (console.*, JSON.stringify(env...), throw with interpolation).

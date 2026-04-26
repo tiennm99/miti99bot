@@ -18,6 +18,12 @@
     "db:migrate": "node scripts/migrate.js",
     "register": "node --env-file-if-exists=.env.deploy scripts/register.js",
     "register:dry": "node --env-file-if-exists=.env.deploy scripts/register.js --dry-run",
+    "backfill:kv": "node --env-file-if-exists=.env.deploy scripts/backfill-kv-to-mongo.js",
+    "backfill:kv:dry": "node --env-file-if-exists=.env.deploy scripts/backfill-kv-to-mongo.js --dry-run",
+    "backfill:d1": "node --env-file-if-exists=.env.deploy scripts/backfill-d1-to-mongo.js",
+    "backfill:d1:dry": "node --env-file-if-exists=.env.deploy scripts/backfill-d1-to-mongo.js --dry-run",
+    "verify:mongo": "node --env-file-if-exists=.env.deploy scripts/verify-mongo-parity.js",
+    "wipe:mongo": "node --env-file-if-exists=.env.deploy scripts/wipe-mongo.js",
     "lint": "biome check . && eslint src && node scripts/check-secret-leaks.js",
     "format": "biome format --write .",
     "test": "vitest run"
