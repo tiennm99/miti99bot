@@ -24,6 +24,8 @@
     "backfill:d1:dry": "node --env-file-if-exists=.env.deploy scripts/backfill-d1-to-mongo.js --dry-run",
     "verify:mongo": "node --env-file-if-exists=.env.deploy scripts/verify-mongo-parity.js",
     "wipe:mongo": "node --env-file-if-exists=.env.deploy scripts/wipe-mongo.js",
+    "analyze:soak": "node scripts/analyze-soak.js",
+    "burst:synthetic": "node scripts/synthetic-burst.js",
     "lint": "biome check . && eslint src && node scripts/check-secret-leaks.js",
     "format": "biome format --write .",
     "test": "vitest run"
