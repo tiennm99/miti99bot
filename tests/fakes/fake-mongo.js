@@ -1,17 +1,29 @@
 /**
  * @file fake-mongo — Map-backed in-memory MongoDB fake for unit tests.
  *
- * Covers the full surface needed by Phase 02 (MongoKVStore) and
- * Phase 03 (MongoTradesStore):
- *   collection(name) → { findOne, updateOne, deleteOne, find, insertOne,
- *                         insertMany, distinct, deleteMany, countDocuments,
- *                         createIndex }
+ * **FROZEN SURFACE** (Phase 02–08): This fake implements the minimal subset of MongoDB
+ * API required by MongoKVStore and MongoTradesStore tests. New MongoClient features
+ * must be added to this fake to remain testable.
  *
- * TTL is NOT simulated server-side. Tests that exercise TTL check the
- * `expiresAt` field value directly and test the read-time filter in the
- * MongoKVStore layer by controlling Date.now() via vi.setSystemTime().
+ * **Implemented methods:**
+ * - `db.collection(name)` → Collection
+ * - Collection: `findOne(query)`, `updateOne(filter, update, opts)`, `deleteOne(query)`,
+ *   `find(query)`, `insertOne(doc)`, `insertMany(docs)`, `distinct(field, query)`,
+ *   `deleteMany(query)`, `countDocuments(query)`, `createIndex(spec)` (no-op)
+ *
+ * **Cursor methods** (from `find()`): `sort(spec)`, `skip(n)`, `limit(n)`,
+ * `project(spec)`, `toArray()`
+ *
+ * **NOT SIMULATED:**
+ * - TTL expirations at server-side. Tests assert `expiresAt` field presence and
+ *   control Date.now() via `vi.setSystemTime()` to test read-time expiration filters
+ *   in MongoKVStore. Real Atlas TTL is validated during Phase 06 soak.
+ * - Transactions, sharding, replica sets, or other cluster features.
+ * - Advanced operators beyond those in `matchQuery()` ($gt, $gte, $lt, $lte,
+ *   $exists, $in, $regex, $or, $and).
  *
  * @see tests/db/mongo-kv-store.test.js
+ * @see tests/modules/trading/ (trades store usage)
  */
 
 /**

@@ -69,11 +69,21 @@ export default {
 ```
 
 - Store module-level `db` and `sql` references in closure variables, set during `init`
-- Never access `env.KV` or `env.DB` directly — always use the prefixed `db` (KV) or `sql` (D1) from `init`
-- `sql` is `null` when `env.DB` is not bound — always guard with `if (!sql) return`
+- Never access `env.KV`, `env.DB`, or `env.MONGODB_URI` directly — always use the prefixed `db` (KVStore) or `sql` (SqlStore) from `init`
+- `sql` is `null` when no relational store is bound — always guard with `if (!sql) return`
 - Command handlers receive grammY `ctx` — use `ctx.match` for command arguments, `ctx.from.id` for user identity
 - Reply with `ctx.reply(text)` — plain text or Telegram HTML
 - Cron handlers receive `(event, { db, sql, env })` — same context as `init`
+
+## Persistence Layer
+
+All data persistence flows through storage factories:
+
+- **`createStore(moduleName, env)`** — returns a `KVStore` interface for key-value data (simple state, settings, JSON blobs). Implementation: `MongoKVStore` (primary) with optional dual-write to Cloudflare KV during migration.
+- **`createSqlStore(moduleName, env)`** — returns a `SqlStore` interface for relational data (trading ledger, aggregates, scans). Implementation: `MongoTradesStore` (MongoDB native queries and inserts). D1 is read-only during migration.
+- **Modules NEVER instantiate `MongoClient` directly.** All MongoDB access goes through `MongoKVStore` or `MongoTradesStore` factories.
+
+Post-migration (after Phase 07 cutover), the dual-write layer collapses and Cloudflare KV/D1 are deleted; `createStore` returns `MongoKVStore` directly.
 
 ## Error Handling
 
