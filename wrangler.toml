@@ -10,6 +10,13 @@ compatibility_flags = ["nodejs_compat_v2"]
 # Also duplicate this value into .env.deploy so scripts/register.js derives the same public command list.
 [vars]
 MODULES = "util,wordle,loldle,loldle-emoji,loldle-quote,loldle-ability,loldle-splash,misc,trading,lolschedule,semantle,doantu,twentyq"
+# Storage routing flags — control which backend serves reads and receives writes.
+# STORAGE_PRIMARY: "kv" = CF KV (default), "mongo" = Atlas (post-cutover).
+# DUAL_WRITE: "1" = write both backends in parallel (default), "0" = primary only.
+# DRIFT_SAMPLE_N: number of keys sampled per module by drift-verifier cron.
+STORAGE_PRIMARY = "kv"
+DUAL_WRITE = "1"
+DRIFT_SAMPLE_N = "50"
 
 # KV namespace holding all module state. Each module auto-prefixes its keys via createStore().
 # Production-only — no preview namespace. Create with:
@@ -44,7 +51,10 @@ binding = "AI"
 # Local testing: curl "http://localhost:8787/__scheduled?cron=0+1+*+*+*"
 # (requires `wrangler dev --test-scheduled`)
 [triggers]
-crons = ["0 17 * * *", "0 1 * * *"]
+# "0 17 * * *" — trading trim-trades (lolschedule module)
+# "0 1 * * *"  — misc / lolschedule nightly jobs
+# "0 * * * *"  — drift-verifier: drain retry queue + spot-check KV vs Mongo parity
+crons = ["0 17 * * *", "0 1 * * *", "0 * * * *"]
 
 # Workers Observability — captures console.* logs, request metadata, and
 # invocation traces in the Cloudflare dashboard (Observability → Logs).

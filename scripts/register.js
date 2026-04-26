@@ -19,7 +19,7 @@
  */
 
 import { buildRegistry, resetRegistry } from "../src/modules/registry.js";
-import { stubAi, stubKv } from "./stub-kv.js";
+import { STUB_SENTINEL, stubAi, stubKv } from "./stub-kv.js";
 
 const TELEGRAM_API = "https://api.telegram.org";
 
@@ -71,8 +71,18 @@ async function main() {
 
   // Build the registry against the same code the Worker uses. Stub KV
   // satisfies the binding so createStore() does not throw.
+  // MONGODB_URI = STUB_SENTINEL ensures create-store / create-sql-store
+  // factories short-circuit before constructing any MongoClient.
+  // STORAGE_PRIMARY + DUAL_WRITE lock the factories to the CF-only path.
   resetRegistry();
-  const reg = await buildRegistry({ MODULES: modules, KV: stubKv, AI: stubAi });
+  const reg = await buildRegistry({
+    MODULES: modules,
+    KV: stubKv,
+    AI: stubAi,
+    MONGODB_URI: STUB_SENTINEL,
+    STORAGE_PRIMARY: "kv",
+    DUAL_WRITE: "0",
+  });
 
   const commands = [...reg.publicCommands.values()].map(({ cmd }) => ({
     command: cmd.name,
