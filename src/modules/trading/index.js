@@ -14,23 +14,31 @@ let db = null;
 /** @type {import("../../db/sql-store-interface.js").SqlStore | null} */
 let sql = null;
 
+/** @type {import("../../db/mongo-trades-store.js").MongoTradesStore | null} */
+let tradesStore = null;
+
 /**
- * Build an onTrade callback bound to the current sql store and userId.
+ * Build an onTrade callback bound to the current stores and userId.
  *
  * @param {number} userId
  * @returns {(trade: {symbol:string, side:"buy"|"sell", qty:number, priceVnd:number}) => Promise<void>}
  */
 function makeOnTrade(userId) {
   return ({ symbol, side, qty, priceVnd }) =>
-    recordTrade(sql, { userId, symbol, side, qty, priceVnd });
+    recordTrade(sql, { userId, symbol, side, qty, priceVnd }, tradesStore);
 }
 
 /** @type {import("../registry.js").BotModule} */
 const tradingModule = {
   name: "trading",
-  init: async ({ db: store, sql: sqlStore }) => {
+  /**
+   * @param {{ db: import("../../db/kv-store-interface.js").KVStore, sql: import("../../db/sql-store-interface.js").SqlStore | null, tradesStore?: import("../../db/mongo-trades-store.js").MongoTradesStore | null, env: any }} ctx
+   */
+  init: async ({ db: store, sql: sqlStore, tradesStore: ts }) => {
     db = store;
     sql = sqlStore ?? null;
+    // tradesStore is optional until Phase 04 wires it — fall back to sql path.
+    tradesStore = ts ?? null;
   },
   commands: [
     {
@@ -67,15 +75,15 @@ const tradingModule = {
       name: "history",
       visibility: "public",
       description: "Show your last N trades (default 10, max 50)",
-      // handler is created lazily so it picks up the sql value set in init().
-      handler: (ctx) => createHistoryHandler(sql)(ctx),
+      // handler is created lazily so it picks up the stores set in init().
+      handler: (ctx) => createHistoryHandler(sql, tradesStore)(ctx),
     },
   ],
   crons: [
     {
       schedule: "0 17 * * *",
       name: "trim-trades",
-      handler: (event, ctx) => trimTradesHandler(event, ctx),
+      handler: (event, ctx) => trimTradesHandler(event, { ...ctx, tradesStore }),
     },
   ],
 };

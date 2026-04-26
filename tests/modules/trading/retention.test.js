@@ -6,12 +6,16 @@
  *   - SELECT id ... WHERE user_id = ? ORDER BY ts DESC LIMIT -1 OFFSET N
  *   - SELECT id ... ORDER BY ts DESC LIMIT -1 OFFSET N
  *   - DELETE FROM ... WHERE id IN (?, ...)
+ *
+ * Also covers the MongoTradesStore path added in Phase 03.
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createSqlStore } from "../../../src/db/create-sql-store.js";
+import { MongoTradesStore } from "../../../src/db/mongo-trades-store.js";
 import { trimTradesHandler } from "../../../src/modules/trading/retention.js";
 import { makeFakeD1 } from "../../fakes/fake-d1.js";
+import { makeFakeMongo } from "../../fakes/fake-mongo.js";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -191,5 +195,102 @@ describe("trimTradesHandler — idempotence", () => {
     const afterSecond = allRows(fakeDb).length;
 
     expect(afterFirst).toBe(afterSecond);
+  });
+});
+
+// ─── MongoTradesStore path (Phase 03) ────────────────────────────────────────
+
+/** Build a MongoTradesStore backed by a fresh fake Mongo db. */
+function makeTestTradesStore() {
+  const fakeDb = makeFakeMongo();
+  const tradesStore = new MongoTradesStore({}, fakeDb);
+  return { tradesStore };
+}
+
+/** Convenience: run trimTradesHandler with tradesStore, muted console output. */
+async function runTrimMongo(tradesStore, caps) {
+  const spy = vi.spyOn(console, "log").mockImplementation(() => {});
+  try {
+    await trimTradesHandler({}, { sql: null, tradesStore }, caps);
+  } finally {
+    spy.mockRestore();
+  }
+}
+
+describe("trimTradesHandler — tradesStore path (null sql)", () => {
+  it("skips when tradesStore is null and sql is null", async () => {
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    await expect(trimTradesHandler({}, { sql: null, tradesStore: null })).resolves.toBeUndefined();
+    logSpy.mockRestore();
+  });
+
+  it("per-user trim keeps newest rows via MongoTradesStore", async () => {
+    const { tradesStore } = makeTestTradesStore();
+    for (let i = 1; i <= 5; i++) {
+      await tradesStore.insert({
+        userId: 1,
+        symbol: "TCB",
+        side: "buy",
+        qty: 1,
+        priceVnd: 1,
+        ts: i,
+      });
+    }
+    await runTrimMongo(tradesStore, { perUserCap: 3, globalCap: 1000 });
+    const remaining = await tradesStore.byUser(1, 100);
+    expect(remaining).toHaveLength(3);
+    expect(remaining.map((t) => t.ts)).toEqual([5, 4, 3]);
+  });
+
+  it("global trim keeps newest rows across all users via MongoTradesStore", async () => {
+    const { tradesStore } = makeTestTradesStore();
+    for (let i = 1; i <= 8; i++) {
+      await tradesStore.insert({
+        userId: 1,
+        symbol: "TCB",
+        side: "buy",
+        qty: 1,
+        priceVnd: 1,
+        ts: i,
+      });
+    }
+    for (let i = 9; i <= 15; i++) {
+      await tradesStore.insert({
+        userId: 2,
+        symbol: "VNM",
+        side: "sell",
+        qty: 1,
+        priceVnd: 1,
+        ts: i,
+      });
+    }
+    await runTrimMongo(tradesStore, { perUserCap: 1000, globalCap: 10 });
+
+    const u1 = await tradesStore.byUser(1, 100);
+    const u2 = await tradesStore.byUser(2, 100);
+    expect(u1.length + u2.length).toBe(10);
+  });
+
+  it("uses tradesStore path even when sql is provided alongside tradesStore", async () => {
+    const { tradesStore } = makeTestTradesStore();
+    for (let i = 1; i <= 5; i++) {
+      await tradesStore.insert({
+        userId: 1,
+        symbol: "TCB",
+        side: "buy",
+        qty: 1,
+        priceVnd: 1,
+        ts: i,
+      });
+    }
+    // Provide a sql too — tradesStore must win.
+    const fakeD1 = makeFakeD1();
+    const sql = createSqlStore("trading", { DB: fakeD1 });
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    await trimTradesHandler({}, { sql, tradesStore }, { perUserCap: 3, globalCap: 1000 });
+    logSpy.mockRestore();
+    // D1 must not have been touched.
+    expect(fakeD1.runLog).toHaveLength(0);
+    expect(fakeD1.queryLog).toHaveLength(0);
   });
 });
