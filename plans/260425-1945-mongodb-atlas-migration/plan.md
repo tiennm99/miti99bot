@@ -1,15 +1,18 @@
 ---
 title: "Migrate miti99bot from CF KV+D1 to MongoDB Atlas M0"
 description: "Dual-write migration to Atlas M0 with explicit cold-start abort threshold and Upstash pivot path."
-status: planning
+status: code-complete
 priority: P2
 effort: 22h
-branch: main
+branch: dev
 tags: [storage, migration, mongodb, atlas, cloudflare-workers]
 created: 2026-04-25
+code_completed: 2026-04-26
 blockedBy: []
 blocks: []
 ---
+
+> **Status note:** All 8 phases of code/config/scripts/docs are implemented and committed on `dev` (commits `6f0b5ff`..`e2e3112`). 503 → 733 tests; lint clean; `register:dry` green. **Operator-driven execution is pending**: Atlas provisioning (Phase 01 §1-7), real-cluster smoke tests (Phase 01 §13-14), backfill runs (Phase 05), 24-72h soak (Phase 06), cutover stages (Phase 07), and Stage 3 code cleanup (delete CFKVStore/dual-stores after binding deletion). Plan stays here (not archived) until cutover lands or the Upstash standby (`phase-07-alt-pivot.md`) executes.
 
 # Plan: KV+D1 → MongoDB Atlas M0
 
@@ -33,15 +36,15 @@ User-chosen path despite research recommending Upstash. Goal: validate cold-star
 
 | # | Phase | Status | Effort | Owner files |
 |---|-------|--------|--------|-------------|
-| 01 | [Atlas setup + wrangler config](phase-01-atlas-setup.md) | pending | 2h | `wrangler.toml`, `.env.deploy.example`, `scripts/check-secret-leaks.js` |
-| 02 | [MongoKVStore implementation](phase-02-mongo-kv-store.md) | pending | 3h | `src/db/mongo-*.js` |
-| 03 | [MongoTradesStore + trading refactor](phase-03-mongo-sql-store.md) | pending | 3h | `src/db/mongo-trades-store.js`, `src/modules/trading/*` |
-| 04 | [Dual-write wrappers + flag + e2e](phase-04-dual-write-wrappers.md) | pending | 4h | `src/db/dual-*.js`, factories, `tests/e2e/*` |
-| 05 | [Backfill + verification (local-only)](phase-05-backfill-scripts.md) | pending | 3h | `scripts/backfill-*.js` |
-| 06 | [Staged deploy + soak (cold-start gate)](phase-06-staged-deploy-and-soak.md) | pending | 4h | runtime telemetry |
-| 07 | [Cutover + decommission](phase-07-cutover-and-decommission.md) | pending | 3h | wrangler bindings |
+| 01 | [Atlas setup + wrangler config](phase-01-atlas-setup.md) | code-complete · operator-pending | 2h | `wrangler.toml`, `.env.deploy.example`, `scripts/check-secret-leaks.js` |
+| 02 | [MongoKVStore implementation](phase-02-mongo-kv-store.md) | implemented (`5b00cae`) | 3h | `src/db/mongo-*.js` |
+| 03 | [MongoTradesStore + trading refactor](phase-03-mongo-sql-store.md) | implemented (`99cd844`) | 3h | `src/db/mongo-trades-store.js`, `src/modules/trading/*` |
+| 04 | [Dual-write wrappers + flag + e2e](phase-04-dual-write-wrappers.md) | implemented (`ea7df56`) | 4h | `src/db/dual-*.js`, factories, `tests/e2e/*` |
+| 05 | [Backfill + verification (local-only)](phase-05-backfill-scripts.md) | implemented · operator-runs (`0859356`) | 3h | `scripts/backfill-*.js` |
+| 06 | [Staged deploy + soak (cold-start gate)](phase-06-staged-deploy-and-soak.md) | code-complete · operator-runs (`55c8739`) | 4h | runtime telemetry |
+| 07 | [Cutover + decommission](phase-07-cutover-and-decommission.md) | prereqs-complete · operator-runs (`3f03521`) | 3h | wrangler bindings |
 | 07-ALT | [Pivot to Upstash (STANDBY)](phase-07-alt-pivot.md) | standby | (3-4d if triggered) | `src/db/upstash-*.js` |
-| 08 | [Tests + docs](phase-08-tests-and-docs.md) | pending | 1h | `tests/`, `docs/` |
+| 08 | [Tests + docs](phase-08-tests-and-docs.md) | implemented (`e2e3112`) | 1h | `tests/`, `docs/` |
 
 ## Critical dependencies
 - 01 → 02, 03 (Atlas creds + bundle-size gate required)
