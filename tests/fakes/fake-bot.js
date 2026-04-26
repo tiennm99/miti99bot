@@ -10,15 +10,22 @@ export function makeFakeBot() {
   const commandCalls = [];
   /** @type {Array<{event: string, handler: Function}>} */
   const onCalls = [];
+  /** @type {Array<Function>} */
+  const useCalls = [];
 
   return {
     commandCalls,
     onCalls,
+    useCalls,
     command(name, handler) {
       commandCalls.push({ name, handler });
     },
     on(event, handler) {
       onCalls.push({ event, handler });
+    },
+    /** Records middleware registered via bot.use() (e.g. timing middleware). */
+    use(middleware) {
+      useCalls.push(middleware);
     },
   };
 }
