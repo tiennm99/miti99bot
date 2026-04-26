@@ -128,6 +128,41 @@ export async function cfKvGet(accountId, nsId, token, key) {
   return res.text();
 }
 
+/**
+ * Write a string value into CF KV via the REST API.
+ *
+ * CF KV REST PUT: PUT /accounts/{id}/storage/kv/namespaces/{nsid}/values/{key}
+ * Optional query param `expiration_ttl` (seconds from now, minimum 60).
+ *
+ * @param {string} accountId
+ * @param {string} nsId
+ * @param {string} token
+ * @param {string} key
+ * @param {string} value
+ * @param {{ expirationTtl?: number }} [opts]
+ * @returns {Promise<void>}
+ */
+export async function cfKvPut(accountId, nsId, token, key, value, opts = {}) {
+  const url = new URL(
+    `${CF_API_BASE}/accounts/${accountId}/storage/kv/namespaces/${nsId}/values/${encodeURIComponent(key)}`,
+  );
+  if (opts.expirationTtl != null) {
+    url.searchParams.set("expiration_ttl", String(opts.expirationTtl));
+  }
+  const res = await fetch(url.toString(), {
+    method: "PUT",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "text/plain",
+    },
+    body: value,
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`CF KV put "${key}" ${res.status}: ${body}`);
+  }
+}
+
 // ─── MongoDB singleton ────────────────────────────────────────────────────────
 
 /** @type {MongoClient|null} */
