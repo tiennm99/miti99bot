@@ -13,6 +13,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   cfKvGet,
   cfKvList,
+  cfKvPut,
   clearCheckpoint,
   closeMongoClient,
   countDiffRatio,
@@ -254,6 +255,85 @@ describe("cfKvGet (fetch mock)", () => {
       }),
     );
     await expect(cfKvGet("acct", "ns", "tok", "missing:key")).rejects.toThrow("404");
+  });
+});
+
+// ─── cfKvPut ──────────────────────────────────────────────────────────────────
+
+describe("cfKvPut (fetch mock)", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  function mockFetch(status = 200) {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: status >= 200 && status < 300,
+        status,
+        text: () => Promise.resolve(""),
+      }),
+    );
+  }
+
+  it("issues a PUT request to the correct URL", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, text: () => Promise.resolve("") });
+    vi.stubGlobal("fetch", fetchMock);
+    await cfKvPut("acct", "ns", "tok", "my:key", "myvalue");
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toContain("/accounts/acct/storage/kv/namespaces/ns/values/my%3Akey");
+    expect(init.method).toBe("PUT");
+  });
+
+  it("sends Authorization Bearer header", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, text: () => Promise.resolve("") });
+    vi.stubGlobal("fetch", fetchMock);
+    await cfKvPut("acct", "ns", "TOKEN", "k", "v");
+    const init = fetchMock.mock.calls[0][1];
+    expect(init.headers.Authorization).toBe("Bearer TOKEN");
+  });
+
+  it("sends the value as the request body", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, text: () => Promise.resolve("") });
+    vi.stubGlobal("fetch", fetchMock);
+    await cfKvPut("acct", "ns", "tok", "k", "hello-value");
+    const init = fetchMock.mock.calls[0][1];
+    expect(init.body).toBe("hello-value");
+  });
+
+  it("appends expiration_ttl query param when provided", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, text: () => Promise.resolve("") });
+    vi.stubGlobal("fetch", fetchMock);
+    await cfKvPut("acct", "ns", "tok", "k", "v", { expirationTtl: 300 });
+    const url = fetchMock.mock.calls[0][0];
+    expect(url).toContain("expiration_ttl=300");
+  });
+
+  it("omits expiration_ttl query param when opts is empty", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, text: () => Promise.resolve("") });
+    vi.stubGlobal("fetch", fetchMock);
+    await cfKvPut("acct", "ns", "tok", "k", "v", {});
+    const url = fetchMock.mock.calls[0][0];
+    expect(url).not.toContain("expiration_ttl");
+  });
+
+  it("omits expiration_ttl when opts is omitted entirely", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, text: () => Promise.resolve("") });
+    vi.stubGlobal("fetch", fetchMock);
+    await cfKvPut("acct", "ns", "tok", "k", "v");
+    const url = fetchMock.mock.calls[0][0];
+    expect(url).not.toContain("expiration_ttl");
+  });
+
+  it("throws on HTTP error response", async () => {
+    mockFetch(403);
+    await expect(cfKvPut("acct", "ns", "tok", "k", "v")).rejects.toThrow("403");
+  });
+
+  it("URL-encodes special characters in key", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, text: () => Promise.resolve("") });
+    vi.stubGlobal("fetch", fetchMock);
+    await cfKvPut("acct", "ns", "tok", "key with spaces/slash", "v");
+    const url = fetchMock.mock.calls[0][0];
+    expect(url).toContain("key%20with%20spaces%2Fslash");
   });
 });
 
