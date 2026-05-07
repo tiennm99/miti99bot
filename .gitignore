@@ -79,6 +79,9 @@ web_modules/
 # Phase 05 backfill cursor checkpoints — persisted locally, must not be committed.
 .backfill-cursor-*.json
 
+# Local Claude Code agent state (memory, session permissions). Never committed.
+.claude/
+
 # parcel-bundler cache (https://parceljs.org/)
 .cache
 .parcel-cache
