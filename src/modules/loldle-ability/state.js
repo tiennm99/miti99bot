@@ -4,12 +4,28 @@
  */
 
 const MAX_GUESSES = 5;
+const MAX_GUESSES_CAP = 10;
 const GAME_TTL_SECONDS = 60 * 60 * 24 * 7;
 
 const gameKey = (subject) => `game:${subject}`;
 const statsKey = (subject) => `stats:${subject}`;
+const configKey = (subject) => `config:${subject}`;
 
-export { MAX_GUESSES };
+export { MAX_GUESSES, MAX_GUESSES_CAP };
+
+export async function getMaxGuesses(db, subject) {
+  const cfg = await db.getJSON(configKey(subject));
+  const n = cfg?.maxGuesses;
+  if (Number.isInteger(n) && n >= 1 && n <= MAX_GUESSES_CAP) return n;
+  return MAX_GUESSES;
+}
+
+export async function setMaxGuesses(db, subject, n) {
+  if (!Number.isInteger(n) || n < 1 || n > MAX_GUESSES_CAP) {
+    throw new RangeError(`maxGuesses must be an integer in [1, ${MAX_GUESSES_CAP}]`);
+  }
+  await db.putJSON(configKey(subject), { maxGuesses: n });
+}
 
 export async function loadGame(db, subject) {
   return db.getJSON(gameKey(subject));

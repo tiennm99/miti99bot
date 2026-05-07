@@ -23,7 +23,16 @@ import { compareChampions } from "./compare.js";
 import { attemptFlavor, formatDuration } from "./flavor.js";
 import { findChampion } from "./lookup.js";
 import { renderBoard, renderGuess } from "./render.js";
-import { MAX_GUESSES, clearGame, loadGame, loadStats, recordResult, saveGame } from "./state.js";
+import {
+  MAX_GUESSES_CAP,
+  clearGame,
+  getMaxGuesses,
+  loadGame,
+  loadStats,
+  recordResult,
+  saveGame,
+  setMaxGuesses,
+} from "./state.js";
 import { GIVEUP_STICKERS, LOSE_STICKERS, WIN_STICKERS, pickSticker } from "./stickers.js";
 
 /** @type {Array<Record<string, any>>} */
@@ -74,9 +83,9 @@ async function startFreshGame(db, subject) {
   return fresh;
 }
 
-async function getOrInitGame(db, subject) {
+async function getOrInitGame(db, subject, maxGuesses) {
   const existing = await loadGame(db, subject);
-  if (existing && existing.guesses.length < MAX_GUESSES) return existing;
+  if (existing && existing.guesses.length < maxGuesses) return existing;
   return startFreshGame(db, subject);
 }
 
@@ -100,10 +109,11 @@ export async function handleLoldle(ctx, db) {
   if (subject == null) return ctx.reply("Cannot identify chat.");
   const arg = argAfterCommand(ctx.message?.text ?? "");
 
-  const game = await getOrInitGame(db, subject);
+  const maxGuesses = await getMaxGuesses(db, subject);
+  const game = await getOrInitGame(db, subject, maxGuesses);
 
   if (!arg) {
-    const header = `Guess ${game.guesses.length}/${MAX_GUESSES}. Use <code>/loldle &lt;champion&gt;</code>.`;
+    const header = `Guess ${game.guesses.length}/${maxGuesses}. Use <code>/loldle &lt;champion&gt;</code>.`;
     const board = renderBoard(rehydrateGuesses(game));
     return ctx.reply(`${header}\n\n${board}`, { parse_mode: "HTML" });
   }
@@ -141,14 +151,14 @@ export async function handleLoldle(ctx, db) {
     const s = await recordResult(db, subject, true);
     await clearGame(db, subject);
     await trySendSticker(ctx, WIN_STICKERS);
-    const flavor = attemptFlavor(game.guesses.length, MAX_GUESSES);
+    const flavor = attemptFlavor(game.guesses.length, maxGuesses);
     return ctx.reply(
-      `${reply}\n\n🎉 ${flavor} ${champ}\n⏱ ${elapsed} · 🔥 Streak: ${s.streak} (${game.guesses.length}/${MAX_GUESSES})\n${NEW_ROUND_HINT}`,
+      `${reply}\n\n🎉 ${flavor} ${champ}\n⏱ ${elapsed} · 🔥 Streak: ${s.streak} (${game.guesses.length}/${maxGuesses})\n${NEW_ROUND_HINT}`,
       { parse_mode: "HTML" },
     );
   }
 
-  if (game.guesses.length >= MAX_GUESSES) {
+  if (game.guesses.length >= maxGuesses) {
     await recordResult(db, subject, false);
     await clearGame(db, subject);
     await trySendSticker(ctx, LOSE_STICKERS);
@@ -158,9 +168,28 @@ export async function handleLoldle(ctx, db) {
   }
 
   await saveGame(db, subject, game);
-  return ctx.reply(`${reply}\n\nGuess ${game.guesses.length}/${MAX_GUESSES}.`, {
+  return ctx.reply(`${reply}\n\nGuess ${game.guesses.length}/${maxGuesses}.`, {
     parse_mode: "HTML",
   });
+}
+
+/**
+ * Hidden command — set the per-subject MAX_GUESSES override (1..MAX_GUESSES_CAP).
+ * Takes effect on the next round; in-progress rounds keep the old value.
+ *
+ * @param {import("grammy").Context} ctx
+ * @param {import("../../db/kv-store-interface.js").KVStore} db
+ */
+export async function handleSetMax(ctx, db) {
+  const subject = getSubject(ctx);
+  if (subject == null) return ctx.reply("Cannot identify chat.");
+  const arg = argAfterCommand(ctx.message?.text ?? "");
+  const n = Number.parseInt(arg, 10);
+  if (!Number.isInteger(n) || n < 1 || n > MAX_GUESSES_CAP) {
+    return ctx.reply(`Usage: /loldle_setmax <1-${MAX_GUESSES_CAP}>`);
+  }
+  await setMaxGuesses(db, subject, n);
+  return ctx.reply(`✅ Loldle max guesses set to ${n} (applies to the next round).`);
 }
 
 /**

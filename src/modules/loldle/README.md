@@ -1,8 +1,9 @@
 # Loldle Module
 
-Classic-mode League of Legends champion guessing game. Players get 8 guesses
-to identify a hidden champion; each guess is compared across 7 attributes
-and the board is rendered as a monospace Telegram table.
+Classic-mode League of Legends champion guessing game. Players get 6 guesses
+(default; per-subject override via the hidden `/loldle_setmax` command, capped
+at 10) to identify a hidden champion; each guess is compared across 7
+attributes and the board is rendered as a monospace Telegram table.
 
 ## Data source
 
@@ -28,6 +29,7 @@ opens a PR whenever the data changes.
 | `/loldle` | public | Show current board, or submit a champion guess |
 | `/loldle_giveup` | public | Reveal the answer and end the round |
 | `/loldle_stats` | public | Show your wins / streak |
+| `/loldle_setmax <n>` | private | Override max guesses (1-10) for this subject; applies to next round |
 
 Submit a guess with `/loldle <champion>` (e.g. `/loldle Ahri`). Names match
 case/space/punctuation-insensitive with a unique-prefix fallback. A round
@@ -45,7 +47,8 @@ empty board gives no hints, so it shouldn't count against the clock.
 - `lookup.js` — normalizes user input to a champion record.
 - `render.js` — Telegram HTML `<pre>` monospace table with auto-widthed
   label column.
-- `state.js` — KV persistence (`MAX_GUESSES = 8`, per-subject stats).
+- `state.js` — KV persistence (`MAX_GUESSES = 6` default, `MAX_GUESSES_CAP = 10`,
+  per-subject stats and config override).
 - `handlers.js` — subject resolution (user id in DMs, chat id in groups) +
   command flow.
 - `flavor.js` — win-message text helpers.
@@ -63,6 +66,7 @@ KV namespace prefix: `loldle:`
 |-----|-------|
 | `game:<subject>` | `{ target, guesses, startedAt }` — active round (TTL 7 days). `guesses` is a championName array; comparison rows are recomputed at render time. |
 | `stats:<subject>` | `{ played, wins, streak, bestStreak }` |
+| `config:<subject>` | `{ maxGuesses }` — optional per-subject round-length override (1-10). Absent ⇒ default `MAX_GUESSES`. |
 
 ## Credits
 

@@ -24,9 +24,10 @@ describe("installDispatcher", () => {
     const env = { MODULES: "util,wordle,loldle,misc", KV: makeFakeKv() };
     const reg = await installDispatcher(bot, env);
 
-    // Expect 13 total commands (10 public + 1 protected + 2 private).
-    expect(bot.commandCalls).toHaveLength(13);
-    expect(reg.allCommands.size).toBe(13);
+    // Expect 14 total commands (10 public + 1 protected + 3 private —
+    // the third private is loldle's /loldle_setmax override command).
+    expect(bot.commandCalls).toHaveLength(14);
+    expect(reg.allCommands.size).toBe(14);
 
     const registeredNames = bot.commandCalls.map((c) => c.name).sort();
     const expected = [...reg.allCommands.keys()].sort();

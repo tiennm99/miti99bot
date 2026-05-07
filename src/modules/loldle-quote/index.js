@@ -4,7 +4,7 @@
  * (see scripts/fetch-ddragon-data.js).
  */
 
-import { handleGiveup, handleQuote, handleStats } from "./handlers.js";
+import { handleGiveup, handleQuote, handleSetMax, handleStats } from "./handlers.js";
 
 /** @type {import("../../db/kv-store-interface.js").KVStore | null} */
 let db = null;
@@ -33,6 +33,12 @@ const loldleQuoteModule = {
       visibility: "public",
       description: "Show your quote loldle stats (wins, streak)",
       handler: (ctx) => handleStats(ctx, db),
+    },
+    {
+      name: "loldle_quote_setmax",
+      visibility: "private",
+      description: "Override quote loldle max guesses per round (1-10)",
+      handler: (ctx) => handleSetMax(ctx, db),
     },
   ],
 };

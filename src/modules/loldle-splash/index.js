@@ -3,7 +3,7 @@
  * Skin pool scraped from loldle.net, splash URLs from Data Dragon CDN.
  */
 
-import { handleGiveup, handleSplash, handleStats } from "./handlers.js";
+import { handleGiveup, handleSetMax, handleSplash, handleStats } from "./handlers.js";
 
 /** @type {import("../../db/kv-store-interface.js").KVStore | null} */
 let db = null;
@@ -32,6 +32,12 @@ const loldleSplashModule = {
       visibility: "public",
       description: "Show your splash loldle stats (wins, streak)",
       handler: (ctx) => handleStats(ctx, db),
+    },
+    {
+      name: "loldle_splash_setmax",
+      visibility: "private",
+      description: "Override splash loldle max guesses per round (1-10)",
+      handler: (ctx) => handleSetMax(ctx, db),
     },
   ],
 };
