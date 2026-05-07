@@ -76,6 +76,9 @@ web_modules/
 !.dev.vars.example
 .wrangler/
 
+# Local Claude Code agent state (memory, session permissions). Never committed.
+.claude/
+
 # parcel-bundler cache (https://parceljs.org/)
 .cache
 .parcel-cache
