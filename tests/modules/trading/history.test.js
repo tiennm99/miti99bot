@@ -1,12 +1,10 @@
 /**
  * @file Tests for trading/history — recordTrade, listTrades, formatTradesHtml,
  * createHistoryHandler, and buy/sell → D1 integration.
- * Also covers the MongoTradesStore path (tradesStore arg) added in Phase 03.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createSqlStore } from "../../../src/db/create-sql-store.js";
-import { MongoTradesStore } from "../../../src/db/mongo-trades-store.js";
 import {
   createHistoryHandler,
   formatTradesHtml,
@@ -14,7 +12,6 @@ import {
   recordTrade,
 } from "../../../src/modules/trading/history.js";
 import { makeFakeD1 } from "../../fakes/fake-d1.js";
-import { makeFakeMongo } from "../../fakes/fake-mongo.js";
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -348,96 +345,5 @@ describe("buy/sell handlers → recordTrade integration", () => {
     };
     await handleBuy(ctx, db, safeOnTrade);
     expect(ctx.reply).toHaveBeenCalledWith(expect.stringContaining("Bought"));
-  });
-});
-
-// ─── MongoTradesStore path (Phase 03) ────────────────────────────────────────
-
-/** Build a MongoTradesStore backed by a fresh fake Mongo db. */
-function makeTestTradesStore() {
-  const fakeDb = makeFakeMongo();
-  const tradesStore = new MongoTradesStore({}, fakeDb);
-  return { fakeDb, tradesStore };
-}
-
-describe("recordTrade — tradesStore path", () => {
-  it("calls tradesStore.insert when tradesStore is provided", async () => {
-    const { tradesStore } = makeTestTradesStore();
-    const spy = vi.spyOn(tradesStore, "insert");
-    await recordTrade(null, TRADE, tradesStore);
-    expect(spy).toHaveBeenCalledOnce();
-    expect(spy).toHaveBeenCalledWith(expect.objectContaining({ userId: 1, symbol: "TCB" }));
-  });
-
-  it("does NOT call sql when tradesStore is provided", async () => {
-    const { fakeDb, sql } = makeTestSql();
-    const { tradesStore } = makeTestTradesStore();
-    await recordTrade(sql, TRADE, tradesStore);
-    // D1 runLog must be empty — Mongo path was used.
-    expect(fakeDb.runLog).toHaveLength(0);
-  });
-
-  it("logs error and does not throw when tradesStore.insert fails", async () => {
-    const { tradesStore } = makeTestTradesStore();
-    vi.spyOn(tradesStore, "insert").mockRejectedValue(new Error("mongo down"));
-    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-    await expect(recordTrade(null, TRADE, tradesStore)).resolves.toBeUndefined();
-    expect(errSpy).toHaveBeenCalledWith(
-      expect.stringContaining("recordTrade (mongo) failed"),
-      expect.any(Error),
-    );
-    errSpy.mockRestore();
-  });
-});
-
-describe("listTrades — tradesStore path", () => {
-  it("calls tradesStore.byUser when tradesStore is provided", async () => {
-    const { tradesStore } = makeTestTradesStore();
-    const spy = vi.spyOn(tradesStore, "byUser").mockResolvedValue([]);
-    await listTrades(null, 1, 10, tradesStore);
-    expect(spy).toHaveBeenCalledWith(1, 10);
-  });
-
-  it("returns mapped trades from tradesStore", async () => {
-    const { tradesStore } = makeTestTradesStore();
-    await tradesStore.insert({
-      userId: 1,
-      symbol: "VNM",
-      side: "sell",
-      qty: 5,
-      priceVnd: 80000,
-      ts: 500,
-    });
-    const trades = await listTrades(null, 1, 10, tradesStore);
-    expect(trades).toHaveLength(1);
-    expect(trades[0].symbol).toBe("VNM");
-    expect(trades[0].priceVnd).toBe(80000);
-  });
-
-  it("clamps limit before passing to tradesStore", async () => {
-    const { tradesStore } = makeTestTradesStore();
-    const spy = vi.spyOn(tradesStore, "byUser").mockResolvedValue([]);
-    await listTrades(null, 1, 999, tradesStore);
-    expect(spy).toHaveBeenCalledWith(1, 50);
-    await listTrades(null, 1, 0, tradesStore);
-    expect(spy).toHaveBeenCalledWith(1, 1);
-  });
-});
-
-describe("createHistoryHandler — tradesStore path", () => {
-  it("uses tradesStore when provided and sql is null", async () => {
-    const { tradesStore } = makeTestTradesStore();
-    await tradesStore.insert({
-      userId: 1,
-      symbol: "TCB",
-      side: "buy",
-      qty: 10,
-      priceVnd: 25000,
-      ts: 1,
-    });
-    const handler = createHistoryHandler(null, tradesStore);
-    const ctx = { match: "", from: { id: 1 }, reply: vi.fn() };
-    await handler(ctx);
-    expect(ctx.reply).toHaveBeenCalledWith(expect.stringContaining("TCB"), { parse_mode: "HTML" });
   });
 });

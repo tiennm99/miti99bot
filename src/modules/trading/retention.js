@@ -7,12 +7,10 @@
  *   2. Global FIFO pass: delete any rows beyond GLOBAL_CAP across all users
  *      (keeps the newest N rows globally).
  *
- * Backwards-compatibility: when `tradesStore` is present in ctx it is used
- * directly (Phase 04+). When absent the handler falls back to the D1 `sql`
- * path so it works unchanged until the factory wires in MongoTradesStore.
+ * Uses a hybrid SELECT-then-DELETE approach so it works with both the real
+ * Cloudflare D1 binding and the in-memory fake-d1 used in unit tests.
  *
  * @typedef {import("../../db/sql-store-interface.js").SqlStore} SqlStore
- * @typedef {import("../../db/mongo-trades-store.js").MongoTradesStore} MongoTradesStore
  */
 
 const TABLE = "trading_trades";
@@ -39,69 +37,16 @@ function buildDeleteByIds(ids) {
  * Daily cron handler — trims trading_trades to enforce per-user and global caps.
  *
  * @param {any} _event — Cloudflare ScheduledEvent (unused; present for handler contract).
- * @param {{ sql: SqlStore | null, tradesStore?: MongoTradesStore | null }} ctx
+ * @param {{ sql: SqlStore | null }} ctx
  * @param {{ perUserCap?: number, globalCap?: number }} [caps] — override caps (for tests).
  * @returns {Promise<void>}
  */
-export async function trimTradesHandler(_event, { sql, tradesStore }, caps = {}) {
-  // Mongo path (Phase 04+).
-  if (tradesStore != null) {
-    return trimWithMongoStore(tradesStore, caps);
-  }
-
-  // D1 fallback path.
+export async function trimTradesHandler(_event, { sql }, caps = {}) {
   if (sql === null) {
     console.log("[trim-trades] no D1 binding — skipping");
     return;
   }
-  return trimWithSql(sql, caps);
-}
 
-/**
- * Trim using MongoTradesStore direct methods.
- *
- * @param {MongoTradesStore} store
- * @param {{ perUserCap?: number, globalCap?: number }} caps
- * @returns {Promise<void>}
- */
-async function trimWithMongoStore(store, caps) {
-  const perUserCap = caps.perUserCap ?? PER_USER_CAP;
-  const globalCap = caps.globalCap ?? GLOBAL_CAP;
-
-  let perUserDeleted = 0;
-
-  // ── Pass 1: per-user trim ──────────────────────────────────────────────────
-  const userIds = await store.distinctUsers();
-
-  for (const userId of userIds) {
-    const oldIds = await store.oldRowsForUser(userId, perUserCap);
-    if (oldIds.length === 0) continue;
-    const result = await store.deleteByIds(oldIds);
-    perUserDeleted += result.deletedCount ?? oldIds.length;
-  }
-
-  console.log(`[trim-trades] per-user pass: deleted ${perUserDeleted} rows`);
-
-  // ── Pass 2: global FIFO trim ───────────────────────────────────────────────
-  const globalOldIds = await store.oldRows(globalCap);
-  let globalDeleted = 0;
-  if (globalOldIds.length > 0) {
-    const result = await store.deleteByIds(globalOldIds);
-    globalDeleted = result.deletedCount ?? globalOldIds.length;
-  }
-
-  console.log(`[trim-trades] global pass: deleted ${globalDeleted} rows`);
-  console.log(`[trim-trades] total deleted: ${perUserDeleted + globalDeleted} rows`);
-}
-
-/**
- * Trim using D1 SqlStore (legacy path).
- *
- * @param {SqlStore} sql
- * @param {{ perUserCap?: number, globalCap?: number }} caps
- * @returns {Promise<void>}
- */
-async function trimWithSql(sql, caps) {
   const perUserCap = caps.perUserCap ?? PER_USER_CAP;
   const globalCap = caps.globalCap ?? GLOBAL_CAP;
 

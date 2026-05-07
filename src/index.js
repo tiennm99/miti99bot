@@ -15,8 +15,6 @@
 import { webhookCallback } from "grammy";
 import { getBot, getRegistry } from "./bot.js";
 import { dispatchScheduled } from "./modules/cron-dispatcher.js";
-import { setLastCold } from "./util/request-context.js";
-import { takeColdFlag } from "./util/timing.js";
 
 /** @type {ReturnType<typeof webhookCallback> | null} */
 let cachedWebhookHandler = null;
@@ -61,27 +59,9 @@ export default {
    * @param {any} _ctx
    */
   async fetch(request, env, _ctx) {
-    // Capture cold-start flag first — must be before any await.
-    // Stored in shared request-context module so dispatcher middleware can read it
-    // without a circular import (index → bot → dispatcher → index).
-    const coldMeta = takeColdFlag();
-    setLastCold(coldMeta);
-
     const start = Date.now();
     const { pathname } = new URL(request.url);
     const method = request.method;
-
-    // Per-request cold-start log for CF Observability soak analysis.
-    console.log(
-      JSON.stringify({
-        event: "request",
-        method,
-        path: pathname,
-        cold: coldMeta.cold,
-        isolateAgeMs: coldMeta.isolateAgeMs,
-        ts: start,
-      }),
-    );
 
     const response = await route(request, env, pathname);
 

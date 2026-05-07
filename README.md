@@ -8,7 +8,7 @@ Modules are added or removed via a single `MODULES` env var. Each module registe
 
 - **Drop-in modules.** Write a single file, list the folder name in `MODULES`, redeploy. No registration boilerplate, no manual command wiring.
 - **Three visibility levels out of the box.** Public commands show in Telegram's `/` menu and `/help`; protected show only in `/help`; private are hidden slash-command easter eggs. One namespace, loud conflict detection.
-- **MongoDB Atlas backend.** Modules talk to a `KVStore` interface (MongoDB for simple state) or `MongoTradesStore` (MongoDB for trading append-only ledger). During migration, a dual-write layer persists to both Cloudflare KV/D1 and MongoDB for safety; post-cutover, MongoDB becomes the sole backend.
+- **Dual storage backends.** Modules talk to a small `KVStore` interface (Cloudflare KV for simple state) or `SqlStore` interface (D1 for relational data, scans, leaderboards). Swappable with one-file changes.
 - **Scheduled jobs.** Modules declare cron-based cleanup, stats refresh, or maintenance tasks — registered via `wrangler.toml` and dispatched automatically.
 - **Zero admin surface.** No in-Worker `/admin/*` routes, no admin secret. `setWebhook` + `setMyCommands` run at deploy time from a local node script.
 - **Tested.** 200+ vitest unit tests cover registry, storage, dispatcher, cron validation, help renderer, validators, HTML escaping, and the trading / loldle / wordle modules.
@@ -48,13 +48,11 @@ src/
 ├── types.js             # JSDoc typedefs (central: Env, Module, Command, Cron, etc.)
 ├── db/
 │   ├── kv-store-interface.js    # KVStore contract (JSDoc)
-│   ├── mongo-kv-store.js        # MongoDB KVStore implementation
-│   ├── mongo-trades-store.js    # MongoDB trading ledger implementation
-│   ├── dual-kv-store.js         # Dual-write wrapper (Mongo + CF KV)
-│   ├── create-store.js          # Storage factory (selects backend via STORAGE_PRIMARY flag)
-│   ├── cf-kv-store.js           # Cloudflare KV adapter (still active during migration)
-│   ├── cf-sql-store.js          # Cloudflare D1 adapter (still active during migration)
-│   └── mongo-client.js          # Shared memoized MongoDB connection
+│   ├── cf-kv-store.js           # Cloudflare KV implementation
+│   ├── create-store.js          # KV per-module prefixing factory
+│   ├── sql-store-interface.js   # SqlStore contract (JSDoc)
+│   ├── cf-sql-store.js          # Cloudflare D1 implementation
+│   └── create-sql-store.js      # D1 per-module prefixing factory
 ├── modules/
 │   ├── index.js             # static import map — register new modules here
 │   ├── registry.js          # load, validate, build command + cron tables
