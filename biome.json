@@ -31,7 +31,6 @@
     "ignore": [
       "node_modules",
       ".wrangler",
-      ".claude",
       "dist",
       "coverage",
       "src/modules/loldle/champions.json",

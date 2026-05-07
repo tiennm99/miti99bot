@@ -18,25 +18,12 @@
     "db:migrate": "node scripts/migrate.js",
     "register": "node --env-file-if-exists=.env.deploy scripts/register.js",
     "register:dry": "node --env-file-if-exists=.env.deploy scripts/register.js --dry-run",
-    "backfill:kv": "node --env-file-if-exists=.env.deploy scripts/backfill-kv-to-mongo.js",
-    "backfill:kv:dry": "node --env-file-if-exists=.env.deploy scripts/backfill-kv-to-mongo.js --dry-run",
-    "backfill:d1": "node --env-file-if-exists=.env.deploy scripts/backfill-d1-to-mongo.js",
-    "backfill:d1:dry": "node --env-file-if-exists=.env.deploy scripts/backfill-d1-to-mongo.js --dry-run",
-    "backfill:mongo:kv": "node --env-file-if-exists=.env.deploy scripts/backfill-mongo-to-kv.js",
-    "backfill:mongo:kv:dry": "node --env-file-if-exists=.env.deploy scripts/backfill-mongo-to-kv.js --dry-run",
-    "backfill:mongo:d1": "node --env-file-if-exists=.env.deploy scripts/backfill-mongo-to-d1.js",
-    "backfill:mongo:d1:dry": "node --env-file-if-exists=.env.deploy scripts/backfill-mongo-to-d1.js --dry-run",
-    "verify:mongo": "node --env-file-if-exists=.env.deploy scripts/verify-mongo-parity.js",
-    "wipe:mongo": "node --env-file-if-exists=.env.deploy scripts/wipe-mongo.js",
-    "analyze:soak": "node scripts/analyze-soak.js",
-    "burst:synthetic": "node scripts/synthetic-burst.js",
-    "lint": "biome check . && eslint src && node scripts/check-secret-leaks.js",
+    "lint": "biome check . && eslint src",
     "format": "biome format --write .",
     "test": "vitest run"
   },
   "dependencies": {
-    "grammy": "^1.30.0",
-    "mongodb": "^6.21.0"
+    "grammy": "^1.30.0"
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.0",

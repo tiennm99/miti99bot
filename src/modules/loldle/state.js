@@ -10,9 +10,10 @@
  * at render time, so the board always reflects the live champions.json.
  */
 
-// Default round length. Admins can override per-subject via the hidden
-// /loldle_setmax command (bounded by MAX_GUESSES_CAP).
-const MAX_GUESSES = 8;
+// Default round length. The 7-axis grid leaks enough info per guess that 6
+// is a fair target for typical play; admins can override per-subject via the
+// hidden /loldle_setmax command (bounded by MAX_GUESSES_CAP).
+const MAX_GUESSES = 6;
 const MAX_GUESSES_CAP = 10;
 // Upper bound for a round — long enough for any real session, short enough
 // that stale KV entries get reclaimed automatically.

@@ -1,51 +1,31 @@
 /**
- * @file history — Trade record + /history command for the trading module.
+ * @file history — D1-backed trade record + /history command for the trading module.
  *
  * Exports:
- *   recordTrade(sql, opts, tradesStore?)  — fire-and-forget insert; logs + swallows on failure.
- *   listTrades(sql, userId, limit, tradesStore?) — newest-first query; returns [] when both null.
- *   formatTradesHtml(trades)              — HTML-escaped compact list for Telegram HTML mode.
- *   createHistoryHandler(sql, tradesStore?) — grammY command handler factory.
- *
- * Backwards-compatibility: when `tradesStore` is provided (Phase 04+), it is
- * used exclusively. When absent the function falls back to the `sql` D1 path
- * so the module works unchanged until the factory wires in MongoTradesStore.
+ *   recordTrade(sql, opts)   — fire-and-forget insert; logs + swallows on failure.
+ *   listTrades(sql, userId, limit) — newest-first query; returns [] when sql null.
+ *   formatTradesHtml(trades) — HTML-escaped compact list for Telegram HTML mode.
+ *   createHistoryHandler(sql) — grammY command handler factory.
  */
 
 import { escapeHtml } from "../../util/escape-html.js";
 
 /** @typedef {import("../../types.js").Trade} Trade */
 /** @typedef {import("../../db/sql-store-interface.js").SqlStore} SqlStore */
-/** @typedef {import("../../db/mongo-trades-store.js").MongoTradesStore} MongoTradesStore */
 
 const TABLE = "trading_trades";
 const DEFAULT_LIMIT = 10;
 const MAX_LIMIT = 50;
 
 /**
- * Insert a trade row.
- *
- * Uses `tradesStore` when provided, otherwise falls back to `sql` (D1 path).
- * Silently skips when both are null. Failure is logged but never re-thrown —
- * portfolio KV is source of truth.
+ * Insert a trade row. Silently skips when sql is null (no D1 binding).
+ * Failure is logged but never re-thrown — portfolio KV is source of truth.
  *
  * @param {SqlStore | null} sql
  * @param {{ userId: number, symbol: string, side: "buy"|"sell", qty: number, priceVnd: number }} opts
- * @param {MongoTradesStore | null} [tradesStore]
  * @returns {Promise<void>}
  */
-export async function recordTrade(sql, { userId, symbol, side, qty, priceVnd }, tradesStore) {
-  // Mongo path (Phase 04+).
-  if (tradesStore != null) {
-    try {
-      await tradesStore.insert({ userId, symbol, side, qty, priceVnd });
-    } catch (err) {
-      console.error("[trading/history] recordTrade (mongo) failed:", err);
-    }
-    return;
-  }
-
-  // D1 fallback path.
+export async function recordTrade(sql, { userId, symbol, side, qty, priceVnd }) {
   if (sql === null) {
     console.warn("[trading/history] recordTrade skipped — no D1 binding");
     return;
@@ -67,26 +47,16 @@ export async function recordTrade(sql, { userId, symbol, side, qty, priceVnd }, 
 
 /**
  * Fetch the most recent trades for a user, newest first.
- *
- * Uses `tradesStore` when provided, otherwise falls back to `sql` (D1 path).
- * Returns [] when both are null or the table is empty.
+ * Returns [] when sql is null or the table is empty.
  *
  * @param {SqlStore | null} sql
  * @param {number} userId
  * @param {number} limit — clamped to [1, 50].
- * @param {MongoTradesStore | null} [tradesStore]
  * @returns {Promise<Trade[]>}
  */
-export async function listTrades(sql, userId, limit, tradesStore) {
-  const n = Math.max(1, Math.min(MAX_LIMIT, limit));
-
-  // Mongo path (Phase 04+).
-  if (tradesStore != null) {
-    return tradesStore.byUser(userId, n);
-  }
-
-  // D1 fallback path.
+export async function listTrades(sql, userId, limit) {
   if (sql === null) return [];
+  const n = Math.max(1, Math.min(MAX_LIMIT, limit));
   const rows = await sql.all(
     `SELECT id, user_id, symbol, side, qty, price_vnd, ts FROM ${TABLE} WHERE user_id = ? ORDER BY ts DESC LIMIT ?`,
     userId,
@@ -133,10 +103,9 @@ export function formatTradesHtml(trades) {
  * Replies with HTML trade list.
  *
  * @param {SqlStore | null} sql
- * @param {MongoTradesStore | null} [tradesStore]
  * @returns {(ctx: any) => Promise<void>}
  */
-export function createHistoryHandler(sql, tradesStore) {
+export function createHistoryHandler(sql) {
   return async (ctx) => {
     const userId = ctx.from?.id;
     if (!userId) return ctx.reply("Could not identify user.");
@@ -145,7 +114,7 @@ export function createHistoryHandler(sql, tradesStore) {
     // Invalid / zero / negative → default; > MAX_LIMIT → clamp inside listTrades.
     const n = Number.isFinite(raw) && raw > 0 ? raw : DEFAULT_LIMIT;
 
-    const trades = await listTrades(sql, userId, n, tradesStore);
+    const trades = await listTrades(sql, userId, n);
     const html = formatTradesHtml(trades);
     await ctx.reply(html, { parse_mode: "HTML" });
   };
