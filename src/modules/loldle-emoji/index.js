@@ -4,7 +4,7 @@
  * scripts/fetch-ddragon-data.js).
  */
 
-import { handleEmoji, handleGiveup, handleStats } from "./handlers.js";
+import { handleEmoji, handleGiveup, handleSetMax, handleStats } from "./handlers.js";
 
 /** @type {import("../../db/kv-store-interface.js").KVStore | null} */
 let db = null;
@@ -33,6 +33,12 @@ const loldleEmojiModule = {
       visibility: "public",
       description: "Show your emoji loldle stats (wins, streak)",
       handler: (ctx) => handleStats(ctx, db),
+    },
+    {
+      name: "loldle_emoji_setmax",
+      visibility: "private",
+      description: "Override emoji loldle max guesses per round (1-10)",
+      handler: (ctx) => handleSetMax(ctx, db),
     },
   ],
 };

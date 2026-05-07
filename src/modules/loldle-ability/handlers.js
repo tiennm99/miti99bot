@@ -9,7 +9,16 @@
 import { escapeHtml } from "../../util/escape-html.js";
 import abilitiesData from "./abilities.json" with { type: "json" };
 import { findChampion } from "./lookup.js";
-import { MAX_GUESSES, clearGame, loadGame, loadStats, recordResult, saveGame } from "./state.js";
+import {
+  MAX_GUESSES_CAP,
+  clearGame,
+  getMaxGuesses,
+  loadGame,
+  loadStats,
+  recordResult,
+  saveGame,
+  setMaxGuesses,
+} from "./state.js";
 
 const POOL = abilitiesData.filter((c) => c.abilities && c.abilities.length > 0);
 
@@ -57,14 +66,14 @@ async function startFreshGame(db, subject) {
   return fresh;
 }
 
-async function getOrInitGame(db, subject) {
+async function getOrInitGame(db, subject, maxGuesses) {
   const existing = await loadGame(db, subject);
-  if (existing && existing.guesses.length < MAX_GUESSES) return existing;
+  if (existing && existing.guesses.length < maxGuesses) return existing;
   return startFreshGame(db, subject);
 }
 
-function caption(guesses) {
-  return `🔮 Guess the champion from this ability. ${guesses.length}/${MAX_GUESSES} guesses so far.`;
+function caption(guesses, maxGuesses) {
+  return `🔮 Guess the champion from this ability. ${guesses.length}/${maxGuesses} guesses so far.`;
 }
 
 export async function handleAbility(ctx, db) {
@@ -72,7 +81,8 @@ export async function handleAbility(ctx, db) {
   if (subject == null) return ctx.reply("Cannot identify chat.");
   const arg = argAfterCommand(ctx.message?.text ?? "");
 
-  const game = await getOrInitGame(db, subject);
+  const maxGuesses = await getMaxGuesses(db, subject);
+  const game = await getOrInitGame(db, subject, maxGuesses);
   const target = findByName(game.target);
   const ability = target && getAbilityBySlot(target, game.slot);
   if (!target || !ability) {
@@ -83,7 +93,7 @@ export async function handleAbility(ctx, db) {
   }
 
   if (!arg) {
-    return ctx.replyWithPhoto(ability.icon, { caption: caption(game.guesses) });
+    return ctx.replyWithPhoto(ability.icon, { caption: caption(game.guesses, maxGuesses) });
   }
 
   const guess = findChampion(POOL, arg);
@@ -106,12 +116,12 @@ export async function handleAbility(ctx, db) {
     const s = await recordResult(db, subject, true);
     await clearGame(db, subject);
     return ctx.reply(
-      `🎉 Got it! That was <b>${answer}</b> — ${abilityLabel}. Solved in ${game.guesses.length}/${MAX_GUESSES}\n🔥 Streak: ${s.streak}\n${NEW_ROUND_HINT}`,
+      `🎉 Got it! That was <b>${answer}</b> — ${abilityLabel}. Solved in ${game.guesses.length}/${maxGuesses}\n🔥 Streak: ${s.streak}\n${NEW_ROUND_HINT}`,
       { parse_mode: "HTML" },
     );
   }
 
-  if (game.guesses.length >= MAX_GUESSES) {
+  if (game.guesses.length >= maxGuesses) {
     await recordResult(db, subject, false);
     await clearGame(db, subject);
     return ctx.reply(
@@ -122,9 +132,27 @@ export async function handleAbility(ctx, db) {
 
   await saveGame(db, subject, game);
   return ctx.reply(
-    `❌ Not <b>${escapeHtml(guess.championName)}</b>. Guess ${game.guesses.length}/${MAX_GUESSES}.`,
+    `❌ Not <b>${escapeHtml(guess.championName)}</b>. Guess ${game.guesses.length}/${maxGuesses}.`,
     { parse_mode: "HTML" },
   );
+}
+
+/**
+ * Hidden — set the per-subject MAX_GUESSES override (1..MAX_GUESSES_CAP).
+ *
+ * @param {import("grammy").Context} ctx
+ * @param {import("../../db/kv-store-interface.js").KVStore} db
+ */
+export async function handleSetMax(ctx, db) {
+  const subject = getSubject(ctx);
+  if (subject == null) return ctx.reply("Cannot identify chat.");
+  const arg = argAfterCommand(ctx.message?.text ?? "");
+  const n = Number.parseInt(arg, 10);
+  if (!Number.isInteger(n) || n < 1 || n > MAX_GUESSES_CAP) {
+    return ctx.reply(`Usage: /loldle_ability_setmax <1-${MAX_GUESSES_CAP}>`);
+  }
+  await setMaxGuesses(db, subject, n);
+  return ctx.reply(`✅ Loldle ability max guesses set to ${n} (applies to the next round).`);
 }
 
 export async function handleGiveup(ctx, db) {

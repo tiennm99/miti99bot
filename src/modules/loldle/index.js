@@ -3,7 +3,7 @@
  * Champion data is scraped weekly from loldle.net.
  */
 
-import { handleGiveup, handleLoldle, handleStats } from "./handlers.js";
+import { handleGiveup, handleLoldle, handleSetMax, handleStats } from "./handlers.js";
 
 /** @type {import("../../db/kv-store-interface.js").KVStore | null} */
 let db = null;
@@ -32,6 +32,12 @@ const loldleModule = {
       visibility: "public",
       description: "Show your loldle stats (wins, streak)",
       handler: (ctx) => handleStats(ctx, db),
+    },
+    {
+      name: "loldle_setmax",
+      visibility: "private",
+      description: "Override max guesses per round (1-10) for this chat",
+      handler: (ctx) => handleSetMax(ctx, db),
     },
   ],
 };

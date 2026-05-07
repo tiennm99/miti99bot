@@ -15,7 +15,16 @@ import { escapeHtml } from "../../util/escape-html.js";
 import emojisData from "./emojis.json" with { type: "json" };
 import { findChampion } from "./lookup.js";
 import { renderBoard } from "./render.js";
-import { MAX_GUESSES, clearGame, loadGame, loadStats, recordResult, saveGame } from "./state.js";
+import {
+  MAX_GUESSES_CAP,
+  clearGame,
+  getMaxGuesses,
+  loadGame,
+  loadStats,
+  recordResult,
+  saveGame,
+  setMaxGuesses,
+} from "./state.js";
 
 const POOL = emojisData.filter((c) => c.emojis && c.emojis.trim().length > 0);
 
@@ -49,9 +58,9 @@ async function startFreshGame(db, subject) {
   return fresh;
 }
 
-async function getOrInitGame(db, subject) {
+async function getOrInitGame(db, subject, maxGuesses) {
   const existing = await loadGame(db, subject);
-  if (existing && existing.guesses.length < MAX_GUESSES) return existing;
+  if (existing && existing.guesses.length < maxGuesses) return existing;
   return startFreshGame(db, subject);
 }
 
@@ -60,7 +69,8 @@ export async function handleEmoji(ctx, db) {
   if (subject == null) return ctx.reply("Cannot identify chat.");
   const arg = argAfterCommand(ctx.message?.text ?? "");
 
-  const game = await getOrInitGame(db, subject);
+  const maxGuesses = await getMaxGuesses(db, subject);
+  const game = await getOrInitGame(db, subject, maxGuesses);
   const target = findByName(game.target);
   if (!target) {
     // Pool refreshed mid-round and the target is gone — start over.
@@ -71,7 +81,7 @@ export async function handleEmoji(ctx, db) {
   }
 
   if (!arg) {
-    return ctx.reply(renderBoard(target.emojis, game.guesses, MAX_GUESSES), {
+    return ctx.reply(renderBoard(target.emojis, game.guesses, maxGuesses), {
       parse_mode: "HTML",
     });
   }
@@ -95,25 +105,43 @@ export async function handleEmoji(ctx, db) {
     const s = await recordResult(db, subject, true);
     await clearGame(db, subject);
     return ctx.reply(
-      `🎉 Got it! <b>${answer}</b> — solved in ${game.guesses.length}/${MAX_GUESSES}\n🔥 Streak: ${s.streak}\n${NEW_ROUND_HINT}`,
+      `🎉 Got it! <b>${answer}</b> — solved in ${game.guesses.length}/${maxGuesses}\n🔥 Streak: ${s.streak}\n${NEW_ROUND_HINT}`,
       { parse_mode: "HTML" },
     );
   }
 
-  if (game.guesses.length >= MAX_GUESSES) {
+  if (game.guesses.length >= maxGuesses) {
     await recordResult(db, subject, false);
     await clearGame(db, subject);
     return ctx.reply(
-      `${renderBoard(target.emojis, game.guesses, MAX_GUESSES)}\n\n❌ Out of guesses. Answer was <b>${answer}</b>.\n${NEW_ROUND_HINT}`,
+      `${renderBoard(target.emojis, game.guesses, maxGuesses)}\n\n❌ Out of guesses. Answer was <b>${answer}</b>.\n${NEW_ROUND_HINT}`,
       { parse_mode: "HTML" },
     );
   }
 
   await saveGame(db, subject, game);
   return ctx.reply(
-    `${renderBoard(target.emojis, game.guesses, MAX_GUESSES)}\n\n❌ Not <b>${escapeHtml(guess.championName)}</b>. Guess ${game.guesses.length}/${MAX_GUESSES}.`,
+    `${renderBoard(target.emojis, game.guesses, maxGuesses)}\n\n❌ Not <b>${escapeHtml(guess.championName)}</b>. Guess ${game.guesses.length}/${maxGuesses}.`,
     { parse_mode: "HTML" },
   );
+}
+
+/**
+ * Hidden — set the per-subject MAX_GUESSES override (1..MAX_GUESSES_CAP).
+ *
+ * @param {import("grammy").Context} ctx
+ * @param {import("../../db/kv-store-interface.js").KVStore} db
+ */
+export async function handleSetMax(ctx, db) {
+  const subject = getSubject(ctx);
+  if (subject == null) return ctx.reply("Cannot identify chat.");
+  const arg = argAfterCommand(ctx.message?.text ?? "");
+  const n = Number.parseInt(arg, 10);
+  if (!Number.isInteger(n) || n < 1 || n > MAX_GUESSES_CAP) {
+    return ctx.reply(`Usage: /loldle_emoji_setmax <1-${MAX_GUESSES_CAP}>`);
+  }
+  await setMaxGuesses(db, subject, n);
+  return ctx.reply(`✅ Loldle emoji max guesses set to ${n} (applies to the next round).`);
 }
 
 export async function handleGiveup(ctx, db) {

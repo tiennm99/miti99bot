@@ -3,7 +3,7 @@
  * Pool seeded from Data Dragon (same source loldle.net uses at runtime).
  */
 
-import { handleAbility, handleGiveup, handleStats } from "./handlers.js";
+import { handleAbility, handleGiveup, handleSetMax, handleStats } from "./handlers.js";
 
 /** @type {import("../../db/kv-store-interface.js").KVStore | null} */
 let db = null;
@@ -32,6 +32,12 @@ const loldleAbilityModule = {
       visibility: "public",
       description: "Show your ability loldle stats (wins, streak)",
       handler: (ctx) => handleStats(ctx, db),
+    },
+    {
+      name: "loldle_ability_setmax",
+      visibility: "private",
+      description: "Override ability loldle max guesses per round (1-10)",
+      handler: (ctx) => handleSetMax(ctx, db),
     },
   ],
 };
