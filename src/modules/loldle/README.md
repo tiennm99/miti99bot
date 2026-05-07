@@ -1,6 +1,6 @@
 # Loldle Module
 
-Classic-mode League of Legends champion guessing game. Players get 6 guesses
+Classic-mode League of Legends champion guessing game. Players get 8 guesses
 (default; per-subject override via the hidden `/loldle_setmax` command, capped
 at 10) to identify a hidden champion; each guess is compared across 7
 attributes and the board is rendered as a monospace Telegram table.
@@ -47,7 +47,7 @@ empty board gives no hints, so it shouldn't count against the clock.
 - `lookup.js` — normalizes user input to a champion record.
 - `render.js` — Telegram HTML `<pre>` monospace table with auto-widthed
   label column.
-- `state.js` — KV persistence (`MAX_GUESSES = 6` default, `MAX_GUESSES_CAP = 10`,
+- `state.js` — KV persistence (`MAX_GUESSES = 8` default, `MAX_GUESSES_CAP = 10`,
   per-subject stats and config override).
 - `handlers.js` — subject resolution (user id in DMs, chat id in groups) +
   command flow.

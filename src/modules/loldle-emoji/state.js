@@ -10,10 +10,9 @@
  * keeps stats isolated per mode.
  */
 
-// Default tightened from 5 → 4: three emojis are a strong signal, so 4 keeps
-// tension without being unfair. Admins can override per-subject via the
-// hidden /loldle_emoji_setmax command (bounded by MAX_GUESSES_CAP).
-const MAX_GUESSES = 4;
+// Default round length. Admins can override per-subject via the hidden
+// /loldle_emoji_setmax command (bounded by MAX_GUESSES_CAP).
+const MAX_GUESSES = 5;
 const MAX_GUESSES_CAP = 10;
 const GAME_TTL_SECONDS = 60 * 60 * 24 * 7;
 
