@@ -3,6 +3,9 @@
  * lolesports.com esports-api (the data feed behind lolesports.com).
  *
  * Commands:
+ *   /lolschedule [date] — matches for a specific ICT day (defaults to today).
+ *                         Accepts dd-mm-yyyy, dd/mm/yyyy, ddmmyyyy; trailing
+ *                         month/year may be omitted.
  *   /lolschedule_today — matches scheduled for the current ICT day, with live/played scores.
  *   /lolschedule_week  — next 7 ICT days, grouped per day → league.
  *
@@ -16,6 +19,7 @@
 
 import {
   handleDailyPushCron,
+  handleSchedule,
   handleSubscribe,
   handleToday,
   handleUnsubscribe,
@@ -32,6 +36,12 @@ const lolscheduleModule = {
     db = store;
   },
   commands: [
+    {
+      name: "lolschedule",
+      visibility: "public",
+      description: "LoL matches for a date (dd-mm-yyyy, dd/mm/yyyy, ddmmyyyy; default today)",
+      handler: (ctx) => handleSchedule(ctx, db),
+    },
     {
       name: "lolschedule_today",
       visibility: "public",

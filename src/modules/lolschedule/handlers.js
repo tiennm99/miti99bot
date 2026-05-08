@@ -9,6 +9,7 @@
 
 import { getEventsCached } from "./api-client.js";
 import { renderToday, renderWeek } from "./format.js";
+import { parseScheduleDate } from "./parse-date.js";
 import { addSubscriber, listSubscribers, removeSubscriber } from "./subscribers.js";
 
 const ICT_OFFSET_MS = 7 * 60 * 60 * 1000;
@@ -62,6 +63,35 @@ export async function handleToday(ctx, db) {
   } catch (err) {
     console.log(JSON.stringify({ msg: "lolschedule_today_fail", err: String(err) }));
     await ctx.reply("Could not fetch today's matches. Try again later.");
+  }
+}
+
+/**
+ * /lolschedule [date] — schedule for a specific ICT day. Accepts dd-mm-yyyy,
+ * dd/mm/yyyy, or ddmmyyyy with trailing month/year optional. Empty → today.
+ *
+ * @param {import("grammy").Context} ctx
+ * @param {import("../../db/kv-store-interface.js").KVStore | null} db
+ */
+export async function handleSchedule(ctx, db) {
+  if (!db) {
+    await ctx.reply("lolschedule: storage unavailable");
+    return;
+  }
+  const arg = (ctx.match || "").trim();
+  const parsed = parseScheduleDate(arg);
+  if (!parsed.ok) {
+    await ctx.reply(parsed.error);
+    return;
+  }
+  const from = parsed.date;
+  const to = addDays(from, 1);
+  try {
+    const events = filterMajor(await getEventsCached(db, from, to));
+    await ctx.reply(renderToday(events, from), { parse_mode: "HTML" });
+  } catch (err) {
+    console.log(JSON.stringify({ msg: "lolschedule_fail", err: String(err) }));
+    await ctx.reply("Could not fetch matches. Try again later.");
   }
 }
 
