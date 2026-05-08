@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createStore } from "../../../src/db/create-store.js";
 import {
   handleDailyPushCron,
+  handleSchedule,
   handleSubscribe,
   handleUnsubscribe,
 } from "../../../src/modules/lolschedule/handlers.js";
@@ -78,6 +79,48 @@ describe("handleSubscribe / handleUnsubscribe", () => {
     const ctx = fakeCtx(null);
     await handleSubscribe(ctx, db);
     expect(ctx.replied[0].text).toMatch(/Could not read chat id/);
+  });
+});
+
+describe("handleSchedule", () => {
+  let db;
+
+  beforeEach(() => {
+    db = createStore("lolschedule", { KV: makeFakeKv() });
+  });
+
+  afterEach(() => vi.restoreAllMocks());
+
+  it("replies with a parse error on a bad date param", async () => {
+    const ctx = { ...fakeCtx(1), match: "abc" };
+    await handleSchedule(ctx, db);
+    expect(ctx.replied[0].text).toMatch(/Invalid date/);
+  });
+
+  it("rejects a 6-digit blob (month+year without day)", async () => {
+    const ctx = { ...fakeCtx(1), match: "052026" };
+    await handleSchedule(ctx, db);
+    expect(ctx.replied[0].text).toMatch(/Invalid date/);
+  });
+
+  it("fetches the requested ICT day when input parses", async () => {
+    global.fetch = vi.fn(async () => scheduleResponse([majorEvt("2025-06-01T09:00:00Z")]));
+    const ctx = { ...fakeCtx(1), match: "01-06-2025" };
+    await handleSchedule(ctx, db);
+    expect(ctx.replied[0].text).toMatch(/LCK/);
+    expect(ctx.replied[0].opts).toEqual({ parse_mode: "HTML" });
+  });
+
+  it("defaults to today when input is empty", async () => {
+    const ictOffsetMs = 7 * 60 * 60 * 1000;
+    const ictDayStart = new Date(
+      new Date(Date.now() + ictOffsetMs).setUTCHours(0, 0, 0, 0) - ictOffsetMs,
+    );
+    const pickTime = new Date(ictDayStart.getTime() + 12 * 60 * 60 * 1000).toISOString();
+    global.fetch = vi.fn(async () => scheduleResponse([majorEvt(pickTime)]));
+    const ctx = { ...fakeCtx(1), match: "" };
+    await handleSchedule(ctx, db);
+    expect(ctx.replied[0].text).toMatch(/LCK/);
   });
 });
 
