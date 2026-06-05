@@ -76,6 +76,15 @@ curl "https://api.telegram.org/bot$TOKEN/getWebhookInfo" | jq .
 ```
 Expect: `url` matches Function URL, `pending_update_count` ≈ 0, `last_error_date` empty.
 
+## Trading income events API
+
+`/trade_income_events` uses a FireAnt REST API, configured at Lambda runtime:
+
+- `TRADING_INCOME_EVENTS_API_URL`: FireAnt base URL; defaults to `https://restv2.fireant.vn`. The bot calls `/symbols/{symbol}/timescale-marks` with `startDate` and `endDate`.
+- `TRADING_INCOME_EVENTS_API_TOKEN`: bearer token for FireAnt. Store it directly only for local dev; in AWS prefer `TRADING_INCOME_EVENTS_API_TOKEN_PARAMETER_NAME`.
+
+FireAnt response is an array of timescale marks with `id`, `label`, `date`, `title`, and `color`. The bot keeps marks whose label/title indicate dividends, ex-right dates, final registration dates, rights issues, or bonus/share dividends.
+
 ## Rotate secrets
 
 ```sh
