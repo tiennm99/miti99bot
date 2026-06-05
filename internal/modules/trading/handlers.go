@@ -22,6 +22,7 @@ import (
 type state struct {
 	kv                storage.KVStore
 	prices            *PriceClient
+	incomeEvents      *IncomeEventClient
 	locks             keylock.Map
 	nowFn             func() time.Time
 	comingSoonMessage string // exposed for tests / future i18n
@@ -39,6 +40,7 @@ func newState(kv storage.KVStore) *state {
 	return &state{
 		kv:                kv,
 		prices:            &PriceClient{},
+		incomeEvents:      NewIncomeEventClientFromEnv(),
 		comingSoonMessage: "Crypto, gold & currency exchange coming soon!",
 	}
 }
@@ -217,6 +219,104 @@ func (s *state) handleSell(ctx context.Context, b *bot.Bot, update *models.Updat
 	return chathelper.Reply(ctx, b, update.Message,
 		"Sold "+FormatStock(float64(qty))+" "+resolved.Symbol+
 			" @ "+FormatVND(price)+"\nRevenue: "+FormatVND(revenue)+
+			"\nRemaining: "+FormatVND(p.Currency["VND"]))
+}
+
+func (s *state) handleIncomeStock(ctx context.Context, b *bot.Bot, update *models.Update) error {
+	userID, ok := senderInfo(update)
+	if !ok {
+		return chathelper.Reply(ctx, b, update.Message,
+			"Cannot identify user — trading only works in private/group chats with a sender.")
+	}
+	args := argsAfterCommand(update.Message.Text)
+	if len(args) < 2 {
+		return chathelper.Reply(ctx, b, update.Message,
+			"Usage: /trade_income_stock <qty> <TICKER>\nExample: /trade_income_stock 200 TCX")
+	}
+	qty, err := strconv.ParseInt(args[0], 10, 64)
+	if err != nil || qty <= 0 {
+		return chathelper.Reply(ctx, b, update.Message, "Quantity must be a positive whole number.")
+	}
+
+	resolved, err := ResolveSymbol(ctx, s.kv, s.prices, args[1])
+	if err != nil {
+		if errors.Is(err, ErrUnknownTicker) {
+			return chathelper.Reply(ctx, b, update.Message,
+				"Unknown stock ticker \""+strings.ToUpper(args[1])+"\".")
+		}
+		log.Error("trading_resolve_symbol", "ticker", args[1], "err", err)
+		return chathelper.Reply(ctx, b, update.Message, "Could not look up that ticker. Try again later.")
+	}
+
+	defer s.locks.Acquire(strconv.FormatInt(userID, 10))()
+
+	p, err := LoadPortfolio(ctx, s.kv, userID, s.now().UnixMilli())
+	if err != nil {
+		log.Error("trading_load_portfolio", "user", userID, "err", err)
+		return chathelper.Reply(ctx, b, update.Message, "Could not load portfolio. Try again later.")
+	}
+	held := p.Assets[resolved.Symbol]
+	if held == 0 {
+		return chathelper.Reply(ctx, b, update.Message,
+			"You don't hold any "+resolved.Symbol+" to receive a stock dividend.")
+	}
+	p.AddAsset(resolved.Symbol, qty)
+	if err := SavePortfolio(ctx, s.kv, userID, p); err != nil {
+		log.Error("trading_save_portfolio", "user", userID, "err", err)
+		return chathelper.Reply(ctx, b, update.Message, "Could not save portfolio. Try again later.")
+	}
+	return chathelper.Reply(ctx, b, update.Message,
+		"Stock dividend: +"+FormatStock(float64(qty))+" "+resolved.Symbol+
+			"\nHolding: "+FormatStock(float64(held))+" → "+FormatStock(float64(p.Assets[resolved.Symbol])))
+}
+
+func (s *state) handleIncomeVND(ctx context.Context, b *bot.Bot, update *models.Update) error {
+	userID, ok := senderInfo(update)
+	if !ok {
+		return chathelper.Reply(ctx, b, update.Message,
+			"Cannot identify user — trading only works in private/group chats with a sender.")
+	}
+	args := argsAfterCommand(update.Message.Text)
+	if len(args) < 2 {
+		return chathelper.Reply(ctx, b, update.Message,
+			"Usage: /trade_income_vnd <amount_per_share> <TICKER>\nExample: /trade_income_vnd 1500 TCX")
+	}
+	amountPerShare, err := strconv.ParseFloat(args[0], 64)
+	if err != nil || amountPerShare <= 0 {
+		return chathelper.Reply(ctx, b, update.Message, "Amount per share must be a positive number.")
+	}
+
+	resolved, err := ResolveSymbol(ctx, s.kv, s.prices, args[1])
+	if err != nil {
+		if errors.Is(err, ErrUnknownTicker) {
+			return chathelper.Reply(ctx, b, update.Message,
+				"Unknown stock ticker \""+strings.ToUpper(args[1])+"\".")
+		}
+		log.Error("trading_resolve_symbol", "ticker", args[1], "err", err)
+		return chathelper.Reply(ctx, b, update.Message, "Could not look up that ticker. Try again later.")
+	}
+
+	defer s.locks.Acquire(strconv.FormatInt(userID, 10))()
+
+	p, err := LoadPortfolio(ctx, s.kv, userID, s.now().UnixMilli())
+	if err != nil {
+		log.Error("trading_load_portfolio", "user", userID, "err", err)
+		return chathelper.Reply(ctx, b, update.Message, "Could not load portfolio. Try again later.")
+	}
+	held := p.Assets[resolved.Symbol]
+	if held == 0 {
+		return chathelper.Reply(ctx, b, update.Message,
+			"You don't hold any "+resolved.Symbol+" to receive a cash dividend.")
+	}
+	total := amountPerShare * float64(held)
+	p.AddCurrency("VND", total)
+	if err := SavePortfolio(ctx, s.kv, userID, p); err != nil {
+		log.Error("trading_save_portfolio", "user", userID, "err", err)
+		return chathelper.Reply(ctx, b, update.Message, "Could not save portfolio. Try again later.")
+	}
+	return chathelper.Reply(ctx, b, update.Message,
+		"Cash dividend: "+FormatVND(amountPerShare)+" × "+FormatStock(float64(held))+" "+resolved.Symbol+
+			" = "+FormatVND(total)+
 			"\nRemaining: "+FormatVND(p.Currency["VND"]))
 }
 
