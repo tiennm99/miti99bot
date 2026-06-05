@@ -30,6 +30,24 @@ func New(deps modules.Deps) modules.Module {
 				Handler:     s.handleSell,
 			},
 			{
+				Name:        "trade_income_stock",
+				Visibility:  modules.VisibilityPublic,
+				Description: "Record stock dividend (bonus shares)",
+				Handler:     s.handleIncomeStock,
+			},
+			{
+				Name:        "trade_income_vnd",
+				Visibility:  modules.VisibilityPublic,
+				Description: "Record cash dividend (VND per share)",
+				Handler:     s.handleIncomeVND,
+			},
+			{
+				Name:        "trade_income_events",
+				Visibility:  modules.VisibilityPublic,
+				Description: "Check recent income events from FireAnt",
+				Handler:     s.handleIncomeEvents,
+			},
+			{
 				Name:        "trade_convert",
 				Visibility:  modules.VisibilityPublic,
 				Description: "Currency exchange (coming soon)",

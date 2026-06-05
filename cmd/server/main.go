@@ -82,6 +82,8 @@ func main() {
 		log.Fatal("missing required env", "key", "TELEGRAM_WEBHOOK_SECRET",
 			"why", "non-empty secret is the only auth on /webhook")
 	}
+	exportOptionalEnv("TRADING_INCOME_EVENTS_API_URL", cfg.TradingIncomeEventsAPIURL)
+	exportOptionalEnv("TRADING_INCOME_EVENTS_API_TOKEN", cfg.TradingIncomeEventsAPIToken)
 
 	// Periodic metrics flush. Cancels with rootCtx and emits one final
 	// flush on shutdown so the trailing window isn't lost.
@@ -247,22 +249,25 @@ func buildProvider(ctx context.Context, cfg config) (storage.KVProvider, func(),
 }
 
 type config struct {
-	Port                  string
-	TelegramBotToken      string
-	WebhookSecret         string
-	CronSecret            string
-	FirestoreProject      string
-	FirestoreEmulatorHost string
-	GeminiAPIKey          string
-	Modules               []string
-	BotOwnerID            int64
-	AdminUserIDs          map[int64]bool
-	KVProvider            string // empty = auto-detect; or "memory"|"firestore"|"dynamodb"
-	DynamoDBTable         string // required when KVProvider=dynamodb
-	TelegramBotTokenParam string
-	WebhookSecretParam    string
-	CronSecretParam       string
-	GeminiAPIKeyParam     string
+	Port                             string
+	TelegramBotToken                 string
+	WebhookSecret                    string
+	CronSecret                       string
+	FirestoreProject                 string
+	FirestoreEmulatorHost            string
+	GeminiAPIKey                     string
+	TradingIncomeEventsAPIURL        string
+	TradingIncomeEventsAPIToken      string
+	Modules                          []string
+	BotOwnerID                       int64
+	AdminUserIDs                     map[int64]bool
+	KVProvider                       string // empty = auto-detect; or "memory"|"firestore"|"dynamodb"
+	DynamoDBTable                    string // required when KVProvider=dynamodb
+	TelegramBotTokenParam            string
+	WebhookSecretParam               string
+	CronSecretParam                  string
+	GeminiAPIKeyParam                string
+	TradingIncomeEventsAPITokenParam string
 }
 
 func loadConfig() config {
@@ -283,22 +288,25 @@ func loadConfig() config {
 		log.Fatal("invalid PORT", "value", port)
 	}
 	return config{
-		Port:                  port,
-		TelegramBotToken:      envMap["TELEGRAM_BOT_TOKEN"],
-		WebhookSecret:         envMap["TELEGRAM_WEBHOOK_SECRET"],
-		CronSecret:            envMap["CRON_SHARED_SECRET"],
-		FirestoreProject:      envMap["GOOGLE_CLOUD_PROJECT"],
-		FirestoreEmulatorHost: envMap["FIRESTORE_EMULATOR_HOST"],
-		GeminiAPIKey:          envMap["GEMINI_API_KEY"],
-		Modules:               splitCSV(envMap["MODULES"]),
-		BotOwnerID:            parseInt64(envMap["BOT_OWNER_ID"]),
-		AdminUserIDs:          parseInt64Set(envMap["ADMIN_USER_IDS"]),
-		KVProvider:            envMap["KV_PROVIDER"],
-		DynamoDBTable:         envMap["DYNAMODB_TABLE"],
-		TelegramBotTokenParam: strings.TrimSpace(envMap["TELEGRAM_BOT_TOKEN_PARAMETER_NAME"]),
-		WebhookSecretParam:    strings.TrimSpace(envMap["TELEGRAM_WEBHOOK_SECRET_PARAMETER_NAME"]),
-		CronSecretParam:       strings.TrimSpace(envMap["CRON_SHARED_SECRET_PARAMETER_NAME"]),
-		GeminiAPIKeyParam:     strings.TrimSpace(envMap["GEMINI_API_KEY_PARAMETER_NAME"]),
+		Port:                             port,
+		TelegramBotToken:                 envMap["TELEGRAM_BOT_TOKEN"],
+		WebhookSecret:                    envMap["TELEGRAM_WEBHOOK_SECRET"],
+		CronSecret:                       envMap["CRON_SHARED_SECRET"],
+		FirestoreProject:                 envMap["GOOGLE_CLOUD_PROJECT"],
+		FirestoreEmulatorHost:            envMap["FIRESTORE_EMULATOR_HOST"],
+		GeminiAPIKey:                     envMap["GEMINI_API_KEY"],
+		TradingIncomeEventsAPIURL:        envMap["TRADING_INCOME_EVENTS_API_URL"],
+		TradingIncomeEventsAPIToken:      envMap["TRADING_INCOME_EVENTS_API_TOKEN"],
+		Modules:                          splitCSV(envMap["MODULES"]),
+		BotOwnerID:                       parseInt64(envMap["BOT_OWNER_ID"]),
+		AdminUserIDs:                     parseInt64Set(envMap["ADMIN_USER_IDS"]),
+		KVProvider:                       envMap["KV_PROVIDER"],
+		DynamoDBTable:                    envMap["DYNAMODB_TABLE"],
+		TelegramBotTokenParam:            strings.TrimSpace(envMap["TELEGRAM_BOT_TOKEN_PARAMETER_NAME"]),
+		WebhookSecretParam:               strings.TrimSpace(envMap["TELEGRAM_WEBHOOK_SECRET_PARAMETER_NAME"]),
+		CronSecretParam:                  strings.TrimSpace(envMap["CRON_SHARED_SECRET_PARAMETER_NAME"]),
+		GeminiAPIKeyParam:                strings.TrimSpace(envMap["GEMINI_API_KEY_PARAMETER_NAME"]),
+		TradingIncomeEventsAPITokenParam: strings.TrimSpace(envMap["TRADING_INCOME_EVENTS_API_TOKEN_PARAMETER_NAME"]),
 	}
 }
 
@@ -311,6 +319,7 @@ func resolveSSMSecrets(ctx context.Context, cfg *config) error {
 		{name: cfg.WebhookSecretParam, target: &cfg.WebhookSecret},
 		{name: cfg.CronSecretParam, target: &cfg.CronSecret},
 		{name: cfg.GeminiAPIKeyParam, target: &cfg.GeminiAPIKey},
+		{name: cfg.TradingIncomeEventsAPITokenParam, target: &cfg.TradingIncomeEventsAPIToken},
 	}
 
 	targetsByName := map[string][]*string{}
@@ -357,6 +366,15 @@ func resolveSSMSecrets(ctx context.Context, cfg *config) error {
 	}
 	log.Info("loaded secrets from ssm", "count", len(out.Parameters))
 	return nil
+}
+
+func exportOptionalEnv(key, value string) {
+	if strings.TrimSpace(value) == "" {
+		return
+	}
+	if err := os.Setenv(key, value); err != nil {
+		log.Warn("could not export optional env", "key", key, "err", err)
+	}
 }
 
 func splitCSV(s string) []string {
