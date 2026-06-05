@@ -88,26 +88,13 @@ func (c *IncomeEventClient) FetchRecent(ctx context.Context, ticker string, sinc
 		return nil, ErrIncomeEventClientNotConfigured
 	}
 
-	endpoint, err := url.Parse(c.URL)
+	fullURL, err := fireAntMarksURL(c.URL, ticker, since, until)
 	if err != nil {
-		return nil, fmt.Errorf("trading: parse FireAnt URL: %w", err)
+		return nil, err
 	}
-	if endpoint.Scheme != "https" && !(endpoint.Scheme == "http" && strings.HasPrefix(endpoint.Host, "127.0.0.1:")) && !(endpoint.Scheme == "http" && strings.HasPrefix(endpoint.Host, "localhost:")) {
-		return nil, fmt.Errorf("trading: income events API URL must be https")
-	}
-	endpoint.Path = strings.TrimRight(endpoint.Path, "/") + "/symbols/" + url.PathEscape(ticker) + "/timescale-marks"
-	q := endpoint.Query()
-	q.Set("startDate", since.Format(time.RFC3339))
-	q.Set("endDate", until.Format(time.RFC3339))
-	endpoint.RawQuery = q.Encode()
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint.String(), nil)
+	req, err := fireAntRequest(ctx, fullURL, c.Token)
 	if err != nil {
-		return nil, fmt.Errorf("trading: build FireAnt request: %w", err)
-	}
-	req.Header.Set("User-Agent", "miti99bot")
-	if c.Token != "" {
-		req.Header.Set("Authorization", "Bearer "+c.Token)
+		return nil, err
 	}
 
 	resp, err := c.httpClient().Do(req)
@@ -116,6 +103,56 @@ func (c *IncomeEventClient) FetchRecent(ctx context.Context, ticker string, sinc
 	}
 	defer func() { _ = resp.Body.Close() }()
 
+	marks, err := decodeFireAntMarks(resp)
+	if err != nil {
+		return nil, err
+	}
+	events := incomeEventsFromMarks(ticker, marks, since, until)
+	if len(events) == 0 {
+		return nil, ErrNoIncomeEvents
+	}
+	return events, nil
+}
+
+func fireAntMarksURL(baseURL, ticker string, since, until time.Time) (string, error) {
+	endpoint, err := url.Parse(baseURL)
+	if err != nil {
+		return "", fmt.Errorf("trading: parse FireAnt URL: %w", err)
+	}
+	if !isSafeFireAntEndpoint(endpoint) {
+		return "", fmt.Errorf("trading: income events API URL must be https")
+	}
+	endpoint.Path = strings.TrimRight(endpoint.Path, "/") + "/symbols/" + url.PathEscape(ticker) + "/timescale-marks"
+	q := endpoint.Query()
+	q.Set("startDate", since.Format(time.RFC3339))
+	q.Set("endDate", until.Format(time.RFC3339))
+	endpoint.RawQuery = q.Encode()
+	return endpoint.String(), nil
+}
+
+func isSafeFireAntEndpoint(endpoint *url.URL) bool {
+	if endpoint.Scheme == "https" {
+		return true
+	}
+	if endpoint.Scheme != "http" {
+		return false
+	}
+	return strings.HasPrefix(endpoint.Host, "127.0.0.1:") || strings.HasPrefix(endpoint.Host, "localhost:")
+}
+
+func fireAntRequest(ctx context.Context, fullURL, token string) (*http.Request, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fullURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("trading: build FireAnt request: %w", err)
+	}
+	req.Header.Set("User-Agent", "miti99bot")
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	return req, nil
+}
+
+func decodeFireAntMarks(resp *http.Response) ([]fireAntTimescaleMark, error) {
 	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
 		return nil, ErrIncomeEventAuthRequired
 	}
@@ -130,36 +167,35 @@ func (c *IncomeEventClient) FetchRecent(ctx context.Context, ticker string, sinc
 	if err := json.NewDecoder(resp.Body).Decode(&marks); err != nil {
 		return nil, fmt.Errorf("trading: FireAnt decode: %w", err)
 	}
+	return marks, nil
+}
 
+func incomeEventsFromMarks(ticker string, marks []fireAntTimescaleMark, since, until time.Time) []IncomeEvent {
 	var out []IncomeEvent
 	for _, mark := range marks {
 		date, ok := parseFireAntDate(mark.Date)
 		if !ok || date.Before(since) || date.After(until) || !isIncomeEventMark(mark) {
 			continue
 		}
-		title := cleanIncomeEventText(mark.Title)
-		label := cleanIncomeEventText(mark.Label)
-		if title == "" {
-			title = label
-		}
-		subtitle := ""
-		if label != "" && label != title {
-			subtitle = label
-		}
-		out = append(out, IncomeEvent{
-			Symbol:     ticker,
-			Title:      title,
-			Subtitle:   subtitle,
-			DeployDate: date,
-		})
-	}
-	if len(out) == 0 {
-		return nil, ErrNoIncomeEvents
+		out = append(out, incomeEventFromMark(ticker, mark, date))
 	}
 	sort.Slice(out, func(i, j int) bool {
 		return out[i].DeployDate.After(out[j].DeployDate)
 	})
-	return out, nil
+	return out
+}
+
+func incomeEventFromMark(ticker string, mark fireAntTimescaleMark, date time.Time) IncomeEvent {
+	title := cleanIncomeEventText(mark.Title)
+	label := cleanIncomeEventText(mark.Label)
+	if title == "" {
+		title = label
+	}
+	subtitle := ""
+	if label != "" && label != title {
+		subtitle = label
+	}
+	return IncomeEvent{Symbol: ticker, Title: title, Subtitle: subtitle, DeployDate: date}
 }
 
 func parseFireAntDate(raw string) (time.Time, bool) {
