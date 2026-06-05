@@ -85,6 +85,18 @@
       "description": "Sell VN stock back to VND"
     },
     {
+      "command": "trade_income_stock",
+      "description": "Record stock dividend bonus shares"
+    },
+    {
+      "command": "trade_income_vnd",
+      "description": "Record cash dividend per share"
+    },
+    {
+      "command": "trade_income_events",
+      "description": "Check recent income events"
+    },
+    {
       "command": "trade_convert",
       "description": "Currency exchange"
     },
