@@ -156,7 +156,8 @@ func (s *state) handleBuy(ctx context.Context, b *bot.Bot, update *models.Update
 	}
 	return chathelper.Reply(ctx, b, update.Message,
 		"Bought "+FormatStock(float64(qty))+" "+resolved.Symbol+
-			" @ "+FormatVND(price)+"\nCost: "+FormatVND(cost))
+			" @ "+FormatVND(price)+"\nCost: "+FormatVND(cost)+
+			"\nRemaining: "+FormatVND(p.Currency["VND"]))
 }
 
 func (s *state) handleSell(ctx context.Context, b *bot.Bot, update *models.Update) error {
@@ -215,7 +216,8 @@ func (s *state) handleSell(ctx context.Context, b *bot.Bot, update *models.Updat
 	}
 	return chathelper.Reply(ctx, b, update.Message,
 		"Sold "+FormatStock(float64(qty))+" "+resolved.Symbol+
-			" @ "+FormatVND(price)+"\nRevenue: "+FormatVND(revenue))
+			" @ "+FormatVND(price)+"\nRevenue: "+FormatVND(revenue)+
+			"\nRemaining: "+FormatVND(p.Currency["VND"]))
 }
 
 func (s *state) handleConvert(ctx context.Context, b *bot.Bot, update *models.Update) error {
