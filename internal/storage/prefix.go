@@ -2,6 +2,8 @@ package storage
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"strings"
 )
 
@@ -37,7 +39,9 @@ func (p *prefixedStore) Put(ctx context.Context, key string, val []byte) error {
 func (p *prefixedStore) CompareAndSwap(ctx context.Context, key string, expected []byte, val []byte) error {
 	cas, ok := p.inner.(CompareAndSwapStore)
 	if !ok {
-		return ErrConflict
+		// A missing capability is permanent: report it as unsupported so
+		// callers fail fast instead of retrying it as a write conflict.
+		return fmt.Errorf("storage: inner store does not support compare-and-swap: %w", errors.ErrUnsupported)
 	}
 	return cas.CompareAndSwap(ctx, p.k(key), expected, val)
 }

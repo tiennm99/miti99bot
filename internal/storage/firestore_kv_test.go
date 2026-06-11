@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"errors"
 	"os"
 	"reflect"
 	"sort"
@@ -58,6 +59,43 @@ func drainCollection(t *testing.T, c *firestore.Client, name string) {
 		if _, err := d.Ref.Delete(ctx); err != nil {
 			t.Fatalf("drain delete %s: %v", d.Ref.ID, err)
 		}
+	}
+}
+
+func TestFirestoreKV_CompareAndSwap(t *testing.T) {
+	c := requireEmulator(t)
+	col := uniqueCollection(t)
+	defer drainCollection(t, c, col)
+	store := NewFirestoreKVStore(c, col)
+
+	ctx := context.Background()
+
+	// Create-if-absent succeeds once, then conflicts.
+	if err := store.CompareAndSwap(ctx, "user:1", nil, []byte("v1")); err != nil {
+		t.Fatalf("CompareAndSwap create: %v", err)
+	}
+	if err := store.CompareAndSwap(ctx, "user:1", nil, []byte("v2")); !errors.Is(err, ErrConflict) {
+		t.Errorf("CompareAndSwap create over existing: got %v, want ErrConflict", err)
+	}
+
+	// Swap with matching expected succeeds; stale expected conflicts.
+	if err := store.CompareAndSwap(ctx, "user:1", []byte("v1"), []byte("v2")); err != nil {
+		t.Fatalf("CompareAndSwap matching: %v", err)
+	}
+	if err := store.CompareAndSwap(ctx, "user:1", []byte("v1"), []byte("v3")); !errors.Is(err, ErrConflict) {
+		t.Errorf("CompareAndSwap stale: got %v, want ErrConflict", err)
+	}
+	got, err := store.Get(ctx, "user:1")
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if string(got) != "v2" {
+		t.Errorf("stored value = %q, want %q", got, "v2")
+	}
+
+	// Non-nil expected on a missing key conflicts (caller reloads and retries).
+	if err := store.CompareAndSwap(ctx, "user:missing", []byte("v1"), []byte("v2")); !errors.Is(err, ErrConflict) {
+		t.Errorf("CompareAndSwap missing key: got %v, want ErrConflict", err)
 	}
 }
 
