@@ -9,6 +9,12 @@ func New(deps modules.Deps) modules.Module {
 	return modules.Module{
 		Commands: []modules.Command{
 			{
+				Name:        "gold_price",
+				Visibility:  modules.VisibilityPublic,
+				Description: "Show current gold spot price (USD & VND)",
+				Handler:     s.handlePrice,
+			},
+			{
 				Name:        "gold_topup",
 				Visibility:  modules.VisibilityPublic,
 				Description: "Top up VND to your gold account",
