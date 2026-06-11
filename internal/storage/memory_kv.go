@@ -50,6 +50,23 @@ func (s *MemoryKVStore) Put(_ context.Context, key string, val []byte) error {
 	return nil
 }
 
+func (s *MemoryKVStore) CompareAndSwap(_ context.Context, key string, expected []byte, val []byte) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	current, ok := s.m[key]
+	if expected == nil {
+		if ok {
+			return ErrConflict
+		}
+	} else if !ok || !bytes.Equal(current, expected) {
+		return ErrConflict
+	}
+	stored := make([]byte, len(val))
+	copy(stored, val)
+	s.m[key] = stored
+	return nil
+}
+
 func (s *MemoryKVStore) PutJSON(ctx context.Context, key string, val any) error {
 	raw, err := json.Marshal(val)
 	if err != nil {

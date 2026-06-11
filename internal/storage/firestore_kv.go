@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -134,6 +135,55 @@ func (s *FirestoreKVStore) Put(ctx context.Context, key string, val []byte) erro
 	})
 	if err != nil {
 		return fmt.Errorf("firestore put %s/%s: %w", s.collection, key, err)
+	}
+	return nil
+}
+
+func (s *FirestoreKVStore) CompareAndSwap(ctx context.Context, key string, expected []byte, val []byte) error {
+	if err := validateKey(key); err != nil {
+		return err
+	}
+	ref := s.doc(key)
+	err := s.client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+		snap, err := tx.Get(ref)
+		if err != nil {
+			if status.Code(err) == codes.NotFound && expected == nil {
+				return tx.Set(ref, map[string]any{
+					firestoreValueField:     val,
+					firestoreUpdatedAtField: time.Now().UTC(),
+				})
+			}
+			if status.Code(err) == codes.NotFound {
+				return ErrConflict
+			}
+			return err
+		}
+		raw, err := snap.DataAt(firestoreValueField)
+		if err != nil {
+			return fmt.Errorf("missing %q field: %w", firestoreValueField, err)
+		}
+		var current []byte
+		switch v := raw.(type) {
+		case []byte:
+			current = v
+		case string:
+			current = []byte(v)
+		default:
+			return fmt.Errorf("unexpected value type %T", raw)
+		}
+		if expected == nil || !bytes.Equal(current, expected) {
+			return ErrConflict
+		}
+		return tx.Set(ref, map[string]any{
+			firestoreValueField:     val,
+			firestoreUpdatedAtField: time.Now().UTC(),
+		})
+	})
+	if err != nil {
+		if errors.Is(err, ErrConflict) {
+			return ErrConflict
+		}
+		return fmt.Errorf("firestore compare-and-swap %s/%s: %w", s.collection, key, err)
 	}
 	return nil
 }

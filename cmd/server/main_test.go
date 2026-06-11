@@ -16,7 +16,7 @@ func TestFactoriesIncludesGold(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Build gold: %v", err)
 	}
-	for _, name := range []string{"gold_topup", "gold_buy", "gold_sell", "gold_stats"} {
+	for _, name := range []string{"gold_price", "gold_topup", "gold_buy", "gold_sell", "gold_stats"} {
 		if _, ok := reg.AllCommands[name]; !ok {
 			t.Fatalf("missing command %s", name)
 		}
