@@ -20,6 +20,7 @@ import (
 	"github.com/tiennm99/miti99bot/internal/log"
 	"github.com/tiennm99/miti99bot/internal/metrics"
 	"github.com/tiennm99/miti99bot/internal/modules"
+	"github.com/tiennm99/miti99bot/internal/modules/gold"
 	"github.com/tiennm99/miti99bot/internal/modules/loldle"
 	"github.com/tiennm99/miti99bot/internal/modules/lolschedule"
 	"github.com/tiennm99/miti99bot/internal/modules/misc"
@@ -48,6 +49,7 @@ func factories() map[string]modules.Factory {
 		"wordle":      wordle.New,
 		"loldle":      loldle.New,
 		"lolschedule": lolschedule.New,
+		"gold":        gold.New,
 		"twentyq":     twentyq.New,
 		"trading":     trading.New,
 		"stats":       stats.New,
@@ -84,6 +86,8 @@ func main() {
 	}
 	exportOptionalEnv("TRADING_INCOME_EVENTS_API_URL", cfg.TradingIncomeEventsAPIURL)
 	exportOptionalEnv("TRADING_INCOME_EVENTS_API_TOKEN", cfg.TradingIncomeEventsAPIToken)
+	exportOptionalEnv("GOLD_PRICE_API_URL", cfg.GoldPriceAPIURL)
+	exportOptionalEnv("GOLD_FX_API_URL", cfg.GoldFXAPIURL)
 
 	// Periodic metrics flush. Cancels with rootCtx and emits one final
 	// flush on shutdown so the trailing window isn't lost.
@@ -258,6 +262,8 @@ type config struct {
 	GeminiAPIKey                     string
 	TradingIncomeEventsAPIURL        string
 	TradingIncomeEventsAPIToken      string
+	GoldPriceAPIURL                  string
+	GoldFXAPIURL                     string
 	Modules                          []string
 	BotOwnerID                       int64
 	AdminUserIDs                     map[int64]bool
@@ -297,6 +303,8 @@ func loadConfig() config {
 		GeminiAPIKey:                     envMap["GEMINI_API_KEY"],
 		TradingIncomeEventsAPIURL:        envMap["TRADING_INCOME_EVENTS_API_URL"],
 		TradingIncomeEventsAPIToken:      envMap["TRADING_INCOME_EVENTS_API_TOKEN"],
+		GoldPriceAPIURL:                  envMap["GOLD_PRICE_API_URL"],
+		GoldFXAPIURL:                     envMap["GOLD_FX_API_URL"],
 		Modules:                          splitCSV(envMap["MODULES"]),
 		BotOwnerID:                       parseInt64(envMap["BOT_OWNER_ID"]),
 		AdminUserIDs:                     parseInt64Set(envMap["ADMIN_USER_IDS"]),

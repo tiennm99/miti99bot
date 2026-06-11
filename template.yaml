@@ -37,6 +37,16 @@ Parameters:
     Default: ""
     Description: Optional SSM SecureString parameter name containing bearer token for FireAnt REST API.
 
+  GoldPriceAPIURL:
+    Type: String
+    Default: ""
+    Description: Optional gold spot price API URL override. Empty uses the built-in GoldPrice.org endpoint.
+
+  GoldFXAPIURL:
+    Type: String
+    Default: ""
+    Description: Optional USD/VND FX API URL override. Empty uses the built-in ExchangeRate-API open endpoint.
+
   # AWS Lambda Web Adapter ARM64 layer ARN. Pin a specific version so deploys
   # are reproducible. Bump by checking the latest at:
   #   https://github.com/awslabs/aws-lambda-web-adapter/releases
@@ -142,6 +152,8 @@ Resources:
           ADMIN_USER_IDS: !Ref AdminUserIDs
           TRADING_INCOME_EVENTS_API_URL: !Ref TradingIncomeEventsAPIURL
           TRADING_INCOME_EVENTS_API_TOKEN_PARAMETER_NAME: !Ref TradingIncomeEventsAPITokenParameterName
+          GOLD_PRICE_API_URL: !Ref GoldPriceAPIURL
+          GOLD_FX_API_URL: !Ref GoldFXAPIURL
           # ---- Secrets (fetched from Parameter Store at Lambda cold start) ----
           TELEGRAM_BOT_TOKEN_PARAMETER_NAME: !Sub "/miti99bot/${StackEnv}/telegram-bot-token"
           TELEGRAM_WEBHOOK_SECRET_PARAMETER_NAME: !Sub "/miti99bot/${StackEnv}/telegram-webhook-secret"
