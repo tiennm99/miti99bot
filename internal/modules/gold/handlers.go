@@ -2,6 +2,7 @@ package gold
 
 import (
 	"context"
+	"errors"
 	"strconv"
 	"strings"
 
@@ -10,6 +11,11 @@ import (
 
 	"github.com/tiennm99/miti99bot/internal/log"
 	"github.com/tiennm99/miti99bot/internal/modules/util/chathelper"
+)
+
+var (
+	errInsufficientVND  = errors.New("gold: insufficient VND")
+	errInsufficientGold = errors.New("gold: insufficient gold")
 )
 
 func (s *state) handlePrice(ctx context.Context, b *bot.Bot, update *models.Update) error {
@@ -46,14 +52,12 @@ func (s *state) handleTopup(ctx context.Context, b *bot.Bot, update *models.Upda
 	}
 
 	defer s.locks.Acquire(strconv.FormatInt(userID, 10))()
-	p, err := LoadPortfolio(ctx, s.kv, userID, s.now().UnixMilli())
+	p, err := UpdatePortfolio(ctx, s.kv, userID, s.now().UnixMilli(), func(p *Portfolio) error {
+		p.AddVND(amount)
+		p.Meta.Invested += amount
+		return nil
+	})
 	if err != nil {
-		log.Error("gold_load_portfolio", "user", userID, "err", err)
-		return chathelper.Reply(ctx, b, update.Message, "Could not load gold portfolio. Try again later.")
-	}
-	p.AddVND(amount)
-	p.Meta.Invested += amount
-	if err := SavePortfolio(ctx, s.kv, userID, p); err != nil {
 		log.Error("gold_save_portfolio", "user", userID, "err", err)
 		return chathelper.Reply(ctx, b, update.Message, "Could not save gold portfolio. Try again later.")
 	}
@@ -85,18 +89,21 @@ func (s *state) handleBuy(ctx context.Context, b *bot.Bot, update *models.Update
 	}
 
 	defer s.locks.Acquire(strconv.FormatInt(userID, 10))()
-	p, err := LoadPortfolio(ctx, s.kv, userID, s.now().UnixMilli())
-	if err != nil {
-		log.Error("gold_load_portfolio", "user", userID, "err", err)
-		return chathelper.Reply(ctx, b, update.Message, "Could not load gold portfolio. Try again later.")
-	}
-	ok, balance := p.DeductVND(cost)
-	if !ok {
+	var insufficientBalance *float64
+	p, err := UpdatePortfolio(ctx, s.kv, userID, s.now().UnixMilli(), func(p *Portfolio) error {
+		ok, balance := p.DeductVND(cost)
+		if !ok {
+			insufficientBalance = &balance
+			return errInsufficientVND
+		}
+		p.AddLuong(qty)
+		return nil
+	})
+	if errors.Is(err, errInsufficientVND) && insufficientBalance != nil {
 		return chathelper.Reply(ctx, b, update.Message,
-			"Insufficient VND. Need "+FormatVND(cost)+", have "+FormatVND(balance)+".")
+			"Insufficient VND. Need "+FormatVND(cost)+", have "+FormatVND(*insufficientBalance)+".")
 	}
-	p.AddLuong(qty)
-	if err := SavePortfolio(ctx, s.kv, userID, p); err != nil {
+	if err != nil {
 		log.Error("gold_save_portfolio", "user", userID, "err", err)
 		return chathelper.Reply(ctx, b, update.Message, "Could not save gold portfolio. Try again later.")
 	}
@@ -125,22 +132,25 @@ func (s *state) handleSell(ctx context.Context, b *bot.Bot, update *models.Updat
 	}
 
 	defer s.locks.Acquire(strconv.FormatInt(userID, 10))()
-	p, err := LoadPortfolio(ctx, s.kv, userID, s.now().UnixMilli())
-	if err != nil {
-		log.Error("gold_load_portfolio", "user", userID, "err", err)
-		return chathelper.Reply(ctx, b, update.Message, "Could not load gold portfolio. Try again later.")
-	}
-	ok, held := p.DeductLuong(qty)
-	if !ok {
-		return chathelper.Reply(ctx, b, update.Message,
-			"Insufficient gold. You have: "+FormatLuong(held)+" luong")
-	}
 	revenue := qty * price
 	if !isSafeVND(revenue) {
 		return chathelper.Reply(ctx, b, update.Message, "Trade value is too large.")
 	}
-	p.AddVND(revenue)
-	if err := SavePortfolio(ctx, s.kv, userID, p); err != nil {
+	var insufficientHeld *float64
+	p, err := UpdatePortfolio(ctx, s.kv, userID, s.now().UnixMilli(), func(p *Portfolio) error {
+		ok, held := p.DeductLuong(qty)
+		if !ok {
+			insufficientHeld = &held
+			return errInsufficientGold
+		}
+		p.AddVND(revenue)
+		return nil
+	})
+	if errors.Is(err, errInsufficientGold) && insufficientHeld != nil {
+		return chathelper.Reply(ctx, b, update.Message,
+			"Insufficient gold. You have: "+FormatLuong(*insufficientHeld)+" luong")
+	}
+	if err != nil {
 		log.Error("gold_save_portfolio", "user", userID, "err", err)
 		return chathelper.Reply(ctx, b, update.Message, "Could not save gold portfolio. Try again later.")
 	}

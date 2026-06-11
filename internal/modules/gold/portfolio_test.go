@@ -68,6 +68,46 @@ func TestNormalizeAmountSpecialValues(t *testing.T) {
 	}
 }
 
+type conflictOnceStore struct {
+	storage.KVStore
+	conflicted bool
+}
+
+func (s *conflictOnceStore) CompareAndSwap(ctx context.Context, key string, expected []byte, val []byte) error {
+	if !s.conflicted {
+		s.conflicted = true
+		competing := NewPortfolio(1)
+		competing.AddVND(10)
+		if err := s.KVStore.PutJSON(ctx, key, competing); err != nil {
+			return err
+		}
+		return storage.ErrConflict
+	}
+	return s.KVStore.(storage.CompareAndSwapStore).CompareAndSwap(ctx, key, expected, val)
+}
+
+func TestUpdatePortfolioRetriesAfterWriteConflict(t *testing.T) {
+	ctx := context.Background()
+	kv := &conflictOnceStore{KVStore: storage.NewMemoryKVStore()}
+	got, err := UpdatePortfolio(ctx, kv, 7, 1, func(p *Portfolio) error {
+		p.AddVND(5)
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("UpdatePortfolio: %v", err)
+	}
+	if got.VND != 15 {
+		t.Fatalf("updated portfolio VND = %v, want 15", got.VND)
+	}
+	loaded, err := LoadPortfolio(ctx, kv, 7, 1)
+	if err != nil {
+		t.Fatalf("LoadPortfolio: %v", err)
+	}
+	if loaded.VND != 15 {
+		t.Fatalf("stored portfolio VND = %v, want 15", loaded.VND)
+	}
+}
+
 func TestTradingAndGoldPortfolioKeysDoNotCollide(t *testing.T) {
 	ctx := context.Background()
 	provider := storage.NewMemoryProvider()
