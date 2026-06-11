@@ -85,6 +85,24 @@ Expect: `url` matches Function URL, `pending_update_count` ≈ 0, `last_error_da
 
 FireAnt response is an array of timescale marks with `id`, `label`, `date`, `title`, and `color`. The bot keeps marks whose label/title indicate dividends, ex-right dates, final registration dates, rights issues, or bonus/share dividends.
 
+## Gold module
+
+`gold` is opt-in for first deploy. Enable it by adding `gold` to the `ModulesCSV` parameter / `MODULES` env, for example `util,misc,wordle,loldle,lolschedule,twentyq,trading,stats,gold`.
+
+Commands:
+
+- `/gold_topup <amount>` credits VND. No currency argument is accepted.
+- `/gold_buy <luong>` buys gold in Vietnamese `luong`. No symbol or unit argument is accepted.
+- `/gold_sell <luong>` sells gold in Vietnamese `luong`.
+- `/gold_stats` shows VND balance, gold holding, current spot price, total value, invested amount, and P&L.
+
+Price source: v1 uses world spot XAU from GoldPrice.org converted through USD/VND from ExchangeRate-API open endpoint. It is not SJC local retail buy/sell pricing. The defaults require no secrets. Optional overrides:
+
+- `GOLD_PRICE_API_URL`: gold spot JSON endpoint override. Remote URLs must be HTTPS; localhost HTTP is allowed for local tests.
+- `GOLD_FX_API_URL`: USD/VND FX JSON endpoint override. Remote URLs must be HTTPS; localhost HTTP is allowed for local tests.
+
+ExchangeRate-API open endpoint requires attribution if surfaced publicly and updates once per day; the bot caches FX responses until the provider `time_next_update_unix` when available.
+
 ## Rotate secrets
 
 ```sh
