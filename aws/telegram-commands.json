@@ -105,6 +105,26 @@
       "description": "Show portfolio summary with P&L"
     },
     {
+      "command": "gold_price",
+      "description": "Show current gold spot price (USD & VND)"
+    },
+    {
+      "command": "gold_topup",
+      "description": "Top up VND to your gold account"
+    },
+    {
+      "command": "gold_buy",
+      "description": "Buy gold at spot price (luong)"
+    },
+    {
+      "command": "gold_sell",
+      "description": "Sell gold back to VND (luong)"
+    },
+    {
+      "command": "gold_stats",
+      "description": "Show gold account summary with P&L"
+    },
+    {
       "command": "stats",
       "description": "Stats. Try: /stats users, /stats user <name>, /stats cmd <name>"
     }
