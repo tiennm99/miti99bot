@@ -12,6 +12,24 @@ import (
 	"github.com/tiennm99/miti99bot/internal/modules/util/chathelper"
 )
 
+func (s *state) handlePrice(ctx context.Context, b *bot.Bot, update *models.Update) error {
+	args := argsAfterCommand(update.Message.Text)
+	if len(args) != 0 {
+		return chathelper.Reply(ctx, b, update.Message, "Usage: /gold_price")
+	}
+	p, err := s.prices.FetchPrice(ctx)
+	if err != nil {
+		return s.replyPriceError(ctx, b, update, err)
+	}
+	lines := []string{
+		"Gold Spot Price",
+		"XAU: " + FormatUSD(p.XAUUSD) + " USD/oz",
+		"Rate: " + FormatVND(p.USDVND) + "/USD",
+		"VND: " + FormatVND(p.VNDPerLuong) + "/luong",
+	}
+	return chathelper.Reply(ctx, b, update.Message, strings.Join(lines, "\n"))
+}
+
 func (s *state) handleTopup(ctx context.Context, b *bot.Bot, update *models.Update) error {
 	userID, ok := senderInfo(update)
 	if !ok {
