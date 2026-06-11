@@ -2,7 +2,10 @@ package gold
 
 import (
 	"context"
+	"errors"
 	"math"
+	"sync"
+	"sync/atomic"
 	"testing"
 
 	stocktrading "github.com/tiennm99/miti99bot/internal/modules/trading"
@@ -105,6 +108,136 @@ func TestUpdatePortfolioRetriesAfterWriteConflict(t *testing.T) {
 	}
 	if loaded.VND != 15 {
 		t.Fatalf("stored portfolio VND = %v, want 15", loaded.VND)
+	}
+}
+
+type alwaysConflictStore struct {
+	storage.KVStore
+	attempts int
+}
+
+func (s *alwaysConflictStore) CompareAndSwap(context.Context, string, []byte, []byte) error {
+	s.attempts++
+	return storage.ErrConflict
+}
+
+func TestUpdatePortfolioReturnsConflictAfterExhaustingRetries(t *testing.T) {
+	ctx := context.Background()
+	kv := &alwaysConflictStore{KVStore: storage.NewMemoryKVStore()}
+	_, err := UpdatePortfolio(ctx, kv, 7, 1, func(p *Portfolio) error {
+		p.AddVND(5)
+		return nil
+	})
+	if !errors.Is(err, storage.ErrConflict) {
+		t.Fatalf("UpdatePortfolio: got %v, want wrapped ErrConflict", err)
+	}
+	if kv.attempts != portfolioUpdateAttempts {
+		t.Errorf("CAS attempts = %d, want %d", kv.attempts, portfolioUpdateAttempts)
+	}
+	if _, err := kv.KVStore.Get(ctx, "user:7"); !errors.Is(err, storage.ErrNotFound) {
+		t.Errorf("exhausted update must not persist anything, Get = %v", err)
+	}
+}
+
+type countingCASStore struct {
+	*storage.MemoryKVStore
+	casCalls int
+}
+
+func (s *countingCASStore) CompareAndSwap(ctx context.Context, key string, expected, val []byte) error {
+	s.casCalls++
+	return s.MemoryKVStore.CompareAndSwap(ctx, key, expected, val)
+}
+
+func TestUpdatePortfolioMutateErrorDoesNotRetryOrPersist(t *testing.T) {
+	ctx := context.Background()
+	kv := &countingCASStore{MemoryKVStore: storage.NewMemoryKVStore()}
+	mutateCalls := 0
+	_, err := UpdatePortfolio(ctx, kv, 7, 1, func(p *Portfolio) error {
+		mutateCalls++
+		return errInsufficientVND
+	})
+	if !errors.Is(err, errInsufficientVND) {
+		t.Fatalf("UpdatePortfolio: got %v, want errInsufficientVND", err)
+	}
+	if mutateCalls != 1 {
+		t.Errorf("mutate calls = %d, want 1 (business errors must not retry)", mutateCalls)
+	}
+	if kv.casCalls != 0 {
+		t.Errorf("CAS calls = %d, want 0 (failed mutate must not write)", kv.casCalls)
+	}
+	if _, err := kv.Get(ctx, "user:7"); !errors.Is(err, storage.ErrNotFound) {
+		t.Errorf("failed mutate must not persist anything, Get = %v", err)
+	}
+}
+
+func TestUpdatePortfolioConcurrentIncrementsLoseNoUpdates(t *testing.T) {
+	ctx := context.Background()
+	kv := storage.NewMemoryKVStore()
+	const goroutines = 16
+	var successes atomic.Int64
+	var wg sync.WaitGroup
+	errs := make(chan error, goroutines)
+	for range goroutines {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, err := UpdatePortfolio(ctx, kv, 7, 1, func(p *Portfolio) error {
+				p.AddVND(1000)
+				return nil
+			})
+			if err == nil {
+				successes.Add(1)
+			} else if !errors.Is(err, storage.ErrConflict) {
+				errs <- err
+			}
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		t.Fatalf("UpdatePortfolio: %v", err)
+	}
+	// Retry exhaustion under heavy contention is acceptable; a lost update is not:
+	// the stored balance must equal exactly 1000 per successful update.
+	if successes.Load() == 0 {
+		t.Fatal("no update succeeded")
+	}
+	loaded, err := LoadPortfolio(ctx, kv, 7, 1)
+	if err != nil {
+		t.Fatalf("LoadPortfolio: %v", err)
+	}
+	if want := float64(successes.Load()) * 1000; loaded.VND != want {
+		t.Errorf("VND = %v, want %v (%d successful updates)", loaded.VND, want, successes.Load())
+	}
+}
+
+// plainKVStore hides the embedded store's CompareAndSwap method to model a
+// backend without CAS support.
+type plainKVStore struct {
+	storage.KVStore
+}
+
+func TestUpdatePortfolioFailsFastWhenCASUnsupported(t *testing.T) {
+	ctx := context.Background()
+	mutate := func(p *Portfolio) error {
+		p.AddVND(5)
+		return nil
+	}
+
+	// A bare non-CAS store is rejected by the capability check.
+	if _, err := UpdatePortfolio(ctx, &plainKVStore{KVStore: storage.NewMemoryKVStore()}, 7, 1, mutate); err == nil {
+		t.Error("UpdatePortfolio on non-CAS store: want error, got nil")
+	}
+
+	// A prefixed wrapper around a non-CAS store must fail fast as unsupported,
+	// not burn retries on a fake conflict.
+	_, err := UpdatePortfolio(ctx, storage.Prefixed(&plainKVStore{KVStore: storage.NewMemoryKVStore()}, "gold"), 7, 1, mutate)
+	if !errors.Is(err, errors.ErrUnsupported) {
+		t.Errorf("got %v, want errors.ErrUnsupported", err)
+	}
+	if errors.Is(err, storage.ErrConflict) {
+		t.Error("missing CAS capability must not be reported as a write conflict")
 	}
 }
 
