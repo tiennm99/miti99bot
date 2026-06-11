@@ -2,6 +2,7 @@ package gold
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -11,6 +12,7 @@ import (
 )
 
 const goldDustEpsilon = 1e-9
+const portfolioUpdateAttempts = 5
 
 type Portfolio struct {
 	VND   float64       `json:"vnd"`
@@ -54,6 +56,54 @@ func SavePortfolio(ctx context.Context, kv storage.KVStore, userID int64, p Port
 		return fmt.Errorf("gold: save portfolio %d: %w", userID, err)
 	}
 	return nil
+}
+
+func UpdatePortfolio(ctx context.Context, kv storage.KVStore, userID int64, now int64, mutate func(*Portfolio) error) (Portfolio, error) {
+	cas, ok := kv.(storage.CompareAndSwapStore)
+	if !ok {
+		return Portfolio{}, fmt.Errorf("gold: storage does not support conditional portfolio updates")
+	}
+	key := portfolioKey(userID)
+	for attempt := 0; attempt < portfolioUpdateAttempts; attempt++ {
+		p, expected, err := loadPortfolioForUpdate(ctx, kv, key, now)
+		if err != nil {
+			return Portfolio{}, fmt.Errorf("gold: load portfolio %d: %w", userID, err)
+		}
+		if err := mutate(&p); err != nil {
+			return p, err
+		}
+		p.normalize()
+		next, err := json.Marshal(p)
+		if err != nil {
+			return Portfolio{}, fmt.Errorf("gold: save portfolio %d: json encode: %w", userID, err)
+		}
+		if err := cas.CompareAndSwap(ctx, key, expected, next); err == nil {
+			return p, nil
+		} else if !errors.Is(err, storage.ErrConflict) {
+			return Portfolio{}, fmt.Errorf("gold: save portfolio %d: %w", userID, err)
+		}
+	}
+	return Portfolio{}, fmt.Errorf("gold: save portfolio %d: %w", userID, storage.ErrConflict)
+}
+
+func loadPortfolioForUpdate(ctx context.Context, kv storage.KVStore, key string, now int64) (Portfolio, []byte, error) {
+	raw, err := kv.Get(ctx, key)
+	switch {
+	case err == nil:
+		var p Portfolio
+		if err := json.Unmarshal(raw, &p); err != nil {
+			return Portfolio{}, nil, fmt.Errorf("json decode: %w", err)
+		}
+		p.normalize()
+		if p.Meta.CreatedAt == 0 {
+			p.Meta.CreatedAt = now
+		}
+		return p, raw, nil
+	case errors.Is(err, storage.ErrNotFound):
+		return NewPortfolio(now), nil, nil
+	default:
+		return Portfolio{}, nil, err
+	}
 }
 
 func (p *Portfolio) AddVND(amount float64) {

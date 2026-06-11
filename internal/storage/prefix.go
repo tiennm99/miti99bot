@@ -34,6 +34,14 @@ func (p *prefixedStore) Put(ctx context.Context, key string, val []byte) error {
 	return p.inner.Put(ctx, p.k(key), val)
 }
 
+func (p *prefixedStore) CompareAndSwap(ctx context.Context, key string, expected []byte, val []byte) error {
+	cas, ok := p.inner.(CompareAndSwapStore)
+	if !ok {
+		return ErrConflict
+	}
+	return cas.CompareAndSwap(ctx, p.k(key), expected, val)
+}
+
 func (p *prefixedStore) PutJSON(ctx context.Context, key string, val any) error {
 	return p.inner.PutJSON(ctx, p.k(key), val)
 }

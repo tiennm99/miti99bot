@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"time"
@@ -104,6 +105,39 @@ func (s *DynamoDBKVStore) Put(ctx context.Context, key string, val []byte) error
 		return fmt.Errorf("dynamodb put %s/%s: %w", s.moduleName, key, err)
 	}
 	return nil
+}
+
+func (s *DynamoDBKVStore) CompareAndSwap(ctx context.Context, key string, expected []byte, val []byte) error {
+	if err := validateKey(key); err != nil {
+		return err
+	}
+	input := &dynamodb.PutItemInput{
+		TableName: aws.String(s.table),
+		Item: map[string]types.AttributeValue{
+			dynamoPKAttr:        &types.AttributeValueMemberS{Value: s.moduleName},
+			dynamoSKAttr:        &types.AttributeValueMemberS{Value: key},
+			dynamoValueAttr:     &types.AttributeValueMemberS{Value: string(val)},
+			dynamoUpdatedAtAttr: &types.AttributeValueMemberN{Value: strconv.FormatInt(time.Now().UTC().UnixNano(), 10)},
+		},
+	}
+	if expected == nil {
+		input.ConditionExpression = aws.String("attribute_not_exists(pk) AND attribute_not_exists(sk)")
+	} else {
+		input.ConditionExpression = aws.String("#v = :expected")
+		input.ExpressionAttributeNames = map[string]string{"#v": dynamoValueAttr}
+		input.ExpressionAttributeValues = map[string]types.AttributeValue{
+			":expected": &types.AttributeValueMemberS{Value: string(expected)},
+		}
+	}
+	_, err := s.client.PutItem(ctx, input)
+	if err == nil {
+		return nil
+	}
+	var conflict *types.ConditionalCheckFailedException
+	if errors.As(err, &conflict) {
+		return ErrConflict
+	}
+	return fmt.Errorf("dynamodb compare-and-swap %s/%s: %w", s.moduleName, key, err)
 }
 
 // PutJSON marshals val and writes the bytes at key.
