@@ -24,6 +24,12 @@ const (
 
 var ErrNoGoldPrice = errors.New("gold: no price available")
 
+type GoldPrice struct {
+	XAUUSD      float64
+	USDVND      float64
+	VNDPerLuong float64
+}
+
 type GoldPriceClient struct {
 	HTTP    *http.Client
 	GoldURL string
@@ -45,20 +51,28 @@ func NewGoldPriceClientFromEnv() *GoldPriceClient {
 	}
 }
 
-func (c *GoldPriceClient) FetchLuongPrice(ctx context.Context) (float64, error) {
+func (c *GoldPriceClient) FetchPrice(ctx context.Context) (GoldPrice, error) {
 	xauUSD, err := c.fetchXAUUSD(ctx)
 	if err != nil {
-		return 0, err
+		return GoldPrice{}, err
 	}
 	usdToVND, err := c.fetchUSDVND(ctx)
 	if err != nil {
+		return GoldPrice{}, err
+	}
+	vndPerLuong := xauUSD * usdToVND * (gramsPerLuong / gramsPerTroyOunce)
+	if vndPerLuong <= 0 || math.IsNaN(vndPerLuong) || math.IsInf(vndPerLuong, 0) {
+		return GoldPrice{}, ErrNoGoldPrice
+	}
+	return GoldPrice{XAUUSD: xauUSD, USDVND: usdToVND, VNDPerLuong: vndPerLuong}, nil
+}
+
+func (c *GoldPriceClient) FetchLuongPrice(ctx context.Context) (float64, error) {
+	p, err := c.FetchPrice(ctx)
+	if err != nil {
 		return 0, err
 	}
-	price := xauUSD * usdToVND * (gramsPerLuong / gramsPerTroyOunce)
-	if price <= 0 || math.IsNaN(price) || math.IsInf(price, 0) {
-		return 0, ErrNoGoldPrice
-	}
-	return price, nil
+	return p.VNDPerLuong, nil
 }
 
 func (c *GoldPriceClient) httpClient() *http.Client {

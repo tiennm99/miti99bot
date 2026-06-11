@@ -21,6 +21,13 @@ func (f fakePriceFetcher) FetchLuongPrice(context.Context) (float64, error) {
 	return f.price, f.err
 }
 
+func (f fakePriceFetcher) FetchPrice(context.Context) (GoldPrice, error) {
+	if f.err != nil {
+		return GoldPrice{}, f.err
+	}
+	return GoldPrice{XAUUSD: 3000, USDVND: 25000, VNDPerLuong: f.price}, nil
+}
+
 func newTestState(price float64, err error) *state {
 	return &state{
 		kv:     storage.NewMemoryKVStore(),
@@ -47,7 +54,7 @@ func TestModuleRegistersExpectedCommands(t *testing.T) {
 	for _, cmd := range mod.Commands {
 		got[cmd.Name] = true
 	}
-	for _, name := range []string{"gold_topup", "gold_buy", "gold_sell", "gold_stats"} {
+	for _, name := range []string{"gold_price", "gold_topup", "gold_buy", "gold_sell", "gold_stats"} {
 		if !got[name] {
 			t.Fatalf("missing command %s", name)
 		}
@@ -159,4 +166,36 @@ func TestStatsWithAndWithoutPrice(t *testing.T) {
 
 func modDepsForTest() modules.Deps {
 	return modules.Deps{KV: storage.NewMemoryKVStore()}
+}
+
+func TestHandlePrice(t *testing.T) {
+	s := newTestState(90_000_000, nil)
+	rb := testutil.NewRecordingBot(t)
+	if err := s.handlePrice(context.Background(), rb.Bot, testutil.NewPrivateMessage(7, "/gold_price")); err != nil {
+		t.Fatalf("handlePrice: %v", err)
+	}
+	text := rb.LastSent().Text()
+	for _, want := range []string{"Gold Spot Price", "XAU:", "USD/oz", "VND:", "/luong"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("price missing %q in %q", want, text)
+		}
+	}
+}
+
+func TestHandlePriceRejectsArgs(t *testing.T) {
+	s := newTestState(90_000_000, nil)
+	rb := testutil.NewRecordingBot(t)
+	if err := s.handlePrice(context.Background(), rb.Bot, testutil.NewPrivateMessage(7, "/gold_price USD")); err != nil {
+		t.Fatalf("handlePrice: %v", err)
+	}
+	rb.AssertSentText(t, "Usage: /gold_price")
+}
+
+func TestHandlePriceFetchError(t *testing.T) {
+	s := newTestState(0, errors.New("upstream down"))
+	rb := testutil.NewRecordingBot(t)
+	if err := s.handlePrice(context.Background(), rb.Bot, testutil.NewPrivateMessage(7, "/gold_price")); err != nil {
+		t.Fatalf("handlePrice: %v", err)
+	}
+	rb.AssertSentText(t, "Could not fetch gold price")
 }

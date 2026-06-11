@@ -19,6 +19,7 @@ import (
 
 type priceFetcher interface {
 	FetchLuongPrice(ctx context.Context) (float64, error)
+	FetchPrice(ctx context.Context) (GoldPrice, error)
 }
 
 type state struct {

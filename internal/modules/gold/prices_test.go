@@ -105,6 +105,35 @@ func TestGoldPriceClient_FXRateLimitedIsRetryable(t *testing.T) {
 	}
 }
 
+func TestGoldPriceClient_FetchPrice(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/gold":
+			_, _ = w.Write([]byte(`{"items":[{"curr":"USD","xauPrice":3000}]}`))
+		case "/fx":
+			_, _ = w.Write([]byte(`{"result":"success","rates":{"VND":25000}}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+	c := &GoldPriceClient{GoldURL: srv.URL + "/gold", FXURL: srv.URL + "/fx"}
+	p, err := c.FetchPrice(context.Background())
+	if err != nil {
+		t.Fatalf("FetchPrice: %v", err)
+	}
+	if p.XAUUSD != 3000 {
+		t.Errorf("XAUUSD: got %v, want 3000", p.XAUUSD)
+	}
+	if p.USDVND != 25000 {
+		t.Errorf("USDVND: got %v, want 25000", p.USDVND)
+	}
+	want := 3000 * 25000 * (gramsPerLuong / gramsPerTroyOunce)
+	if math.Abs(p.VNDPerLuong-want) > 0.01 {
+		t.Errorf("VNDPerLuong: got %v, want %v", p.VNDPerLuong, want)
+	}
+}
+
 func TestValidateEndpoint(t *testing.T) {
 	if err := validateEndpoint("https://example.com/path"); err != nil {
 		t.Fatalf("https should pass: %v", err)
