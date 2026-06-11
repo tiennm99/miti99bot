@@ -81,7 +81,7 @@ func (s *conflictOnceStore) CompareAndSwap(ctx context.Context, key string, expe
 		s.conflicted = true
 		competing := NewPortfolio(1)
 		competing.AddVND(10)
-		if err := s.KVStore.PutJSON(ctx, key, competing); err != nil {
+		if err := s.PutJSON(ctx, key, competing); err != nil {
 			return err
 		}
 		return storage.ErrConflict
@@ -134,7 +134,7 @@ func TestUpdatePortfolioReturnsConflictAfterExhaustingRetries(t *testing.T) {
 	if kv.attempts != portfolioUpdateAttempts {
 		t.Errorf("CAS attempts = %d, want %d", kv.attempts, portfolioUpdateAttempts)
 	}
-	if _, err := kv.KVStore.Get(ctx, "user:7"); !errors.Is(err, storage.ErrNotFound) {
+	if _, err := kv.Get(ctx, "user:7"); !errors.Is(err, storage.ErrNotFound) {
 		t.Errorf("exhausted update must not persist anything, Get = %v", err)
 	}
 }
