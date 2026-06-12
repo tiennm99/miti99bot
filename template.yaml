@@ -14,7 +14,7 @@ Parameters:
 
   ModulesCSV:
     Type: String
-    Default: util,misc,wordle,loldle,lolschedule,twentyq,trading,stats
+    Default: util,misc,wordle,loldle,lolschedule,twentyq,trading,coin,stats
     Description: Comma-separated module names enabled at runtime (matches MODULES env).
 
   BotOwnerID:
@@ -46,6 +46,21 @@ Parameters:
     Type: String
     Default: ""
     Description: Optional USD/VND FX API URL override. Empty uses the built-in ExchangeRate-API open endpoint.
+
+  CoinBinanceAPIURL:
+    Type: String
+    Default: ""
+    Description: Optional Binance ticker price API URL override. Empty uses the built-in public endpoint.
+
+  CoinCoinbaseAPIURL:
+    Type: String
+    Default: ""
+    Description: Optional Coinbase exchange-rates API URL override. Empty uses the built-in public endpoint.
+
+  CoinCoinGeckoAPIURL:
+    Type: String
+    Default: ""
+    Description: Optional CoinGecko simple price API URL override. Empty uses the built-in public endpoint.
 
   # AWS Lambda Web Adapter ARM64 layer ARN. Pin a specific version so deploys
   # are reproducible. Bump by checking the latest at:
@@ -154,6 +169,9 @@ Resources:
           TRADING_INCOME_EVENTS_API_TOKEN_PARAMETER_NAME: !Ref TradingIncomeEventsAPITokenParameterName
           GOLD_PRICE_API_URL: !Ref GoldPriceAPIURL
           GOLD_FX_API_URL: !Ref GoldFXAPIURL
+          COIN_BINANCE_API_URL: !Ref CoinBinanceAPIURL
+          COIN_COINBASE_API_URL: !Ref CoinCoinbaseAPIURL
+          COIN_COINGECKO_API_URL: !Ref CoinCoinGeckoAPIURL
           # ---- Secrets (fetched from Parameter Store at Lambda cold start) ----
           TELEGRAM_BOT_TOKEN_PARAMETER_NAME: !Sub "/miti99bot/${StackEnv}/telegram-bot-token"
           TELEGRAM_WEBHOOK_SECRET_PARAMETER_NAME: !Sub "/miti99bot/${StackEnv}/telegram-webhook-secret"
