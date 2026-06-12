@@ -74,18 +74,21 @@ func run(ctx context.Context, from, to string, apply bool) error {
 // DynamoDB/env so it is unit-testable against any KVStore pair (the in-memory
 // provider prefixes keys by module name exactly like DynamoDB partitions).
 func migrate(ctx context.Context, src, dst storage.KVStore, from, to string, apply bool, out io.Writer) error {
+	// Progress lines are advisory; a failed write to stdout isn't actionable.
+	logf := func(format string, a ...any) { _, _ = fmt.Fprintf(out, format, a...) }
+
 	keys, err := src.List(ctx, "")
 	if err != nil {
 		return fmt.Errorf("list source partition %q: %w", from, err)
 	}
-	fmt.Fprintf(out, "  %d source keys\n", len(keys))
+	logf("  %d source keys\n", len(keys))
 
 	var copied, skipped int
 	for _, key := range keys {
 		// Skip keys the destination already has — the renamed module may have
 		// written fresher state; the migration must never overwrite it.
 		if _, err := dst.Get(ctx, key); err == nil {
-			fmt.Fprintf(out, "  skip  %s (already in %s)\n", key, to)
+			logf("  skip  %s (already in %s)\n", key, to)
 			skipped++
 			continue
 		} else if !errors.Is(err, storage.ErrNotFound) {
@@ -93,7 +96,7 @@ func migrate(ctx context.Context, src, dst storage.KVStore, from, to string, app
 		}
 
 		if !apply {
-			fmt.Fprintf(out, "  copy  %s (would migrate)\n", key)
+			logf("  copy  %s (would migrate)\n", key)
 			copied++
 			continue
 		}
@@ -105,7 +108,7 @@ func migrate(ctx context.Context, src, dst storage.KVStore, from, to string, app
 		if err := dst.Put(ctx, key, raw); err != nil {
 			return fmt.Errorf("write destination %s/%s: %w", to, key, err)
 		}
-		fmt.Fprintf(out, "  copy  %s (%d bytes)\n", key, len(raw))
+		logf("  copy  %s (%d bytes)\n", key, len(raw))
 		copied++
 	}
 
@@ -113,6 +116,6 @@ func migrate(ctx context.Context, src, dst storage.KVStore, from, to string, app
 	if apply {
 		verb = "copied"
 	}
-	fmt.Fprintf(out, "done: %s %d, skipped %d (source rows left in place)\n", verb, copied, skipped)
+	logf("done: %s %d, skipped %d (source rows left in place)\n", verb, copied, skipped)
 	return nil
 }
