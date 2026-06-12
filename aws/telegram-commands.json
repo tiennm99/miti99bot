@@ -73,35 +73,35 @@
       "description": "Show your twentyq stats"
     },
     {
-      "command": "trade_topup",
-      "description": "Top up VND to your trading account"
+      "command": "stock_topup",
+      "description": "Top up VND to your stock account"
     },
     {
-      "command": "trade_buy",
+      "command": "stock_buy",
       "description": "Buy VN stock at market price"
     },
     {
-      "command": "trade_sell",
+      "command": "stock_sell",
       "description": "Sell VN stock back to VND"
     },
     {
-      "command": "trade_income_stock",
+      "command": "stock_income_stock",
       "description": "Record stock dividend bonus shares"
     },
     {
-      "command": "trade_income_vnd",
+      "command": "stock_income_vnd",
       "description": "Record cash dividend per share"
     },
     {
-      "command": "trade_income_events",
+      "command": "stock_income_events",
       "description": "Check recent income events"
     },
     {
-      "command": "trade_convert",
+      "command": "stock_convert",
       "description": "Currency exchange"
     },
     {
-      "command": "trade_stats",
+      "command": "stock_stats",
       "description": "Show portfolio summary with P&L"
     },
     {

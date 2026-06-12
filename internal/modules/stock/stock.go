@@ -1,10 +1,10 @@
-package trading
+package stock
 
 import (
 	"github.com/tiennm99/miti99bot/internal/modules"
 )
 
-// New is the trading module Factory. Five user-facing commands; no crons.
+// New is the stock module Factory. Five user-facing commands; no crons.
 // (Original miti99bot only has a SQL retention cron, which our KV-only port
 // does not implement — keeping commits paper-ledger-only is acceptable.)
 func New(deps modules.Deps) modules.Module {
@@ -12,49 +12,49 @@ func New(deps modules.Deps) modules.Module {
 	return modules.Module{
 		Commands: []modules.Command{
 			{
-				Name:        "trade_topup",
+				Name:        "stock_topup",
 				Visibility:  modules.VisibilityPublic,
-				Description: "Top up VND to your trading account",
+				Description: "Top up VND to your stock account",
 				Handler:     s.handleTopup,
 			},
 			{
-				Name:        "trade_buy",
+				Name:        "stock_buy",
 				Visibility:  modules.VisibilityPublic,
 				Description: "Buy VN stock at market price (qty TICKER)",
 				Handler:     s.handleBuy,
 			},
 			{
-				Name:        "trade_sell",
+				Name:        "stock_sell",
 				Visibility:  modules.VisibilityPublic,
 				Description: "Sell VN stock back to VND (qty TICKER)",
 				Handler:     s.handleSell,
 			},
 			{
-				Name:        "trade_income_stock",
+				Name:        "stock_income_stock",
 				Visibility:  modules.VisibilityPublic,
 				Description: "Record stock dividend (bonus shares)",
 				Handler:     s.handleIncomeStock,
 			},
 			{
-				Name:        "trade_income_vnd",
+				Name:        "stock_income_vnd",
 				Visibility:  modules.VisibilityPublic,
 				Description: "Record cash dividend (VND per share)",
 				Handler:     s.handleIncomeVND,
 			},
 			{
-				Name:        "trade_income_events",
+				Name:        "stock_income_events",
 				Visibility:  modules.VisibilityPublic,
 				Description: "Check recent income events from FireAnt",
 				Handler:     s.handleIncomeEvents,
 			},
 			{
-				Name:        "trade_convert",
+				Name:        "stock_convert",
 				Visibility:  modules.VisibilityPublic,
 				Description: "Currency exchange (coming soon)",
 				Handler:     s.handleConvert,
 			},
 			{
-				Name:        "trade_stats",
+				Name:        "stock_stats",
 				Visibility:  modules.VisibilityPublic,
 				Description: "Show portfolio summary with P&L",
 				Handler:     s.handleStats,

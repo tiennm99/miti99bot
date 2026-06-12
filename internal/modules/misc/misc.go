@@ -87,7 +87,7 @@ func mstatsCommand(deps modules.Deps) modules.Command {
 				text = fmt.Sprintf("last ping: %s",
 					time.UnixMilli(last.At).UTC().Format(time.RFC3339))
 			case err != nil && !errors.Is(err, storage.ErrNotFound):
-				// User-visible reply mirrors how trading/wordle/loldle handle
+				// User-visible reply mirrors how stock/wordle/loldle handle
 				// transient KV failures — returning the error here would leave
 				// the user with no reply at all.
 				log.Error("kv get failed", "module", "misc", "command", "mstats", "key", lastPingKey, "err", err)

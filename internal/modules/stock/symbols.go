@@ -1,4 +1,4 @@
-package trading
+package stock
 
 import (
 	"context"
@@ -25,7 +25,7 @@ type ResolvedSymbol struct {
 
 // ErrUnknownTicker means KBS has no price data for the given ticker — i.e.
 // the symbol is not a tradeable VN stock as far as our source is concerned.
-var ErrUnknownTicker = errors.New("trading: unknown ticker")
+var ErrUnknownTicker = errors.New("stock: unknown ticker")
 
 // ResolveSymbol returns the cached ResolvedSymbol if any, otherwise queries
 // KBS to validate the ticker and caches the result permanently. Tickers
@@ -44,7 +44,7 @@ func ResolveSymbol(ctx context.Context, kv storage.KVStore, prices *PriceClient,
 	if err := kv.GetJSON(ctx, cacheKey, &cached); err == nil {
 		return cached, nil
 	} else if !errors.Is(err, storage.ErrNotFound) {
-		return ResolvedSymbol{}, fmt.Errorf("trading: cache read %s: %w", ticker, err)
+		return ResolvedSymbol{}, fmt.Errorf("stock: cache read %s: %w", ticker, err)
 	}
 
 	// Cache miss → validate against KBS by attempting a price fetch.

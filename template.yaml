@@ -14,7 +14,7 @@ Parameters:
 
   ModulesCSV:
     Type: String
-    Default: util,misc,wordle,loldle,lolschedule,twentyq,trading,coin,stats
+    Default: util,misc,wordle,loldle,lolschedule,twentyq,stock,coin,stats
     Description: Comma-separated module names enabled at runtime (matches MODULES env).
 
   BotOwnerID:
@@ -27,12 +27,12 @@ Parameters:
     Default: ""
     Description: Comma-separated Telegram user IDs allowed to use admin commands.
 
-  TradingIncomeEventsAPIURL:
+  StockIncomeEventsAPIURL:
     Type: String
     Default: "https://restv2.fireant.vn"
     Description: FireAnt REST API base URL. Defaults to https://restv2.fireant.vn when omitted.
 
-  TradingIncomeEventsAPITokenParameterName:
+  StockIncomeEventsAPITokenParameterName:
     Type: String
     Default: ""
     Description: Optional SSM SecureString parameter name containing bearer token for FireAnt REST API.
@@ -165,8 +165,8 @@ Resources:
           MODULES: !Ref ModulesCSV
           BOT_OWNER_ID: !Ref BotOwnerID
           ADMIN_USER_IDS: !Ref AdminUserIDs
-          TRADING_INCOME_EVENTS_API_URL: !Ref TradingIncomeEventsAPIURL
-          TRADING_INCOME_EVENTS_API_TOKEN_PARAMETER_NAME: !Ref TradingIncomeEventsAPITokenParameterName
+          STOCK_INCOME_EVENTS_API_URL: !Ref StockIncomeEventsAPIURL
+          STOCK_INCOME_EVENTS_API_TOKEN_PARAMETER_NAME: !Ref StockIncomeEventsAPITokenParameterName
           GOLD_PRICE_API_URL: !Ref GoldPriceAPIURL
           GOLD_FX_API_URL: !Ref GoldFXAPIURL
           COIN_BINANCE_API_URL: !Ref CoinBinanceAPIURL

@@ -102,18 +102,18 @@ Only when a push introduces **new public commands** (`VisibilityPublic`) does th
 need attention — re-confirm registration for those pushes; routine pushes (refactors,
 fixes, non-public commands) need no menu action.
 
-## Trading income events API
+## Stock income events API
 
-`/trade_income_events` uses a FireAnt REST API, configured at Lambda runtime:
+`/stock_income_events` uses a FireAnt REST API, configured at Lambda runtime:
 
-- `TRADING_INCOME_EVENTS_API_URL`: FireAnt base URL; defaults to `https://restv2.fireant.vn`. The bot calls `/symbols/{symbol}/timescale-marks` with `startDate` and `endDate`.
-- `TRADING_INCOME_EVENTS_API_TOKEN`: bearer token for FireAnt. Store it directly only for local dev; in AWS prefer `TRADING_INCOME_EVENTS_API_TOKEN_PARAMETER_NAME`.
+- `STOCK_INCOME_EVENTS_API_URL`: FireAnt base URL; defaults to `https://restv2.fireant.vn`. The bot calls `/symbols/{symbol}/timescale-marks` with `startDate` and `endDate`.
+- `STOCK_INCOME_EVENTS_API_TOKEN`: bearer token for FireAnt. Store it directly only for local dev; in AWS prefer `STOCK_INCOME_EVENTS_API_TOKEN_PARAMETER_NAME`.
 
 FireAnt response is an array of timescale marks with `id`, `label`, `date`, `title`, and `color`. The bot keeps marks whose label/title indicate dividends, ex-right dates, final registration dates, rights issues, or bonus/share dividends.
 
 ## Gold module
 
-`gold` is opt-in for first deploy. Enable it by adding `gold` to the `ModulesCSV` parameter / `MODULES` env, for example `util,misc,wordle,loldle,lolschedule,twentyq,trading,stats,gold`.
+`gold` is opt-in for first deploy. Enable it by adding `gold` to the `ModulesCSV` parameter / `MODULES` env, for example `util,misc,wordle,loldle,lolschedule,twentyq,stock,stats,gold`.
 
 Commands:
 

@@ -1,4 +1,4 @@
-package trading
+package stock
 
 import (
 	"context"
@@ -63,7 +63,7 @@ func senderInfo(update *models.Update) (userID int64, ok bool) {
 }
 
 // argsAfterCommand splits the command body into whitespace-separated args.
-// "/trade_buy 100 TCB" → ["100", "TCB"]; "/trade_topup" → []
+// "/stock_buy 100 TCB" → ["100", "TCB"]; "/stock_topup" → []
 func argsAfterCommand(text string) []string {
 	parts := strings.Fields(text)
 	if len(parts) <= 1 {
@@ -76,11 +76,11 @@ func (s *state) handleTopup(ctx context.Context, b *bot.Bot, update *models.Upda
 	userID, ok := senderInfo(update)
 	if !ok {
 		return chathelper.Reply(ctx, b, update.Message,
-			"Cannot identify user — trading only works in private/group chats with a sender.")
+			"Cannot identify user — stock only works in private/group chats with a sender.")
 	}
 	args := argsAfterCommand(update.Message.Text)
 	if len(args) < 1 {
-		return chathelper.Reply(ctx, b, update.Message, "Usage: /trade_topup <amount>\nExample: /trade_topup 5000000")
+		return chathelper.Reply(ctx, b, update.Message, "Usage: /stock_topup <amount>\nExample: /stock_topup 5000000")
 	}
 	amount, err := strconv.ParseFloat(args[0], 64)
 	if err != nil || amount <= 0 {
@@ -91,13 +91,13 @@ func (s *state) handleTopup(ctx context.Context, b *bot.Bot, update *models.Upda
 
 	p, err := LoadPortfolio(ctx, s.kv, userID, s.now().UnixMilli())
 	if err != nil {
-		log.Error("trading_load_portfolio", "user", userID, "err", err)
+		log.Error("stock_load_portfolio", "user", userID, "err", err)
 		return chathelper.Reply(ctx, b, update.Message, "Could not load portfolio. Try again later.")
 	}
 	p.AddCurrency("VND", amount)
 	p.Meta.Invested += amount
 	if err := SavePortfolio(ctx, s.kv, userID, p); err != nil {
-		log.Error("trading_save_portfolio", "user", userID, "err", err)
+		log.Error("stock_save_portfolio", "user", userID, "err", err)
 		return chathelper.Reply(ctx, b, update.Message, "Could not save portfolio. Try again later.")
 	}
 	return chathelper.Reply(ctx, b, update.Message,
@@ -108,11 +108,11 @@ func (s *state) handleBuy(ctx context.Context, b *bot.Bot, update *models.Update
 	userID, ok := senderInfo(update)
 	if !ok {
 		return chathelper.Reply(ctx, b, update.Message,
-			"Cannot identify user — trading only works in private/group chats with a sender.")
+			"Cannot identify user — stock only works in private/group chats with a sender.")
 	}
 	args := argsAfterCommand(update.Message.Text)
 	if len(args) < 2 {
-		return chathelper.Reply(ctx, b, update.Message, "Usage: /trade_buy <qty> <TICKER>\nExample: /trade_buy 100 TCB")
+		return chathelper.Reply(ctx, b, update.Message, "Usage: /stock_buy <qty> <TICKER>\nExample: /stock_buy 100 TCB")
 	}
 	qty, err := strconv.ParseInt(args[0], 10, 64)
 	if err != nil || qty <= 0 {
@@ -125,7 +125,7 @@ func (s *state) handleBuy(ctx context.Context, b *bot.Bot, update *models.Update
 			return chathelper.Reply(ctx, b, update.Message,
 				"Unknown stock ticker \""+strings.ToUpper(args[1])+"\".\n"+s.comingSoonMessage)
 		}
-		log.Error("trading_resolve_symbol", "ticker", args[1], "err", err)
+		log.Error("stock_resolve_symbol", "ticker", args[1], "err", err)
 		return chathelper.Reply(ctx, b, update.Message, "Could not look up that ticker. Try again later.")
 	}
 
@@ -134,7 +134,7 @@ func (s *state) handleBuy(ctx context.Context, b *bot.Bot, update *models.Update
 		if errors.Is(err, ErrNoPrice) {
 			return chathelper.Reply(ctx, b, update.Message, "No price available for "+resolved.Symbol+".")
 		}
-		log.Error("trading_fetch_price", "ticker", resolved.Symbol, "err", err)
+		log.Error("stock_fetch_price", "ticker", resolved.Symbol, "err", err)
 		return chathelper.Reply(ctx, b, update.Message, "Could not fetch price. Try again later.")
 	}
 	cost := float64(qty) * price
@@ -143,7 +143,7 @@ func (s *state) handleBuy(ctx context.Context, b *bot.Bot, update *models.Update
 
 	p, err := LoadPortfolio(ctx, s.kv, userID, s.now().UnixMilli())
 	if err != nil {
-		log.Error("trading_load_portfolio", "user", userID, "err", err)
+		log.Error("stock_load_portfolio", "user", userID, "err", err)
 		return chathelper.Reply(ctx, b, update.Message, "Could not load portfolio. Try again later.")
 	}
 	ok, balance := p.DeductCurrency("VND", cost)
@@ -153,7 +153,7 @@ func (s *state) handleBuy(ctx context.Context, b *bot.Bot, update *models.Update
 	}
 	p.AddAsset(resolved.Symbol, qty)
 	if err := SavePortfolio(ctx, s.kv, userID, p); err != nil {
-		log.Error("trading_save_portfolio", "user", userID, "err", err)
+		log.Error("stock_save_portfolio", "user", userID, "err", err)
 		return chathelper.Reply(ctx, b, update.Message, "Could not save portfolio. Try again later.")
 	}
 	return chathelper.Reply(ctx, b, update.Message,
@@ -166,11 +166,11 @@ func (s *state) handleSell(ctx context.Context, b *bot.Bot, update *models.Updat
 	userID, ok := senderInfo(update)
 	if !ok {
 		return chathelper.Reply(ctx, b, update.Message,
-			"Cannot identify user — trading only works in private/group chats with a sender.")
+			"Cannot identify user — stock only works in private/group chats with a sender.")
 	}
 	args := argsAfterCommand(update.Message.Text)
 	if len(args) < 2 {
-		return chathelper.Reply(ctx, b, update.Message, "Usage: /trade_sell <qty> <TICKER>\nExample: /trade_sell 100 TCB")
+		return chathelper.Reply(ctx, b, update.Message, "Usage: /stock_sell <qty> <TICKER>\nExample: /stock_sell 100 TCB")
 	}
 	qty, err := strconv.ParseInt(args[0], 10, 64)
 	if err != nil || qty <= 0 {
@@ -186,7 +186,7 @@ func (s *state) handleSell(ctx context.Context, b *bot.Bot, update *models.Updat
 			return chathelper.Reply(ctx, b, update.Message,
 				"Unknown stock ticker \""+strings.ToUpper(args[1])+"\".")
 		}
-		log.Error("trading_resolve_symbol", "ticker", args[1], "err", err)
+		log.Error("stock_resolve_symbol", "ticker", args[1], "err", err)
 		return chathelper.Reply(ctx, b, update.Message, "Could not look up that ticker. Try again later.")
 	}
 	price, err := s.prices.FetchPrice(ctx, resolved.Symbol)
@@ -194,7 +194,7 @@ func (s *state) handleSell(ctx context.Context, b *bot.Bot, update *models.Updat
 		if errors.Is(err, ErrNoPrice) {
 			return chathelper.Reply(ctx, b, update.Message, "No price available for "+resolved.Symbol+".")
 		}
-		log.Error("trading_fetch_price", "ticker", resolved.Symbol, "err", err)
+		log.Error("stock_fetch_price", "ticker", resolved.Symbol, "err", err)
 		return chathelper.Reply(ctx, b, update.Message, "Could not fetch price. Try again later.")
 	}
 
@@ -202,7 +202,7 @@ func (s *state) handleSell(ctx context.Context, b *bot.Bot, update *models.Updat
 
 	p, err := LoadPortfolio(ctx, s.kv, userID, s.now().UnixMilli())
 	if err != nil {
-		log.Error("trading_load_portfolio", "user", userID, "err", err)
+		log.Error("stock_load_portfolio", "user", userID, "err", err)
 		return chathelper.Reply(ctx, b, update.Message, "Could not load portfolio. Try again later.")
 	}
 	ok, held := p.DeductAsset(resolved.Symbol, qty)
@@ -213,7 +213,7 @@ func (s *state) handleSell(ctx context.Context, b *bot.Bot, update *models.Updat
 	revenue := float64(qty) * price
 	p.AddCurrency("VND", revenue)
 	if err := SavePortfolio(ctx, s.kv, userID, p); err != nil {
-		log.Error("trading_save_portfolio", "user", userID, "err", err)
+		log.Error("stock_save_portfolio", "user", userID, "err", err)
 		return chathelper.Reply(ctx, b, update.Message, "Could not save portfolio. Try again later.")
 	}
 	return chathelper.Reply(ctx, b, update.Message,
@@ -226,12 +226,12 @@ func (s *state) handleIncomeStock(ctx context.Context, b *bot.Bot, update *model
 	userID, ok := senderInfo(update)
 	if !ok {
 		return chathelper.Reply(ctx, b, update.Message,
-			"Cannot identify user — trading only works in private/group chats with a sender.")
+			"Cannot identify user — stock only works in private/group chats with a sender.")
 	}
 	args := argsAfterCommand(update.Message.Text)
 	if len(args) < 2 {
 		return chathelper.Reply(ctx, b, update.Message,
-			"Usage: /trade_income_stock <qty> <TICKER>\nExample: /trade_income_stock 200 TCX")
+			"Usage: /stock_income_stock <qty> <TICKER>\nExample: /stock_income_stock 200 TCX")
 	}
 	qty, err := strconv.ParseInt(args[0], 10, 64)
 	if err != nil || qty <= 0 {
@@ -244,7 +244,7 @@ func (s *state) handleIncomeStock(ctx context.Context, b *bot.Bot, update *model
 			return chathelper.Reply(ctx, b, update.Message,
 				"Unknown stock ticker \""+strings.ToUpper(args[1])+"\".")
 		}
-		log.Error("trading_resolve_symbol", "ticker", args[1], "err", err)
+		log.Error("stock_resolve_symbol", "ticker", args[1], "err", err)
 		return chathelper.Reply(ctx, b, update.Message, "Could not look up that ticker. Try again later.")
 	}
 
@@ -252,7 +252,7 @@ func (s *state) handleIncomeStock(ctx context.Context, b *bot.Bot, update *model
 
 	p, err := LoadPortfolio(ctx, s.kv, userID, s.now().UnixMilli())
 	if err != nil {
-		log.Error("trading_load_portfolio", "user", userID, "err", err)
+		log.Error("stock_load_portfolio", "user", userID, "err", err)
 		return chathelper.Reply(ctx, b, update.Message, "Could not load portfolio. Try again later.")
 	}
 	held := p.Assets[resolved.Symbol]
@@ -262,7 +262,7 @@ func (s *state) handleIncomeStock(ctx context.Context, b *bot.Bot, update *model
 	}
 	p.AddAsset(resolved.Symbol, qty)
 	if err := SavePortfolio(ctx, s.kv, userID, p); err != nil {
-		log.Error("trading_save_portfolio", "user", userID, "err", err)
+		log.Error("stock_save_portfolio", "user", userID, "err", err)
 		return chathelper.Reply(ctx, b, update.Message, "Could not save portfolio. Try again later.")
 	}
 	return chathelper.Reply(ctx, b, update.Message,
@@ -274,12 +274,12 @@ func (s *state) handleIncomeVND(ctx context.Context, b *bot.Bot, update *models.
 	userID, ok := senderInfo(update)
 	if !ok {
 		return chathelper.Reply(ctx, b, update.Message,
-			"Cannot identify user — trading only works in private/group chats with a sender.")
+			"Cannot identify user — stock only works in private/group chats with a sender.")
 	}
 	args := argsAfterCommand(update.Message.Text)
 	if len(args) < 2 {
 		return chathelper.Reply(ctx, b, update.Message,
-			"Usage: /trade_income_vnd <amount_per_share> <TICKER>\nExample: /trade_income_vnd 1500 TCX")
+			"Usage: /stock_income_vnd <amount_per_share> <TICKER>\nExample: /stock_income_vnd 1500 TCX")
 	}
 	amountPerShare, err := strconv.ParseFloat(args[0], 64)
 	if err != nil || amountPerShare <= 0 {
@@ -292,7 +292,7 @@ func (s *state) handleIncomeVND(ctx context.Context, b *bot.Bot, update *models.
 			return chathelper.Reply(ctx, b, update.Message,
 				"Unknown stock ticker \""+strings.ToUpper(args[1])+"\".")
 		}
-		log.Error("trading_resolve_symbol", "ticker", args[1], "err", err)
+		log.Error("stock_resolve_symbol", "ticker", args[1], "err", err)
 		return chathelper.Reply(ctx, b, update.Message, "Could not look up that ticker. Try again later.")
 	}
 
@@ -300,7 +300,7 @@ func (s *state) handleIncomeVND(ctx context.Context, b *bot.Bot, update *models.
 
 	p, err := LoadPortfolio(ctx, s.kv, userID, s.now().UnixMilli())
 	if err != nil {
-		log.Error("trading_load_portfolio", "user", userID, "err", err)
+		log.Error("stock_load_portfolio", "user", userID, "err", err)
 		return chathelper.Reply(ctx, b, update.Message, "Could not load portfolio. Try again later.")
 	}
 	held := p.Assets[resolved.Symbol]
@@ -311,7 +311,7 @@ func (s *state) handleIncomeVND(ctx context.Context, b *bot.Bot, update *models.
 	total := amountPerShare * float64(held)
 	p.AddCurrency("VND", total)
 	if err := SavePortfolio(ctx, s.kv, userID, p); err != nil {
-		log.Error("trading_save_portfolio", "user", userID, "err", err)
+		log.Error("stock_save_portfolio", "user", userID, "err", err)
 		return chathelper.Reply(ctx, b, update.Message, "Could not save portfolio. Try again later.")
 	}
 	return chathelper.Reply(ctx, b, update.Message,
@@ -334,11 +334,11 @@ func (s *state) handleStats(ctx context.Context, b *bot.Bot, update *models.Upda
 	userID, ok := senderInfo(update)
 	if !ok {
 		return chathelper.Reply(ctx, b, update.Message,
-			"Cannot identify user — /trade_stats needs a sender.")
+			"Cannot identify user — /stock_stats needs a sender.")
 	}
 	p, err := LoadPortfolio(ctx, s.kv, userID, s.now().UnixMilli())
 	if err != nil {
-		log.Error("trading_load_portfolio", "user", userID, "err", err)
+		log.Error("stock_load_portfolio", "user", userID, "err", err)
 		return chathelper.Reply(ctx, b, update.Message, "Could not load portfolio. Try again later.")
 	}
 

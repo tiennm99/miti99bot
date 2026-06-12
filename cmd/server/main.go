@@ -26,7 +26,7 @@ import (
 	"github.com/tiennm99/miti99bot/internal/modules/lolschedule"
 	"github.com/tiennm99/miti99bot/internal/modules/misc"
 	"github.com/tiennm99/miti99bot/internal/modules/stats"
-	"github.com/tiennm99/miti99bot/internal/modules/trading"
+	"github.com/tiennm99/miti99bot/internal/modules/stock"
 	"github.com/tiennm99/miti99bot/internal/modules/twentyq"
 	"github.com/tiennm99/miti99bot/internal/modules/util"
 	"github.com/tiennm99/miti99bot/internal/modules/wordle"
@@ -53,7 +53,7 @@ func factories() map[string]modules.Factory {
 		"coin":        coin.New,
 		"gold":        gold.New,
 		"twentyq":     twentyq.New,
-		"trading":     trading.New,
+		"stock":       stock.New,
 		"stats":       stats.New,
 	}
 }
@@ -86,8 +86,8 @@ func main() {
 		log.Fatal("missing required env", "key", "TELEGRAM_WEBHOOK_SECRET",
 			"why", "non-empty secret is the only auth on /webhook")
 	}
-	exportOptionalEnv("TRADING_INCOME_EVENTS_API_URL", cfg.TradingIncomeEventsAPIURL)
-	exportOptionalEnv("TRADING_INCOME_EVENTS_API_TOKEN", cfg.TradingIncomeEventsAPIToken)
+	exportOptionalEnv("STOCK_INCOME_EVENTS_API_URL", cfg.StockIncomeEventsAPIURL)
+	exportOptionalEnv("STOCK_INCOME_EVENTS_API_TOKEN", cfg.StockIncomeEventsAPIToken)
 	exportOptionalEnv("GOLD_PRICE_API_URL", cfg.GoldPriceAPIURL)
 	exportOptionalEnv("GOLD_FX_API_URL", cfg.GoldFXAPIURL)
 	exportOptionalEnv("COIN_BINANCE_API_URL", cfg.CoinBinanceAPIURL)
@@ -258,30 +258,30 @@ func buildProvider(ctx context.Context, cfg config) (storage.KVProvider, func(),
 }
 
 type config struct {
-	Port                             string
-	TelegramBotToken                 string
-	WebhookSecret                    string
-	CronSecret                       string
-	FirestoreProject                 string
-	FirestoreEmulatorHost            string
-	GeminiAPIKey                     string
-	TradingIncomeEventsAPIURL        string
-	TradingIncomeEventsAPIToken      string
-	GoldPriceAPIURL                  string
-	GoldFXAPIURL                     string
-	CoinBinanceAPIURL                string
-	CoinCoinbaseAPIURL               string
-	CoinCoinGeckoAPIURL              string
-	Modules                          []string
-	BotOwnerID                       int64
-	AdminUserIDs                     map[int64]bool
-	KVProvider                       string // empty = auto-detect; or "memory"|"firestore"|"dynamodb"
-	DynamoDBTable                    string // required when KVProvider=dynamodb
-	TelegramBotTokenParam            string
-	WebhookSecretParam               string
-	CronSecretParam                  string
-	GeminiAPIKeyParam                string
-	TradingIncomeEventsAPITokenParam string
+	Port                           string
+	TelegramBotToken               string
+	WebhookSecret                  string
+	CronSecret                     string
+	FirestoreProject               string
+	FirestoreEmulatorHost          string
+	GeminiAPIKey                   string
+	StockIncomeEventsAPIURL        string
+	StockIncomeEventsAPIToken      string
+	GoldPriceAPIURL                string
+	GoldFXAPIURL                   string
+	CoinBinanceAPIURL              string
+	CoinCoinbaseAPIURL             string
+	CoinCoinGeckoAPIURL            string
+	Modules                        []string
+	BotOwnerID                     int64
+	AdminUserIDs                   map[int64]bool
+	KVProvider                     string // empty = auto-detect; or "memory"|"firestore"|"dynamodb"
+	DynamoDBTable                  string // required when KVProvider=dynamodb
+	TelegramBotTokenParam          string
+	WebhookSecretParam             string
+	CronSecretParam                string
+	GeminiAPIKeyParam              string
+	StockIncomeEventsAPITokenParam string
 }
 
 func loadConfig() config {
@@ -302,30 +302,30 @@ func loadConfig() config {
 		log.Fatal("invalid PORT", "value", port)
 	}
 	return config{
-		Port:                             port,
-		TelegramBotToken:                 envMap["TELEGRAM_BOT_TOKEN"],
-		WebhookSecret:                    envMap["TELEGRAM_WEBHOOK_SECRET"],
-		CronSecret:                       envMap["CRON_SHARED_SECRET"],
-		FirestoreProject:                 envMap["GOOGLE_CLOUD_PROJECT"],
-		FirestoreEmulatorHost:            envMap["FIRESTORE_EMULATOR_HOST"],
-		GeminiAPIKey:                     envMap["GEMINI_API_KEY"],
-		TradingIncomeEventsAPIURL:        envMap["TRADING_INCOME_EVENTS_API_URL"],
-		TradingIncomeEventsAPIToken:      envMap["TRADING_INCOME_EVENTS_API_TOKEN"],
-		GoldPriceAPIURL:                  envMap["GOLD_PRICE_API_URL"],
-		GoldFXAPIURL:                     envMap["GOLD_FX_API_URL"],
-		CoinBinanceAPIURL:                envMap["COIN_BINANCE_API_URL"],
-		CoinCoinbaseAPIURL:               envMap["COIN_COINBASE_API_URL"],
-		CoinCoinGeckoAPIURL:              envMap["COIN_COINGECKO_API_URL"],
-		Modules:                          splitCSV(envMap["MODULES"]),
-		BotOwnerID:                       parseInt64(envMap["BOT_OWNER_ID"]),
-		AdminUserIDs:                     parseInt64Set(envMap["ADMIN_USER_IDS"]),
-		KVProvider:                       envMap["KV_PROVIDER"],
-		DynamoDBTable:                    envMap["DYNAMODB_TABLE"],
-		TelegramBotTokenParam:            strings.TrimSpace(envMap["TELEGRAM_BOT_TOKEN_PARAMETER_NAME"]),
-		WebhookSecretParam:               strings.TrimSpace(envMap["TELEGRAM_WEBHOOK_SECRET_PARAMETER_NAME"]),
-		CronSecretParam:                  strings.TrimSpace(envMap["CRON_SHARED_SECRET_PARAMETER_NAME"]),
-		GeminiAPIKeyParam:                strings.TrimSpace(envMap["GEMINI_API_KEY_PARAMETER_NAME"]),
-		TradingIncomeEventsAPITokenParam: strings.TrimSpace(envMap["TRADING_INCOME_EVENTS_API_TOKEN_PARAMETER_NAME"]),
+		Port:                           port,
+		TelegramBotToken:               envMap["TELEGRAM_BOT_TOKEN"],
+		WebhookSecret:                  envMap["TELEGRAM_WEBHOOK_SECRET"],
+		CronSecret:                     envMap["CRON_SHARED_SECRET"],
+		FirestoreProject:               envMap["GOOGLE_CLOUD_PROJECT"],
+		FirestoreEmulatorHost:          envMap["FIRESTORE_EMULATOR_HOST"],
+		GeminiAPIKey:                   envMap["GEMINI_API_KEY"],
+		StockIncomeEventsAPIURL:        envMap["STOCK_INCOME_EVENTS_API_URL"],
+		StockIncomeEventsAPIToken:      envMap["STOCK_INCOME_EVENTS_API_TOKEN"],
+		GoldPriceAPIURL:                envMap["GOLD_PRICE_API_URL"],
+		GoldFXAPIURL:                   envMap["GOLD_FX_API_URL"],
+		CoinBinanceAPIURL:              envMap["COIN_BINANCE_API_URL"],
+		CoinCoinbaseAPIURL:             envMap["COIN_COINBASE_API_URL"],
+		CoinCoinGeckoAPIURL:            envMap["COIN_COINGECKO_API_URL"],
+		Modules:                        splitCSV(envMap["MODULES"]),
+		BotOwnerID:                     parseInt64(envMap["BOT_OWNER_ID"]),
+		AdminUserIDs:                   parseInt64Set(envMap["ADMIN_USER_IDS"]),
+		KVProvider:                     envMap["KV_PROVIDER"],
+		DynamoDBTable:                  envMap["DYNAMODB_TABLE"],
+		TelegramBotTokenParam:          strings.TrimSpace(envMap["TELEGRAM_BOT_TOKEN_PARAMETER_NAME"]),
+		WebhookSecretParam:             strings.TrimSpace(envMap["TELEGRAM_WEBHOOK_SECRET_PARAMETER_NAME"]),
+		CronSecretParam:                strings.TrimSpace(envMap["CRON_SHARED_SECRET_PARAMETER_NAME"]),
+		GeminiAPIKeyParam:              strings.TrimSpace(envMap["GEMINI_API_KEY_PARAMETER_NAME"]),
+		StockIncomeEventsAPITokenParam: strings.TrimSpace(envMap["STOCK_INCOME_EVENTS_API_TOKEN_PARAMETER_NAME"]),
 	}
 }
 
@@ -338,7 +338,7 @@ func resolveSSMSecrets(ctx context.Context, cfg *config) error {
 		{name: cfg.WebhookSecretParam, target: &cfg.WebhookSecret},
 		{name: cfg.CronSecretParam, target: &cfg.CronSecret},
 		{name: cfg.GeminiAPIKeyParam, target: &cfg.GeminiAPIKey},
-		{name: cfg.TradingIncomeEventsAPITokenParam, target: &cfg.TradingIncomeEventsAPIToken},
+		{name: cfg.StockIncomeEventsAPITokenParam, target: &cfg.StockIncomeEventsAPIToken},
 	}
 
 	targetsByName := map[string][]*string{}
