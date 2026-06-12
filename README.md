@@ -14,6 +14,7 @@ Plug-n-play Telegram bot framework in Go. Runs on AWS Lambda + DynamoDB + EventB
 | `twentyq` | 20-questions game (requires Gemini API key) |
 | `trading` | VN-stocks paper trading |
 | `gold` | Gold paper trading (opt-in; spot XAU converted to VND per luong) |
+| `coin` | Crypto paper trading in USD (Binance -> Coinbase -> CoinGecko price fallback) |
 | `stats` | `/stats` (top commands), `/stats users`, `/stats user <name>`, `/stats cmd <name>` |
 
 Disable any module by editing `MODULES` in `template.yaml`.
