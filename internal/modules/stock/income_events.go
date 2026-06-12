@@ -1,4 +1,4 @@
-package trading
+package stock
 
 import (
 	"context"
@@ -45,13 +45,13 @@ type IncomeEventClient struct {
 }
 
 func NewIncomeEventClientFromEnv() *IncomeEventClient {
-	url := strings.TrimSpace(os.Getenv("TRADING_INCOME_EVENTS_API_URL"))
+	url := strings.TrimSpace(os.Getenv("STOCK_INCOME_EVENTS_API_URL"))
 	if url == "" {
 		url = fireAntIncomeEventsDefaultURL
 	}
 	return &IncomeEventClient{
 		URL:   url,
-		Token: strings.TrimSpace(os.Getenv("TRADING_INCOME_EVENTS_API_TOKEN")),
+		Token: strings.TrimSpace(os.Getenv("STOCK_INCOME_EVENTS_API_TOKEN")),
 	}
 }
 
@@ -74,9 +74,9 @@ type fireAntTimescaleMark struct {
 }
 
 var (
-	ErrNoIncomeEvents                 = errors.New("trading: no income events")
-	ErrIncomeEventClientNotConfigured = errors.New("trading: income events API not configured")
-	ErrIncomeEventAuthRequired        = errors.New("trading: income events API authentication required")
+	ErrNoIncomeEvents                 = errors.New("stock: no income events")
+	ErrIncomeEventClientNotConfigured = errors.New("stock: income events API not configured")
+	ErrIncomeEventAuthRequired        = errors.New("stock: income events API authentication required")
 )
 
 func (c *IncomeEventClient) FetchRecent(ctx context.Context, ticker string, since, until time.Time) ([]IncomeEvent, error) {
@@ -99,7 +99,7 @@ func (c *IncomeEventClient) FetchRecent(ctx context.Context, ticker string, sinc
 
 	resp, err := c.httpClient().Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("trading: FireAnt request: %w", err)
+		return nil, fmt.Errorf("stock: FireAnt request: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
@@ -117,10 +117,10 @@ func (c *IncomeEventClient) FetchRecent(ctx context.Context, ticker string, sinc
 func fireAntMarksURL(baseURL, ticker string, since, until time.Time) (string, error) {
 	endpoint, err := url.Parse(baseURL)
 	if err != nil {
-		return "", fmt.Errorf("trading: parse FireAnt URL: %w", err)
+		return "", fmt.Errorf("stock: parse FireAnt URL: %w", err)
 	}
 	if !isSafeFireAntEndpoint(endpoint) {
-		return "", fmt.Errorf("trading: income events API URL must be https")
+		return "", fmt.Errorf("stock: income events API URL must be https")
 	}
 	endpoint.Path = strings.TrimRight(endpoint.Path, "/") + "/symbols/" + url.PathEscape(ticker) + "/timescale-marks"
 	q := endpoint.Query()
@@ -143,7 +143,7 @@ func isSafeFireAntEndpoint(endpoint *url.URL) bool {
 func fireAntRequest(ctx context.Context, fullURL, token string) (*http.Request, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fullURL, nil)
 	if err != nil {
-		return nil, fmt.Errorf("trading: build FireAnt request: %w", err)
+		return nil, fmt.Errorf("stock: build FireAnt request: %w", err)
 	}
 	req.Header.Set("User-Agent", "miti99bot")
 	if token != "" {
@@ -160,12 +160,12 @@ func decodeFireAntMarks(resp *http.Response) ([]fireAntTimescaleMark, error) {
 		return nil, ErrNoIncomeEvents
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("trading: FireAnt status %d", resp.StatusCode)
+		return nil, fmt.Errorf("stock: FireAnt status %d", resp.StatusCode)
 	}
 
 	var marks []fireAntTimescaleMark
 	if err := json.NewDecoder(resp.Body).Decode(&marks); err != nil {
-		return nil, fmt.Errorf("trading: FireAnt decode: %w", err)
+		return nil, fmt.Errorf("stock: FireAnt decode: %w", err)
 	}
 	return marks, nil
 }
@@ -275,7 +275,7 @@ func (s *state) handleIncomeEvents(ctx context.Context, b *bot.Bot, update *mode
 	userID, ok := senderInfo(update)
 	if !ok {
 		return chathelper.Reply(ctx, b, update.Message,
-			"Cannot identify user - /trade_income_events needs a sender.")
+			"Cannot identify user - /stock_income_events needs a sender.")
 	}
 
 	args := argsAfterCommand(update.Message.Text)
@@ -288,12 +288,12 @@ func (s *state) handleIncomeEvents(ctx context.Context, b *bot.Bot, update *mode
 			}
 			return chathelper.Reply(ctx, b, update.Message, "Unknown stock ticker \""+ticker+"\".")
 		}
-		log.Error("trading_income_events_symbols", "user", userID, "err", err)
+		log.Error("stock_income_events_symbols", "user", userID, "err", err)
 		return chathelper.Reply(ctx, b, update.Message, "Could not load holdings. Try again later.")
 	}
 	if len(symbols) == 0 {
 		return chathelper.Reply(ctx, b, update.Message,
-			"You don't hold any stocks yet. Usage: /trade_income_events <TICKER>")
+			"You don't hold any stocks yet. Usage: /stock_income_events <TICKER>")
 	}
 
 	until := s.now().UTC()
@@ -310,12 +310,12 @@ func (s *state) handleIncomeEvents(ctx context.Context, b *bot.Bot, update *mode
 			}
 			if errors.Is(err, ErrIncomeEventAuthRequired) {
 				return chathelper.Reply(ctx, b, update.Message,
-					"FireAnt income events API requires authentication. Set TRADING_INCOME_EVENTS_API_TOKEN or TRADING_INCOME_EVENTS_API_TOKEN_PARAMETER_NAME.")
+					"FireAnt income events API requires authentication. Set STOCK_INCOME_EVENTS_API_TOKEN or STOCK_INCOME_EVENTS_API_TOKEN_PARAMETER_NAME.")
 			}
 			if errors.Is(err, ErrNoIncomeEvents) {
 				continue
 			}
-			log.Error("trading_fetch_income_events", "ticker", symbol, "err", err)
+			log.Error("stock_fetch_income_events", "ticker", symbol, "err", err)
 			failed = append(failed, symbol)
 			continue
 		}
@@ -323,7 +323,7 @@ func (s *state) handleIncomeEvents(ctx context.Context, b *bot.Bot, update *mode
 	}
 	if notConfigured {
 		return chathelper.Reply(ctx, b, update.Message,
-			"Income events API is not configured. Set TRADING_INCOME_EVENTS_API_URL or use the FireAnt default.")
+			"Income events API is not configured. Set STOCK_INCOME_EVENTS_API_URL or use the FireAnt default.")
 	}
 	sort.Slice(all, func(i, j int) bool {
 		if all[i].DeployDate.Equal(all[j].DeployDate) {
