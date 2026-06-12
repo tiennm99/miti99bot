@@ -1,4 +1,4 @@
-package trading
+package stock
 
 import (
 	"context"
@@ -128,13 +128,13 @@ func installTradingIncomeEvents(t *testing.T, eventBody string, now time.Time) (
 		nowFn:        func() time.Time { return now },
 	}
 	cmd := modules.Command{
-		Name:        "trade_income_events",
+		Name:        "stock_income_events",
 		Visibility:  modules.VisibilityPublic,
 		Description: "x",
 		Handler:     s.handleIncomeEvents,
 	}
 	reg := &modules.Registry{
-		Modules:     []modules.Module{{Name: "trading", Commands: []modules.Command{cmd}}},
+		Modules:     []modules.Module{{Name: "stock", Commands: []modules.Command{cmd}}},
 		AllCommands: map[string]modules.Command{cmd.Name: cmd},
 	}
 	modules.Install(rb.Bot, reg, modules.Auth{})
@@ -146,7 +146,7 @@ func TestHandleIncomeEvents_WithTicker(t *testing.T) {
 	body := `[{"id":"1","label":"GDKHQ","date":"2026-05-25T00:00:00Z","title":"TCX: 25.5.2026, ngày GDKHQ trả cổ tức bằng cổ phiếu năm 2024 (tỷ lệ 5:1)"}]`
 	rb, _ := installTradingIncomeEvents(t, body, now)
 
-	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(1, "/trade_income_events TCX"))
+	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(1, "/stock_income_events TCX"))
 	got := rb.LastSent().Text()
 	for _, want := range []string{"Income events from FireAnt", "TCX - 25/05/2026", "trả cổ tức"} {
 		if !strings.Contains(got, want) {
@@ -165,7 +165,7 @@ func TestHandleIncomeEvents_UsesHoldingsWhenTickerMissing(t *testing.T) {
 		t.Fatalf("SavePortfolio: %v", err)
 	}
 
-	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(7, "/trade_income_events"))
+	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(7, "/stock_income_events"))
 	got := rb.LastSent().Text()
 	if !strings.Contains(got, "TCX - 25/05/2026: Holding event") {
 		t.Errorf("expected holding event reply; got:\n%s", got)

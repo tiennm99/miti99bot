@@ -1,4 +1,4 @@
-package trading
+package stock
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 	"github.com/tiennm99/miti99bot/internal/storage"
 )
 
-// Portfolio is the per-user trading state. Currency is a map for forward-
+// Portfolio is the per-user stock state. Currency is a map for forward-
 // compat with USD/EUR (currently VND-only). Assets is a flat ticker→qty map
 // — category lives in the symbol cache, not the portfolio.
 type Portfolio struct {
@@ -60,14 +60,14 @@ func LoadPortfolio(ctx context.Context, kv storage.KVStore, userID int64, now in
 	case errors.Is(err, storage.ErrNotFound):
 		return NewPortfolio(now), nil
 	default:
-		return Portfolio{}, fmt.Errorf("trading: load portfolio %d: %w", userID, err)
+		return Portfolio{}, fmt.Errorf("stock: load portfolio %d: %w", userID, err)
 	}
 }
 
 // SavePortfolio persists the portfolio.
 func SavePortfolio(ctx context.Context, kv storage.KVStore, userID int64, p Portfolio) error {
 	if err := kv.PutJSON(ctx, portfolioKey(userID), p); err != nil {
-		return fmt.Errorf("trading: save portfolio %d: %w", userID, err)
+		return fmt.Errorf("stock: save portfolio %d: %w", userID, err)
 	}
 	return nil
 }

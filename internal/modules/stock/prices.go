@@ -1,4 +1,4 @@
-package trading
+package stock
 
 import (
 	"context"
@@ -29,7 +29,7 @@ type PriceClient struct {
 	URL  string
 
 	// defaultClient memoises the zero-value HTTP fallback so the transport's
-	// connection pool survives across FetchPrice calls — /trade_stats fans
+	// connection pool survives across FetchPrice calls — /stock_stats fans
 	// out per held ticker, and a fresh client per call means a fresh TLS
 	// handshake per ticker.
 	defaultOnce   sync.Once
@@ -76,7 +76,7 @@ func kbsFormatDate(t time.Time) string {
 // decode errors are returned wrapped.
 func (c *PriceClient) FetchPrice(ctx context.Context, ticker string) (float64, error) {
 	if ticker == "" {
-		return 0, errors.New("trading: ticker is empty")
+		return 0, errors.New("stock: ticker is empty")
 	}
 	now := time.Now().UTC()
 	edate := kbsFormatDate(now)
@@ -90,13 +90,13 @@ func (c *PriceClient) FetchPrice(ctx context.Context, ticker string) (float64, e
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, full, nil)
 	if err != nil {
-		return 0, fmt.Errorf("trading: build KBS request: %w", err)
+		return 0, fmt.Errorf("stock: build KBS request: %w", err)
 	}
 	req.Header.Set("User-Agent", "Mozilla/5.0 (miti99bot)")
 
 	resp, err := c.httpClient().Do(req)
 	if err != nil {
-		return 0, fmt.Errorf("trading: KBS request: %w", err)
+		return 0, fmt.Errorf("stock: KBS request: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
@@ -106,7 +106,7 @@ func (c *PriceClient) FetchPrice(ctx context.Context, ticker string) (float64, e
 
 	var body kbsResponse
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
-		return 0, fmt.Errorf("trading: KBS decode: %w", err)
+		return 0, fmt.Errorf("stock: KBS decode: %w", err)
 	}
 	if len(body.DataDay) == 0 {
 		return 0, ErrNoPrice
@@ -121,4 +121,4 @@ func (c *PriceClient) FetchPrice(ctx context.Context, ticker string) (float64, e
 // ErrNoPrice means KBS returned no usable price for the ticker — either the
 // symbol is unknown, the market hasn't traded recently, or the data was
 // invalid. Used by symbol resolution to detect "is this a real ticker".
-var ErrNoPrice = errors.New("trading: no price available")
+var ErrNoPrice = errors.New("stock: no price available")

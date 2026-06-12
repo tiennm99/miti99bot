@@ -8,7 +8,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	stocktrading "github.com/tiennm99/miti99bot/internal/modules/trading"
+	stockmod "github.com/tiennm99/miti99bot/internal/modules/stock"
 	"github.com/tiennm99/miti99bot/internal/storage"
 )
 
@@ -241,7 +241,7 @@ func TestUpdatePortfolioFailsFastWhenCASUnsupported(t *testing.T) {
 	}
 }
 
-func TestTradingAndGoldPortfolioKeysDoNotCollide(t *testing.T) {
+func TestStockAndGoldPortfolioKeysDoNotCollide(t *testing.T) {
 	ctx := context.Background()
 	provider := storage.NewMemoryProvider()
 	goldPortfolio := NewPortfolio(1)
@@ -249,16 +249,16 @@ func TestTradingAndGoldPortfolioKeysDoNotCollide(t *testing.T) {
 	if err := SavePortfolio(ctx, provider.For("gold"), 7, goldPortfolio); err != nil {
 		t.Fatalf("save gold: %v", err)
 	}
-	tradingPortfolio := stocktrading.NewPortfolio(1)
-	tradingPortfolio.AddAsset("TCB", 100)
-	if err := stocktrading.SavePortfolio(ctx, provider.For("trading"), 7, tradingPortfolio); err != nil {
-		t.Fatalf("save trading: %v", err)
+	stockPortfolio := stockmod.NewPortfolio(1)
+	stockPortfolio.AddAsset("TCB", 100)
+	if err := stockmod.SavePortfolio(ctx, provider.For("stock"), 7, stockPortfolio); err != nil {
+		t.Fatalf("save stock: %v", err)
 	}
 	keys, err := provider.Base().List(ctx, "")
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}
-	want := map[string]bool{"gold:user:7": false, "trading:user:7": false}
+	want := map[string]bool{"gold:user:7": false, "stock:user:7": false}
 	for _, key := range keys {
 		if _, ok := want[key]; ok {
 			want[key] = true

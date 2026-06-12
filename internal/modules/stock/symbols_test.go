@@ -1,4 +1,4 @@
-package trading
+package stock
 
 import (
 	"context"
