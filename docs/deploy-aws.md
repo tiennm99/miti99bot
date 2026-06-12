@@ -76,6 +76,32 @@ curl "https://api.telegram.org/bot$TOKEN/getWebhookInfo" | jq .
 ```
 Expect: `url` matches Function URL, `pending_update_count` ≈ 0, `last_error_date` empty.
 
+## Adding a module or command (registration checklist)
+
+A module only runs in production if its name is in **both** `ModulesCSV` sources — the
+`template.yaml` default is ignored once an override is passed, so editing one place is
+not enough. A command only appears in the Telegram menu if it is in
+`aws/telegram-commands.json`. Missing either is silent: no error, the command just
+never dispatches (this is how `coin_*` shipped dark until `coin` was added to the CSVs).
+
+When **adding a new module**, register it in all of:
+
+1. `cmd/server/main.go` — add the factory to the catalog (`"name": pkg.New`).
+2. `.github/workflows/deploy.yml` — append the name to `ModulesCSV=…` (CI override).
+3. `samconfig.toml` — append the name to `ModulesCSV=…` (manual-deploy override; keep in sync with the workflow).
+4. `template.yaml` — append to the `ModulesCSV` `Default` (documents the full set).
+5. `aws/telegram-commands.json` — add each new command + description for the Telegram menu.
+
+When **adding a command to an existing, already-enabled module**, only step 5 applies.
+
+**On push to `main`:** CI redeploys and re-runs `setMyCommands` from
+`aws/telegram-commands.json` automatically. The Telegram client caches the command
+menu, so a changed menu may not show until the chat is reopened — confirm with
+`make telegram-commands-info` (calls `getMyCommands`) rather than trusting the app UI.
+Only when a push introduces **new public commands** (`VisibilityPublic`) does the menu
+need attention — re-confirm registration for those pushes; routine pushes (refactors,
+fixes, non-public commands) need no menu action.
+
 ## Trading income events API
 
 `/trade_income_events` uses a FireAnt REST API, configured at Lambda runtime:
