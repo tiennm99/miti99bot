@@ -1,0 +1,198 @@
+package coin
+
+import (
+	"context"
+	"errors"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/tiennm99/miti99bot/internal/modules"
+	"github.com/tiennm99/miti99bot/internal/storage"
+	"github.com/tiennm99/miti99bot/internal/testutil"
+)
+
+type fakePriceFetcher struct {
+	prices map[string]CoinPrice
+	err    error
+}
+
+func (f fakePriceFetcher) FetchUSD(_ context.Context, coin CoinSymbol) (CoinPrice, error) {
+	if f.err != nil {
+		return CoinPrice{}, f.err
+	}
+	price, ok := f.prices[coin.Symbol]
+	if !ok {
+		return CoinPrice{}, ErrNoCoinPrice
+	}
+	if price.Symbol == "" {
+		price.Symbol = coin.Symbol
+	}
+	return price, nil
+}
+
+func newTestState(prices map[string]CoinPrice, err error) *state {
+	return &state{
+		kv:     storage.NewMemoryKVStore(),
+		prices: fakePriceFetcher{prices: prices, err: err},
+		nowFn:  func() time.Time { return time.UnixMilli(123) },
+	}
+}
+
+func TestParsePositiveFinite(t *testing.T) {
+	bad := []string{"", "0", "-1", "NaN", "Inf", "+Inf", "-Inf", "1e9999"}
+	for _, in := range bad {
+		if got, ok := parsePositiveFinite(in); ok {
+			t.Fatalf("parsePositiveFinite(%q) = %v, true; want false", in, got)
+		}
+	}
+	if got, ok := parsePositiveFinite("0.5"); !ok || got != 0.5 {
+		t.Fatalf("parsePositiveFinite valid = %v, %v", got, ok)
+	}
+}
+
+func TestResolveCoinSymbol(t *testing.T) {
+	coin, err := ResolveCoinSymbol("btc")
+	if err != nil || coin.Symbol != "BTC" || coin.CoinGeckoID != "bitcoin" {
+		t.Fatalf("ResolveCoinSymbol btc = %+v, %v", coin, err)
+	}
+	if _, err := ResolveCoinSymbol("NOPE"); !errors.Is(err, ErrUnsupportedCoin) {
+		t.Fatalf("got %v, want ErrUnsupportedCoin", err)
+	}
+}
+
+func TestModuleRegistersExpectedCommands(t *testing.T) {
+	mod := New(modDepsForTest())
+	got := map[string]bool{}
+	for _, cmd := range mod.Commands {
+		got[cmd.Name] = true
+	}
+	for _, name := range []string{"coin_price", "coin_topup", "coin_buy", "coin_sell", "coin_stats"} {
+		if !got[name] {
+			t.Fatalf("missing command %s", name)
+		}
+	}
+}
+
+func TestHandlePrice(t *testing.T) {
+	s := newTestState(map[string]CoinPrice{"BTC": {USD: 67000, Source: "Binance"}}, nil)
+	rb := testutil.NewRecordingBot(t)
+	if err := s.handlePrice(context.Background(), rb.Bot, testutil.NewPrivateMessage(7, "/coin_price btc")); err != nil {
+		t.Fatalf("handlePrice: %v", err)
+	}
+	rb.AssertSentText(t, "BTC price: $67,000.00 (Binance)")
+}
+
+func TestHandlePriceRejectsUnsupportedCoin(t *testing.T) {
+	s := newTestState(nil, nil)
+	rb := testutil.NewRecordingBot(t)
+	if err := s.handlePrice(context.Background(), rb.Bot, testutil.NewPrivateMessage(7, "/coin_price nope")); err != nil {
+		t.Fatalf("handlePrice: %v", err)
+	}
+	rb.AssertSentText(t, "Unsupported coin")
+}
+
+func TestHandleTopup(t *testing.T) {
+	ctx := context.Background()
+	s := newTestState(nil, nil)
+	rb := testutil.NewRecordingBot(t)
+	if err := s.handleTopup(ctx, rb.Bot, testutil.NewPrivateMessage(7, "/coin_topup 1000")); err != nil {
+		t.Fatalf("handleTopup: %v", err)
+	}
+	rb.AssertSentText(t, "Topped up $1,000.00")
+	p, err := LoadPortfolio(ctx, s.kv, 7, 999)
+	if err != nil {
+		t.Fatalf("LoadPortfolio: %v", err)
+	}
+	if p.USD != 1000 || p.Meta.Invested != 1000 {
+		t.Fatalf("portfolio = %+v", p)
+	}
+}
+
+func TestHandleBuyAndSell(t *testing.T) {
+	ctx := context.Background()
+	s := newTestState(map[string]CoinPrice{"BTC": {USD: 50000, Source: "Binance"}}, nil)
+	rb := testutil.NewRecordingBot(t)
+	_ = s.handleTopup(ctx, rb.Bot, testutil.NewPrivateMessage(7, "/coin_topup 1000"))
+	rb.Reset()
+	if err := s.handleBuy(ctx, rb.Bot, testutil.NewPrivateMessage(7, "/coin_buy 500 BTC")); err != nil {
+		t.Fatalf("handleBuy: %v", err)
+	}
+	rb.AssertSentText(t, "Bought 0.01 BTC")
+	p, _ := LoadPortfolio(ctx, s.kv, 7, 999)
+	if p.USD != 500 || p.Assets["BTC"] != 0.01 {
+		t.Fatalf("after buy = %+v", p)
+	}
+	rb.Reset()
+	if err := s.handleSell(ctx, rb.Bot, testutil.NewPrivateMessage(7, "/coin_sell 0.01 BTC")); err != nil {
+		t.Fatalf("handleSell: %v", err)
+	}
+	rb.AssertSentText(t, "Sold 0.01 BTC")
+	p, _ = LoadPortfolio(ctx, s.kv, 7, 999)
+	if p.USD != 1000 || len(p.Assets) != 0 {
+		t.Fatalf("after sell = %+v", p)
+	}
+}
+
+func TestHandleBuyInsufficientUSD(t *testing.T) {
+	s := newTestState(map[string]CoinPrice{"ETH": {USD: 3000, Source: "Coinbase"}}, nil)
+	rb := testutil.NewRecordingBot(t)
+	if err := s.handleBuy(context.Background(), rb.Bot, testutil.NewPrivateMessage(7, "/coin_buy 10 ETH")); err != nil {
+		t.Fatalf("handleBuy: %v", err)
+	}
+	rb.AssertSentText(t, "Insufficient USD")
+}
+
+func TestHandleSellInsufficientCoin(t *testing.T) {
+	s := newTestState(map[string]CoinPrice{"ETH": {USD: 3000, Source: "Coinbase"}}, nil)
+	rb := testutil.NewRecordingBot(t)
+	if err := s.handleSell(context.Background(), rb.Bot, testutil.NewPrivateMessage(7, "/coin_sell 1 ETH")); err != nil {
+		t.Fatalf("handleSell: %v", err)
+	}
+	rb.AssertSentText(t, "Insufficient ETH")
+}
+
+func TestPriceErrorDoesNotMutatePortfolio(t *testing.T) {
+	ctx := context.Background()
+	s := newTestState(nil, errors.New("upstream down"))
+	rb := testutil.NewRecordingBot(t)
+	if err := s.handleBuy(ctx, rb.Bot, testutil.NewPrivateMessage(7, "/coin_buy 10 BTC")); err != nil {
+		t.Fatalf("handleBuy: %v", err)
+	}
+	rb.AssertSentText(t, "Could not fetch coin price")
+	p, err := LoadPortfolio(ctx, s.kv, 7, 999)
+	if err != nil {
+		t.Fatalf("LoadPortfolio: %v", err)
+	}
+	if p.USD != 0 || len(p.Assets) != 0 {
+		t.Fatalf("unexpected mutation = %+v", p)
+	}
+}
+
+func TestStatsWithAndWithoutPrice(t *testing.T) {
+	ctx := context.Background()
+	s := newTestState(map[string]CoinPrice{"BTC": {USD: 50000, Source: "Binance"}}, nil)
+	rb := testutil.NewRecordingBot(t)
+	_ = s.handleTopup(ctx, rb.Bot, testutil.NewPrivateMessage(7, "/coin_topup 1000"))
+	_ = s.handleBuy(ctx, rb.Bot, testutil.NewPrivateMessage(7, "/coin_buy 500 BTC"))
+	rb.Reset()
+	if err := s.handleStats(ctx, rb.Bot, testutil.NewPrivateMessage(7, "/coin_stats")); err != nil {
+		t.Fatalf("handleStats: %v", err)
+	}
+	text := rb.LastSent().Text()
+	for _, want := range []string{"Coin Account Summary", "BTC: 0.01", "(Binance)", "P&L:"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("stats missing %q in %q", want, text)
+		}
+	}
+	s.prices = fakePriceFetcher{err: ErrNoCoinPrice}
+	rb.Reset()
+	if err := s.handleStats(ctx, rb.Bot, testutil.NewPrivateMessage(7, "/coin_stats")); err != nil {
+		t.Fatalf("handleStats no price: %v", err)
+	}
+	rb.AssertSentText(t, "price unavailable")
+}
+
+func modDepsForTest() modules.Deps {
+	return modules.Deps{KV: storage.NewMemoryKVStore()}
+}
