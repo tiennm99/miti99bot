@@ -125,6 +125,26 @@
       "description": "Show gold account summary with P&L"
     },
     {
+      "command": "coin_price",
+      "description": "Show current crypto price in USD"
+    },
+    {
+      "command": "coin_topup",
+      "description": "Top up USD to your coin account"
+    },
+    {
+      "command": "coin_buy",
+      "description": "Buy coin with USD amount"
+    },
+    {
+      "command": "coin_sell",
+      "description": "Sell coin quantity back to USD"
+    },
+    {
+      "command": "coin_stats",
+      "description": "Show coin account summary with P&L"
+    },
+    {
       "command": "stats",
       "description": "Stats. Try: /stats users, /stats user <name>, /stats cmd <name>"
     }
