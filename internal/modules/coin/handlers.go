@@ -70,16 +70,17 @@ func (s *state) handleBuy(ctx context.Context, b *bot.Bot, update *models.Update
 	}
 	args := argsAfterCommand(update.Message.Text)
 	if len(args) != 2 {
-		return chathelper.Reply(ctx, b, update.Message, "Usage: /coin_buy <usd_amount> <COIN>\nExample: /coin_buy 100 BTC")
+		return chathelper.Reply(ctx, b, update.Message, "Usage: /coin_buy <COIN> <usd_amount>\nExample: /coin_buy BTC 10")
 	}
-	amount, ok := parsePositiveFinite(args[0])
-	if !ok || !isSafeUSD(amount) {
+	parsed, err := parseCoinValueArgs(args, isSafeUSD, errInvalidUSDAmount)
+	if errors.Is(err, errInvalidUSDAmount) {
 		return chathelper.Reply(ctx, b, update.Message, "USD amount must be a positive finite number within the supported range.")
 	}
-	coin, err := ResolveCoinSymbol(args[1])
 	if err != nil {
 		return s.replyPriceError(ctx, b, update, err)
 	}
+	coin := parsed.coin
+	amount := parsed.value
 	price, err := s.prices.FetchUSD(ctx, coin)
 	if err != nil {
 		return s.replyPriceError(ctx, b, update, err)
@@ -120,16 +121,17 @@ func (s *state) handleSell(ctx context.Context, b *bot.Bot, update *models.Updat
 	}
 	args := argsAfterCommand(update.Message.Text)
 	if len(args) != 2 {
-		return chathelper.Reply(ctx, b, update.Message, "Usage: /coin_sell <qty> <COIN>\nExample: /coin_sell 0.01 BTC")
+		return chathelper.Reply(ctx, b, update.Message, "Usage: /coin_sell <COIN> <qty>\nExample: /coin_sell BTC 0.01")
 	}
-	qty, ok := parsePositiveFinite(args[0])
-	if !ok {
+	parsed, err := parseCoinValueArgs(args, isPositiveFinite, errInvalidQuantity)
+	if errors.Is(err, errInvalidQuantity) {
 		return chathelper.Reply(ctx, b, update.Message, "Quantity must be a positive finite number.")
 	}
-	coin, err := ResolveCoinSymbol(args[1])
 	if err != nil {
 		return s.replyPriceError(ctx, b, update, err)
 	}
+	coin := parsed.coin
+	qty := parsed.value
 	price, err := s.prices.FetchUSD(ctx, coin)
 	if err != nil {
 		return s.replyPriceError(ctx, b, update, err)
