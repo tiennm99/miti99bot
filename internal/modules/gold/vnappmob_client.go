@@ -232,11 +232,19 @@ func (c *VNAppMobClient) refreshKeyLocked(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("vnappmob: refresh read body: %w", err)
 	}
-	// The endpoint may return either a JSON-quoted string or a raw JWT.
+	// The live endpoint wraps the JWT in {"results":"<jwt>"}. Keep fallbacks
+	// for a JSON-quoted string or a raw JWT in case the format changes.
 	token = strings.TrimSpace(string(body))
-	var quoted string
-	if err := json.Unmarshal(body, &quoted); err == nil {
-		token = strings.TrimSpace(quoted)
+	var wrapped struct {
+		Results string `json:"results"`
+	}
+	if err := json.Unmarshal(body, &wrapped); err == nil {
+		token = strings.TrimSpace(wrapped.Results)
+	} else {
+		var quoted string
+		if err := json.Unmarshal(body, &quoted); err == nil {
+			token = strings.TrimSpace(quoted)
+		}
 	}
 	if token == "" {
 		return fmt.Errorf("vnappmob: refresh returned empty token")

@@ -141,6 +141,45 @@ func TestRefreshKey(t *testing.T) {
 	}
 }
 
+func TestRefreshKey_ObjectWrapper(t *testing.T) {
+	exp := time.Unix(1000, 0).Add(14 * 24 * time.Hour).Unix()
+	jwt := makeJWT(exp)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/request_api_key" {
+			t.Errorf("refresh path: got %s", r.URL.Path)
+		}
+		fmt.Fprintf(w, `{"results":%q}`, jwt)
+	}))
+	defer srv.Close()
+
+	c := newTestVNAppMobClient(srv, storage.NewMemoryKVStore())
+	key, err := c.getKey(context.Background())
+	if err != nil {
+		t.Fatalf("getKey: %v", err)
+	}
+	if key != jwt {
+		t.Fatalf("key mismatch: got %q, want %q", key, jwt)
+	}
+}
+
+func TestRefreshKey_QuotedString(t *testing.T) {
+	exp := time.Unix(1000, 0).Add(14 * 24 * time.Hour).Unix()
+	jwt := makeJWT(exp)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, "%q", jwt)
+	}))
+	defer srv.Close()
+
+	c := newTestVNAppMobClient(srv, storage.NewMemoryKVStore())
+	key, err := c.getKey(context.Background())
+	if err != nil {
+		t.Fatalf("getKey: %v", err)
+	}
+	if key != jwt {
+		t.Fatalf("key mismatch: got %q, want %q", key, jwt)
+	}
+}
+
 func TestFetchSJCPrice(t *testing.T) {
 	exp := time.Unix(1000, 0).Add(14 * 24 * time.Hour).Unix()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
