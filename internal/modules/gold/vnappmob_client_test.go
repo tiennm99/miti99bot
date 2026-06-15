@@ -100,8 +100,8 @@ func TestRefreshKey(t *testing.T) {
 	exp := time.Unix(1000, 0).Add(14 * 24 * time.Hour).Unix()
 	var refreshHits int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			t.Errorf("refresh: want POST, got %s", r.Method)
+		if r.Method != http.MethodGet {
+			t.Errorf("refresh: want GET, got %s", r.Method)
 		}
 		if !strings.HasSuffix(r.URL.Path, "/api/request_api_key") {
 			t.Errorf("refresh path: got %s", r.URL.Path)

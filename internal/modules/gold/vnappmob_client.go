@@ -212,7 +212,7 @@ func (c *VNAppMobClient) refreshKeyLocked(ctx context.Context) error {
 		return err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return fmt.Errorf("vnappmob: build refresh request: %w", err)
 	}
