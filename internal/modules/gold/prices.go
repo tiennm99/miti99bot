@@ -27,6 +27,14 @@ type GoldPrice struct {
 	XAUUSD      float64
 	USDVND      float64
 	VNDPerLuong float64
+	Source      string    // "vnappmob-sjc" or "xau-fallback"
+	SJC         *SJCPrice // non-nil when Source == "vnappmob-sjc"
+}
+
+// SJCPrice holds VNAppMob SJC buy/sell quotes per lượng (VND).
+type SJCPrice struct {
+	Buy  float64
+	Sell float64
 }
 
 // GoldPriceClient fetches XAU/USD through a chain of free providers (see
@@ -78,6 +86,13 @@ func (c *GoldPriceClient) FetchLuongPrice(ctx context.Context) (float64, error) 
 		return 0, err
 	}
 	return p.VNDPerLuong, nil
+}
+
+// FetchLuongPrices returns the same representative spot price for both buy and
+// sell because the XAU/USD fallback has no bid/ask spread.
+func (c *GoldPriceClient) FetchLuongPrices(ctx context.Context) (float64, float64, error) {
+	p, err := c.FetchLuongPrice(ctx)
+	return p, p, err
 }
 
 func (c *GoldPriceClient) httpClient() *http.Client {
