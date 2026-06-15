@@ -3,7 +3,6 @@ package gold
 import (
 	"context"
 
-	"github.com/tiennm99/miti99bot/internal/log"
 	"github.com/tiennm99/miti99bot/internal/storage"
 )
 
@@ -13,24 +12,22 @@ type sjcPriceFetcher interface {
 	FetchSJCPrice(ctx context.Context) (buy, sell float64, err error)
 }
 
-// compositePriceFetcher prefers VNAppMob SJC prices and falls back to the
-// existing XAU/USD-derived chain when SJC is unavailable.
+// compositePriceFetcher uses VNAppMob SJC prices only. If VNAppMob fails,
+// the error is surfaced to the user instead of falling back to XAU/USD.
 type compositePriceFetcher struct {
 	vnappmob sjcPriceFetcher
-	fallback priceFetcher
 }
 
 // NewCompositePriceFetcherFromEnv builds the production price fetcher using
-// env-driven VNAppMob and fallback clients.
+// only the env-driven VNAppMob client.
 func NewCompositePriceFetcherFromEnv(kv storage.KVStore) priceFetcher {
 	return &compositePriceFetcher{
 		vnappmob: NewVNAppMobClientFromEnv(kv),
-		fallback: NewGoldPriceClientFromEnv(),
 	}
 }
 
-// FetchLuongPrice returns a representative VND/lượng price. It uses the SJC
-// mid price when available, otherwise the XAU/USD-derived spot price.
+// FetchLuongPrice returns the SJC mid price. It errors when VNAppMob is
+// unavailable so callers can show a failure message.
 func (f *compositePriceFetcher) FetchLuongPrice(ctx context.Context) (float64, error) {
 	buy, sell, err := f.FetchLuongPrices(ctx)
 	if err != nil {
@@ -39,36 +36,22 @@ func (f *compositePriceFetcher) FetchLuongPrice(ctx context.Context) (float64, e
 	return (buy + sell) / 2, nil
 }
 
-// FetchLuongPrices returns SJC buy/sell VND/lượng when VNAppMob is healthy,
-// otherwise the XAU/USD-derived spot price for both sides.
+// FetchLuongPrices returns SJC buy/sell VND/lượng from VNAppMob.
 func (f *compositePriceFetcher) FetchLuongPrices(ctx context.Context) (float64, float64, error) {
-	buy, sell, err := f.vnappmob.FetchSJCPrice(ctx)
-	if err == nil {
-		return buy, sell, nil
-	}
-	log.Warn("vnappmob_sjc_failed", "err", err)
-	p, err := f.fallback.FetchLuongPrice(ctx)
-	return p, p, err
+	return f.vnappmob.FetchSJCPrice(ctx)
 }
 
-// FetchPrice returns a GoldPrice. When VNAppMob succeeds the struct carries
-// SJC buy/sell data and Source "vnappmob-sjc"; otherwise it falls back to the
-// XAU/USD chain with Source "xau-fallback".
+// FetchPrice returns a GoldPrice with SJC buy/sell data and Source
+// "vnappmob-sjc". It errors when VNAppMob is unavailable.
 func (f *compositePriceFetcher) FetchPrice(ctx context.Context) (GoldPrice, error) {
 	buy, sell, err := f.vnappmob.FetchSJCPrice(ctx)
-	if err == nil {
-		mid := (buy + sell) / 2
-		return GoldPrice{
-			VNDPerLuong: mid,
-			Source:      "vnappmob-sjc",
-			SJC:         &SJCPrice{Buy: buy, Sell: sell},
-		}, nil
-	}
-	log.Warn("vnappmob_sjc_failed", "err", err)
-	p, err := f.fallback.FetchPrice(ctx)
 	if err != nil {
 		return GoldPrice{}, err
 	}
-	p.Source = "xau-fallback"
-	return p, nil
+	mid := (buy + sell) / 2
+	return GoldPrice{
+		VNDPerLuong: mid,
+		Source:      "vnappmob-sjc",
+		SJC:         &SJCPrice{Buy: buy, Sell: sell},
+	}, nil
 }

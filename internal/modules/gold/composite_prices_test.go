@@ -12,7 +12,7 @@ import (
 // stubVNAppMobClient implements just enough of the VNAppMob client contract
 // for composite fetcher tests.
 type stubVNAppMobClient struct {
-	buy float64
+	buy  float64
 	sell float64
 	err  error
 }
@@ -21,30 +21,9 @@ func (s *stubVNAppMobClient) FetchSJCPrice(context.Context) (float64, float64, e
 	return s.buy, s.sell, s.err
 }
 
-type stubFallbackFetcher struct {
-	price float64
-	err   error
-}
-
-func (s *stubFallbackFetcher) FetchLuongPrice(context.Context) (float64, error) {
-	return s.price, s.err
-}
-
-func (s *stubFallbackFetcher) FetchLuongPrices(context.Context) (float64, float64, error) {
-	return s.price, s.price, s.err
-}
-
-func (s *stubFallbackFetcher) FetchPrice(context.Context) (GoldPrice, error) {
-	if s.err != nil {
-		return GoldPrice{}, s.err
-	}
-	return GoldPrice{VNDPerLuong: s.price, Source: "xau-fallback"}, nil
-}
-
-func TestCompositeFetcher_PrefersVNAppMob(t *testing.T) {
+func TestCompositeFetcher_UsesVNAppMob(t *testing.T) {
 	f := &compositePriceFetcher{
 		vnappmob: &stubVNAppMobClient{buy: 90_000_000, sell: 91_000_000},
-		fallback: &stubFallbackFetcher{err: errors.New("fallback unavailable")},
 	}
 
 	p, err := f.FetchPrice(context.Background())
@@ -79,63 +58,37 @@ func TestCompositeFetcher_PrefersVNAppMob(t *testing.T) {
 	}
 }
 
-func TestCompositeFetcher_FallsBack(t *testing.T) {
+func TestCompositeFetcher_ErrorsWhenVNAppMobFails(t *testing.T) {
+	wantErr := errors.New("vnappmob down")
 	f := &compositePriceFetcher{
-		vnappmob: &stubVNAppMobClient{err: errors.New("vnappmob down")},
-		fallback: &stubFallbackFetcher{price: 88_000_000},
+		vnappmob: &stubVNAppMobClient{err: wantErr},
 	}
-	p, err := f.FetchPrice(context.Background())
-	if err != nil {
-		t.Fatalf("FetchPrice: %v", err)
+	if _, err := f.FetchPrice(context.Background()); err == nil {
+		t.Fatal("FetchPrice: expected error")
 	}
-	if p.Source != "xau-fallback" {
-		t.Fatalf("source: got %q, want xau-fallback", p.Source)
+	if _, err := f.FetchLuongPrice(context.Background()); err == nil {
+		t.Fatal("FetchLuongPrice: expected error")
 	}
-	if p.VNDPerLuong != 88_000_000 {
-		t.Fatalf("VNDPerLuong: got %v, want 88000000", p.VNDPerLuong)
-	}
-
-	mid, err := f.FetchLuongPrice(context.Background())
-	if err != nil {
-		t.Fatalf("FetchLuongPrice: %v", err)
-	}
-	if mid != 88_000_000 {
-		t.Fatalf("FetchLuongPrice: got %v, want 88000000", mid)
+	if _, _, err := f.FetchLuongPrices(context.Background()); err == nil {
+		t.Fatal("FetchLuongPrices: expected error")
 	}
 }
 
 func TestGoldPriceLines(t *testing.T) {
-	t.Run("sjc", func(t *testing.T) {
-		lines := goldPriceLines(GoldPrice{
-			VNDPerLuong: 90_500_000,
-			Source:      "vnappmob-sjc",
-			SJC:         &SJCPrice{Buy: 90_000_000, Sell: 91_000_000},
-		})
-		want := []string{"Gold Spot Price (SJC)", "Buy:", "Sell:"}
-		if len(lines) != len(want) {
-			t.Fatalf("got %d lines, want %d: %v", len(lines), len(want), lines)
-		}
-		for i, w := range want {
-			if !strings.Contains(lines[i], w) {
-				t.Fatalf("line %d missing %q in %v", i, w, lines)
-			}
-		}
+	lines := goldPriceLines(GoldPrice{
+		VNDPerLuong: 90_500_000,
+		Source:      "vnappmob-sjc",
+		SJC:         &SJCPrice{Buy: 90_000_000, Sell: 91_000_000},
 	})
-
-	t.Run("fallback", func(t *testing.T) {
-		lines := goldPriceLines(GoldPrice{
-			XAUUSD:      3000,
-			USDVND:      25000,
-			VNDPerLuong: 90_000_000,
-			Source:      "xau-fallback",
-		})
-		want := []string{"Gold Spot Price", "XAU:", "Rate:", "VND:"}
-		for i, w := range want {
-			if i >= len(lines) || !strings.Contains(lines[i], w) {
-				t.Fatalf("line %d missing %q in %v", i, w, lines)
-			}
+	want := []string{"Gold Spot Price (SJC)", "Buy:", "Sell:"}
+	if len(lines) != len(want) {
+		t.Fatalf("got %d lines, want %d: %v", len(lines), len(want), lines)
+	}
+	for i, w := range want {
+		if !strings.Contains(lines[i], w) {
+			t.Fatalf("line %d missing %q in %v", i, w, lines)
 		}
-	})
+	}
 }
 
 func TestNewCompositePriceFetcherFromEnv(t *testing.T) {
@@ -145,8 +98,5 @@ func TestNewCompositePriceFetcherFromEnv(t *testing.T) {
 	}
 	if f.vnappmob == nil {
 		t.Fatal("vnappmob client is nil")
-	}
-	if f.fallback == nil {
-		t.Fatal("fallback client is nil")
 	}
 }

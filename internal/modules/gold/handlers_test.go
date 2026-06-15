@@ -29,7 +29,11 @@ func (f fakePriceFetcher) FetchPrice(context.Context) (GoldPrice, error) {
 	if f.err != nil {
 		return GoldPrice{}, f.err
 	}
-	return GoldPrice{XAUUSD: 3000, USDVND: 25000, VNDPerLuong: f.price}, nil
+	return GoldPrice{
+		VNDPerLuong: f.price,
+		Source:      "vnappmob-sjc",
+		SJC:         &SJCPrice{Buy: f.price, Sell: f.price},
+	}, nil
 }
 
 func newTestState(price float64, err error) *state {
@@ -188,7 +192,12 @@ func (f spreadPriceFetcher) FetchPrice(context.Context) (GoldPrice, error) {
 	if f.err != nil {
 		return GoldPrice{}, f.err
 	}
-	return GoldPrice{XAUUSD: 3000, USDVND: 25000, VNDPerLuong: (f.buy + f.sell) / 2}, nil
+	mid := (f.buy + f.sell) / 2
+	return GoldPrice{
+		VNDPerLuong: mid,
+		Source:      "vnappmob-sjc",
+		SJC:         &SJCPrice{Buy: f.buy, Sell: f.sell},
+	}, nil
 }
 
 func modDepsForTest() modules.Deps {
@@ -202,7 +211,7 @@ func TestHandlePrice(t *testing.T) {
 		t.Fatalf("handlePrice: %v", err)
 	}
 	text := rb.LastSent().Text()
-	for _, want := range []string{"Gold Spot Price", "XAU:", "USD/oz", "VND:", "/luong"} {
+	for _, want := range []string{"Gold Spot Price (SJC)", "Buy:", "Sell:", "/luong"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("price missing %q in %q", want, text)
 		}

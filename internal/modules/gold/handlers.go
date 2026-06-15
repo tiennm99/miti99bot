@@ -32,18 +32,10 @@ func (s *state) handlePrice(ctx context.Context, b *bot.Bot, update *models.Upda
 }
 
 func goldPriceLines(p GoldPrice) []string {
-	if p.Source == "vnappmob-sjc" && p.SJC != nil {
-		return []string{
-			"Gold Spot Price (SJC)",
-			"Buy: " + FormatVND(p.SJC.Buy) + "/luong",
-			"Sell: " + FormatVND(p.SJC.Sell) + "/luong",
-		}
-	}
 	return []string{
-		"Gold Spot Price",
-		"XAU: " + FormatUSD(p.XAUUSD) + " USD/oz",
-		"Rate: " + FormatVND(p.USDVND) + "/USD",
-		"VND: " + FormatVND(p.VNDPerLuong) + "/luong",
+		"Gold Spot Price (SJC)",
+		"Buy: " + FormatVND(p.SJC.Buy) + "/luong",
+		"Sell: " + FormatVND(p.SJC.Sell) + "/luong",
 	}
 }
 
