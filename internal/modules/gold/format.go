@@ -49,13 +49,6 @@ func FormatPnL(currentValue, invested float64) string {
 	return sign + FormatVND(diff) + " (" + sign + strconv.FormatFloat(pct, 'f', 2, 64) + "%)"
 }
 
-func FormatUSD(n float64) string {
-	if math.IsNaN(n) || math.IsInf(n, 0) {
-		return "invalid USD"
-	}
-	return "$" + strconv.FormatFloat(n, 'f', 2, 64)
-}
-
 func absInt64(n int64) int64 {
 	if n < 0 {
 		return -n
