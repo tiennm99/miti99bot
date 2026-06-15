@@ -90,6 +90,8 @@ func main() {
 	exportOptionalEnv("STOCK_INCOME_EVENTS_API_TOKEN", cfg.StockIncomeEventsAPIToken)
 	exportOptionalEnv("GOLD_PRICE_API_URL", cfg.GoldPriceAPIURL)
 	exportOptionalEnv("GOLD_FX_API_URL", cfg.GoldFXAPIURL)
+	exportOptionalEnv("GOLD_VNAPP_API_URL", cfg.GoldVNAppAPIURL)
+	exportOptionalEnv("GOLD_VNAPP_API_KEY", cfg.GoldVNAppAPIKey)
 	exportOptionalEnv("COIN_BINANCE_API_URL", cfg.CoinBinanceAPIURL)
 	exportOptionalEnv("COIN_COINBASE_API_URL", cfg.CoinCoinbaseAPIURL)
 	exportOptionalEnv("COIN_COINGECKO_API_URL", cfg.CoinCoinGeckoAPIURL)
@@ -269,6 +271,8 @@ type config struct {
 	StockIncomeEventsAPIToken      string
 	GoldPriceAPIURL                string
 	GoldFXAPIURL                   string
+	GoldVNAppAPIURL                string
+	GoldVNAppAPIKey                string
 	CoinBinanceAPIURL              string
 	CoinCoinbaseAPIURL             string
 	CoinCoinGeckoAPIURL            string
@@ -282,6 +286,7 @@ type config struct {
 	CronSecretParam                string
 	GeminiAPIKeyParam              string
 	StockIncomeEventsAPITokenParam string
+	GoldVNAppAPIKeyParam           string
 }
 
 func loadConfig() config {
@@ -313,6 +318,8 @@ func loadConfig() config {
 		StockIncomeEventsAPIToken:      envMap["STOCK_INCOME_EVENTS_API_TOKEN"],
 		GoldPriceAPIURL:                envMap["GOLD_PRICE_API_URL"],
 		GoldFXAPIURL:                   envMap["GOLD_FX_API_URL"],
+		GoldVNAppAPIURL:                envMap["GOLD_VNAPP_API_URL"],
+		GoldVNAppAPIKey:                envMap["GOLD_VNAPP_API_KEY"],
 		CoinBinanceAPIURL:              envMap["COIN_BINANCE_API_URL"],
 		CoinCoinbaseAPIURL:             envMap["COIN_COINBASE_API_URL"],
 		CoinCoinGeckoAPIURL:            envMap["COIN_COINGECKO_API_URL"],
@@ -326,6 +333,7 @@ func loadConfig() config {
 		CronSecretParam:                strings.TrimSpace(envMap["CRON_SHARED_SECRET_PARAMETER_NAME"]),
 		GeminiAPIKeyParam:              strings.TrimSpace(envMap["GEMINI_API_KEY_PARAMETER_NAME"]),
 		StockIncomeEventsAPITokenParam: strings.TrimSpace(envMap["STOCK_INCOME_EVENTS_API_TOKEN_PARAMETER_NAME"]),
+		GoldVNAppAPIKeyParam:           strings.TrimSpace(envMap["GOLD_VNAPP_API_KEY_PARAMETER_NAME"]),
 	}
 }
 
@@ -339,6 +347,7 @@ func resolveSSMSecrets(ctx context.Context, cfg *config) error {
 		{name: cfg.CronSecretParam, target: &cfg.CronSecret},
 		{name: cfg.GeminiAPIKeyParam, target: &cfg.GeminiAPIKey},
 		{name: cfg.StockIncomeEventsAPITokenParam, target: &cfg.StockIncomeEventsAPIToken},
+		{name: cfg.GoldVNAppAPIKeyParam, target: &cfg.GoldVNAppAPIKey},
 	}
 
 	targetsByName := map[string][]*string{}

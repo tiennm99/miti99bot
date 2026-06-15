@@ -27,13 +27,24 @@ func (s *state) handlePrice(ctx context.Context, b *bot.Bot, update *models.Upda
 	if err != nil {
 		return s.replyPriceError(ctx, b, update, err)
 	}
-	lines := []string{
+	lines := goldPriceLines(p)
+	return chathelper.Reply(ctx, b, update.Message, strings.Join(lines, "\n"))
+}
+
+func goldPriceLines(p GoldPrice) []string {
+	if p.Source == "vnappmob-sjc" && p.SJC != nil {
+		return []string{
+			"Gold Spot Price (SJC)",
+			"Buy: " + FormatVND(p.SJC.Buy) + "/luong",
+			"Sell: " + FormatVND(p.SJC.Sell) + "/luong",
+		}
+	}
+	return []string{
 		"Gold Spot Price",
 		"XAU: " + FormatUSD(p.XAUUSD) + " USD/oz",
 		"Rate: " + FormatVND(p.USDVND) + "/USD",
 		"VND: " + FormatVND(p.VNDPerLuong) + "/luong",
 	}
-	return chathelper.Reply(ctx, b, update.Message, strings.Join(lines, "\n"))
 }
 
 func (s *state) handleTopup(ctx context.Context, b *bot.Bot, update *models.Update) error {
@@ -79,11 +90,11 @@ func (s *state) handleBuy(ctx context.Context, b *bot.Bot, update *models.Update
 	if !ok {
 		return chathelper.Reply(ctx, b, update.Message, "Luong must be a positive finite number.")
 	}
-	price, err := s.prices.FetchLuongPrice(ctx)
+	_, sellPrice, err := s.prices.FetchLuongPrices(ctx)
 	if err != nil {
 		return s.replyPriceError(ctx, b, update, err)
 	}
-	cost := qty * price
+	cost := qty * sellPrice
 	if !isSafeVND(cost) {
 		return chathelper.Reply(ctx, b, update.Message, "Trade value is too large.")
 	}
@@ -108,7 +119,7 @@ func (s *state) handleBuy(ctx context.Context, b *bot.Bot, update *models.Update
 		return chathelper.Reply(ctx, b, update.Message, "Could not save gold portfolio. Try again later.")
 	}
 	return chathelper.Reply(ctx, b, update.Message,
-		"Bought "+FormatLuong(qty)+" luong gold @ "+FormatVND(price)+"/luong\nCost: "+FormatVND(cost)+
+		"Bought "+FormatLuong(qty)+" luong gold @ "+FormatVND(sellPrice)+"/luong\nCost: "+FormatVND(cost)+
 			"\nRemaining: "+FormatVND(p.VND))
 }
 
@@ -126,13 +137,13 @@ func (s *state) handleSell(ctx context.Context, b *bot.Bot, update *models.Updat
 	if !ok {
 		return chathelper.Reply(ctx, b, update.Message, "Luong must be a positive finite number.")
 	}
-	price, err := s.prices.FetchLuongPrice(ctx)
+	buyPrice, _, err := s.prices.FetchLuongPrices(ctx)
 	if err != nil {
 		return s.replyPriceError(ctx, b, update, err)
 	}
 
 	defer s.locks.Acquire(strconv.FormatInt(userID, 10))()
-	revenue := qty * price
+	revenue := qty * buyPrice
 	if !isSafeVND(revenue) {
 		return chathelper.Reply(ctx, b, update.Message, "Trade value is too large.")
 	}
@@ -155,7 +166,7 @@ func (s *state) handleSell(ctx context.Context, b *bot.Bot, update *models.Updat
 		return chathelper.Reply(ctx, b, update.Message, "Could not save gold portfolio. Try again later.")
 	}
 	return chathelper.Reply(ctx, b, update.Message,
-		"Sold "+FormatLuong(qty)+" luong gold @ "+FormatVND(price)+"/luong\nRevenue: "+FormatVND(revenue)+
+		"Sold "+FormatLuong(qty)+" luong gold @ "+FormatVND(buyPrice)+"/luong\nRevenue: "+FormatVND(revenue)+
 			"\nRemaining: "+FormatVND(p.VND))
 }
 
@@ -173,10 +184,10 @@ func (s *state) handleStats(ctx context.Context, b *bot.Bot, update *models.Upda
 
 	lines := []string{"Gold Account Summary\n", "VND: " + FormatVND(p.VND), "Gold: " + FormatLuong(p.Luong) + " luong"}
 	totalValue := p.VND
-	if price, err := s.prices.FetchLuongPrice(ctx); err == nil {
-		goldValue := p.Luong * price
+	if buyPrice, _, err := s.prices.FetchLuongPrices(ctx); err == nil {
+		goldValue := p.Luong * buyPrice
 		totalValue += goldValue
-		lines = append(lines, "Price: "+FormatVND(price)+"/luong")
+		lines = append(lines, "Price: "+FormatVND(buyPrice)+"/luong")
 		lines = append(lines, "Gold value: "+FormatVND(goldValue))
 		lines = append(lines, "Total value: "+FormatVND(totalValue))
 		lines = append(lines, "Invested: "+FormatVND(p.Meta.Invested))

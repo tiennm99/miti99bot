@@ -21,6 +21,10 @@ func (f fakePriceFetcher) FetchLuongPrice(context.Context) (float64, error) {
 	return f.price, f.err
 }
 
+func (f fakePriceFetcher) FetchLuongPrices(context.Context) (float64, float64, error) {
+	return f.price, f.price, f.err
+}
+
 func (f fakePriceFetcher) FetchPrice(context.Context) (GoldPrice, error) {
 	if f.err != nil {
 		return GoldPrice{}, f.err
@@ -164,6 +168,29 @@ func TestStatsWithAndWithoutPrice(t *testing.T) {
 	rb.AssertSentText(t, "Price: no price")
 }
 
+// spreadPriceFetcher returns different buy/sell prices so handler tests can
+// verify that buys use the sell price and sells use the buy price.
+type spreadPriceFetcher struct {
+	buy  float64
+	sell float64
+	err  error
+}
+
+func (f spreadPriceFetcher) FetchLuongPrice(context.Context) (float64, error) {
+	return (f.buy + f.sell) / 2, f.err
+}
+
+func (f spreadPriceFetcher) FetchLuongPrices(context.Context) (float64, float64, error) {
+	return f.buy, f.sell, f.err
+}
+
+func (f spreadPriceFetcher) FetchPrice(context.Context) (GoldPrice, error) {
+	if f.err != nil {
+		return GoldPrice{}, f.err
+	}
+	return GoldPrice{XAUUSD: 3000, USDVND: 25000, VNDPerLuong: (f.buy + f.sell) / 2}, nil
+}
+
 func modDepsForTest() modules.Deps {
 	return modules.Deps{KV: storage.NewMemoryKVStore()}
 }
@@ -198,4 +225,51 @@ func TestHandlePriceFetchError(t *testing.T) {
 		t.Fatalf("handlePrice: %v", err)
 	}
 	rb.AssertSentText(t, "Could not fetch gold price")
+}
+
+func TestHandleBuyUsesSellPrice(t *testing.T) {
+	ctx := context.Background()
+	s := &state{
+		kv:     storage.NewMemoryKVStore(),
+		prices: spreadPriceFetcher{buy: 90_000_000, sell: 91_000_000},
+		nowFn:  func() time.Time { return time.UnixMilli(123) },
+	}
+	rb := testutil.NewRecordingBot(t)
+	_ = s.handleTopup(ctx, rb.Bot, testutil.NewPrivateMessage(7, "/gold_topup 500000000"))
+	rb.Reset()
+	if err := s.handleBuy(ctx, rb.Bot, testutil.NewPrivateMessage(7, "/gold_buy 1")); err != nil {
+		t.Fatalf("buy: %v", err)
+	}
+	text := rb.LastSent().Text()
+	if !strings.Contains(text, "91.000.000 VND/luong") {
+		t.Fatalf("expected sell price 91.000.000 in %q", text)
+	}
+	p, _ := LoadPortfolio(ctx, s.kv, 7, 999)
+	if p.VND != 409_000_000 {
+		t.Fatalf("balance after buy at 91M: got %v, want 409000000", p.VND)
+	}
+}
+
+func TestHandleSellUsesBuyPrice(t *testing.T) {
+	ctx := context.Background()
+	s := &state{
+		kv:     storage.NewMemoryKVStore(),
+		prices: spreadPriceFetcher{buy: 90_000_000, sell: 91_000_000},
+		nowFn:  func() time.Time { return time.UnixMilli(123) },
+	}
+	rb := testutil.NewRecordingBot(t)
+	_ = s.handleTopup(ctx, rb.Bot, testutil.NewPrivateMessage(7, "/gold_topup 500000000"))
+	_ = s.handleBuy(ctx, rb.Bot, testutil.NewPrivateMessage(7, "/gold_buy 1"))
+	rb.Reset()
+	if err := s.handleSell(ctx, rb.Bot, testutil.NewPrivateMessage(7, "/gold_sell 1")); err != nil {
+		t.Fatalf("sell: %v", err)
+	}
+	text := rb.LastSent().Text()
+	if !strings.Contains(text, "90.000.000 VND/luong") {
+		t.Fatalf("expected buy price 90.000.000 in %q", text)
+	}
+	p, _ := LoadPortfolio(ctx, s.kv, 7, 999)
+	if p.VND != 499_000_000 {
+		t.Fatalf("balance after sell at 90M: got %v, want 499000000", p.VND)
+	}
 }
