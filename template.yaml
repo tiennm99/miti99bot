@@ -47,6 +47,16 @@ Parameters:
     Default: ""
     Description: Optional USD/VND FX API URL override. Empty uses the built-in ExchangeRate-API open endpoint.
 
+  GoldVNAppAPIURL:
+    Type: String
+    Default: ""
+    Description: Optional VNAppMob API base URL override. Empty uses https://api.vnappmob.com.
+
+  GoldVNAppAPIKeyParameterName:
+    Type: String
+    Default: ""
+    Description: Optional SSM SecureString parameter name containing a pre-issued VNAppMob JWT API key.
+
   CoinBinanceAPIURL:
     Type: String
     Default: ""
@@ -169,6 +179,8 @@ Resources:
           STOCK_INCOME_EVENTS_API_TOKEN_PARAMETER_NAME: !Ref StockIncomeEventsAPITokenParameterName
           GOLD_PRICE_API_URL: !Ref GoldPriceAPIURL
           GOLD_FX_API_URL: !Ref GoldFXAPIURL
+          GOLD_VNAPP_API_URL: !Ref GoldVNAppAPIURL
+          GOLD_VNAPP_API_KEY_PARAMETER_NAME: !Ref GoldVNAppAPIKeyParameterName
           COIN_BINANCE_API_URL: !Ref CoinBinanceAPIURL
           COIN_COINBASE_API_URL: !Ref CoinCoinbaseAPIURL
           COIN_COINGECKO_API_URL: !Ref CoinCoinGeckoAPIURL

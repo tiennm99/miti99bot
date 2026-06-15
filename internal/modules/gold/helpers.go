@@ -19,6 +19,7 @@ import (
 
 type priceFetcher interface {
 	FetchLuongPrice(ctx context.Context) (float64, error)
+	FetchLuongPrices(ctx context.Context) (buy, sell float64, err error)
 	FetchPrice(ctx context.Context) (GoldPrice, error)
 }
 
@@ -30,7 +31,7 @@ type state struct {
 }
 
 func newState(kv storage.KVStore) *state {
-	return &state{kv: kv, prices: NewGoldPriceClientFromEnv()}
+	return &state{kv: kv, prices: NewCompositePriceFetcherFromEnv(kv)}
 }
 
 func (s *state) now() time.Time {
