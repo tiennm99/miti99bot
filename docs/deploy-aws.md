@@ -117,15 +117,19 @@ FireAnt response is an array of timescale marks with `id`, `label`, `date`, `tit
 
 Commands:
 
+- `/gold_price` shows current gold price. When VNAppMob SJC is available it prints buy/sell/mid VND/lượng; otherwise it falls back to world spot XAU in USD/oz plus USD/VND rate.
 - `/gold_topup <amount>` credits VND. No currency argument is accepted.
 - `/gold_buy <luong>` buys gold in Vietnamese `luong`. No symbol or unit argument is accepted.
 - `/gold_sell <luong>` sells gold in Vietnamese `luong`.
-- `/gold_stats` shows VND balance, gold holding, current spot price, total value, invested amount, and P&L.
+- `/gold_stats` shows VND balance, gold holding, current price, total value, invested amount, and P&L.
 
-Price source: v1 uses world spot XAU from GoldPrice.org converted through USD/VND from ExchangeRate-API open endpoint. It is not SJC local retail buy/sell pricing. The defaults require no secrets. Optional overrides:
+Price source: primary is VNAppMob Vietnam SJC price feed (`api.vnappmob.com/api/v2/gold/sjc`), which returns VND/lượng directly. The client auto-refreshes a free JWT API key and caches it in KV. If VNAppMob fails, the bot falls back to world spot XAU from GoldPrice.org converted through USD/VND from ExchangeRate-API open endpoint. The defaults require no secrets. Optional overrides:
 
-- `GOLD_PRICE_API_URL`: gold spot JSON endpoint override. Remote URLs must be HTTPS; localhost HTTP is allowed for local tests.
-- `GOLD_FX_API_URL`: USD/VND FX JSON endpoint override. Remote URLs must be HTTPS; localhost HTTP is allowed for local tests.
+- `GOLD_VNAPP_API_URL`: VNAppMob API base URL override. Remote URLs must be HTTPS; localhost HTTP is allowed for local tests.
+- `GOLD_VNAPP_API_KEY`: pre-issued VNAppMob JWT key. When set, auto-refresh is skipped. Useful for local dev or SSM injection.
+- `GOLD_VNAPP_API_KEY_PARAMETER_NAME`: SSM SecureString parameter name containing the pre-issued key. Fetched at Lambda cold start.
+- `GOLD_PRICE_API_URL`: fallback gold spot JSON endpoint override. Remote URLs must be HTTPS; localhost HTTP is allowed for local tests.
+- `GOLD_FX_API_URL`: fallback USD/VND FX JSON endpoint override. Remote URLs must be HTTPS; localhost HTTP is allowed for local tests.
 
 ExchangeRate-API open endpoint requires attribution if surfaced publicly and updates once per day; the bot caches FX responses until the provider `time_next_update_unix` when available.
 
