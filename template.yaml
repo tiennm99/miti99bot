@@ -60,7 +60,7 @@ Parameters:
   CoinBinanceAPIURL:
     Type: String
     Default: ""
-    Description: Optional Binance ticker price API URL override. Empty uses the built-in public endpoint.
+    Description: Optional Binance ticker price API URL override. Empty uses the public market-data endpoint https://data-api.binance.vision/api/v3/ticker/price.
 
   CoinCoinbaseAPIURL:
     Type: String
