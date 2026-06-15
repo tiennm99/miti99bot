@@ -13,7 +13,7 @@ Plug-n-play Telegram bot framework in Go. Runs on AWS Lambda + DynamoDB + EventB
 | `lolschedule` | Pro-match schedule + daily push |
 | `twentyq` | 20-questions game (requires Gemini API key) |
 | `stock` | VN-stocks paper trading |
-| `gold` | Gold paper trading (opt-in; spot XAU converted to VND per luong) |
+| `gold` | Gold paper trading (opt-in; primary VNAppMob SJC buy/sell VND/luong, fallback spot XAU) |
 | `coin` | Crypto paper trading in USD (Binance -> Coinbase -> CoinGecko price fallback) |
 | `stats` | `/stats` (top commands), `/stats users`, `/stats user <name>`, `/stats cmd <name>` |
 
