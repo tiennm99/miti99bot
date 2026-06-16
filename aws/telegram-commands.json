@@ -138,7 +138,7 @@
     },
     {
       "command": "coin_sell",
-      "description": "Sell coin quantity back to USD"
+      "description": "Sell coin back to USD amount"
     },
     {
       "command": "coin_stats",

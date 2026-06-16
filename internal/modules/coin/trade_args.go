@@ -2,10 +2,7 @@ package coin
 
 import "errors"
 
-var (
-	errInvalidUSDAmount = errors.New("coin: invalid USD amount")
-	errInvalidQuantity  = errors.New("coin: invalid quantity")
-)
+var errInvalidUSDAmount = errors.New("coin: invalid USD amount")
 
 type coinValueArgs struct {
 	coin  CoinSymbol

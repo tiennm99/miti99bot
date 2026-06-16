@@ -70,7 +70,7 @@ func (s *state) handleBuy(ctx context.Context, b *bot.Bot, update *models.Update
 	}
 	args := argsAfterCommand(update.Message.Text)
 	if len(args) != 2 {
-		return chathelper.Reply(ctx, b, update.Message, "Usage: /coin_buy <COIN> <usd_amount>\nExample: /coin_buy BTC 10")
+		return chathelper.Reply(ctx, b, update.Message, "Usage: /coin_buy <COIN> <usd_amount>\nAlternative: /coin_buy <usd_amount> <COIN>\nExample: /coin_buy BTC 10")
 	}
 	parsed, err := parseCoinValueArgs(args, isSafeUSD, errInvalidUSDAmount)
 	if errors.Is(err, errInvalidUSDAmount) {
@@ -85,9 +85,12 @@ func (s *state) handleBuy(ctx context.Context, b *bot.Bot, update *models.Update
 	if err != nil {
 		return s.replyPriceError(ctx, b, update, err)
 	}
+	if !isPositiveFinite(price.USD) {
+		return s.replyPriceError(ctx, b, update, ErrNoCoinPrice)
+	}
 	qty := amount / price.USD
-	if !isPositiveFinite(qty) {
-		return chathelper.Reply(ctx, b, update.Message, "Trade value is invalid.")
+	if !isPositiveFinite(qty) || qty < coinDustEpsilon {
+		return chathelper.Reply(ctx, b, update.Message, "USD amount is too small to convert to a tradeable coin quantity at the current price.")
 	}
 	defer s.locks.Acquire(strconv.FormatInt(userID, 10))()
 	var insufficientBalance *float64
@@ -121,24 +124,27 @@ func (s *state) handleSell(ctx context.Context, b *bot.Bot, update *models.Updat
 	}
 	args := argsAfterCommand(update.Message.Text)
 	if len(args) != 2 {
-		return chathelper.Reply(ctx, b, update.Message, "Usage: /coin_sell <COIN> <qty>\nExample: /coin_sell BTC 0.01")
+		return chathelper.Reply(ctx, b, update.Message, "Usage: /coin_sell <COIN> <usd_amount>\nAlternative: /coin_sell <usd_amount> <COIN>\nExample: /coin_sell BTC 10")
 	}
-	parsed, err := parseCoinValueArgs(args, isPositiveFinite, errInvalidQuantity)
-	if errors.Is(err, errInvalidQuantity) {
-		return chathelper.Reply(ctx, b, update.Message, "Quantity must be a positive finite number.")
+	parsed, err := parseCoinValueArgs(args, isSafeUSD, errInvalidUSDAmount)
+	if errors.Is(err, errInvalidUSDAmount) {
+		return chathelper.Reply(ctx, b, update.Message, "USD amount must be a positive finite number within the supported range.")
 	}
 	if err != nil {
 		return s.replyPriceError(ctx, b, update, err)
 	}
 	coin := parsed.coin
-	qty := parsed.value
+	amount := parsed.value
 	price, err := s.prices.FetchUSD(ctx, coin)
 	if err != nil {
 		return s.replyPriceError(ctx, b, update, err)
 	}
-	revenue := qty * price.USD
-	if !isSafeUSD(revenue) {
-		return chathelper.Reply(ctx, b, update.Message, "Trade value is too large.")
+	if !isPositiveFinite(price.USD) {
+		return s.replyPriceError(ctx, b, update, ErrNoCoinPrice)
+	}
+	qty := amount / price.USD
+	if !isPositiveFinite(qty) || qty < coinDustEpsilon {
+		return chathelper.Reply(ctx, b, update.Message, "USD amount is too small to convert to a tradeable coin quantity at the current price.")
 	}
 	defer s.locks.Acquire(strconv.FormatInt(userID, 10))()
 	var insufficientHeld *float64
@@ -148,7 +154,7 @@ func (s *state) handleSell(ctx context.Context, b *bot.Bot, update *models.Updat
 			insufficientHeld = &held
 			return errInsufficientCoin
 		}
-		p.AddUSD(revenue)
+		p.AddUSD(amount)
 		return nil
 	})
 	if errors.Is(err, errInsufficientCoin) && insufficientHeld != nil {
@@ -161,5 +167,5 @@ func (s *state) handleSell(ctx context.Context, b *bot.Bot, update *models.Updat
 	}
 	return chathelper.Reply(ctx, b, update.Message,
 		"Sold "+FormatCoinQty(qty)+" "+coin.Symbol+" @ "+FormatUSD(price.USD)+" ("+price.Source+")"+
-			"\nRevenue: "+FormatUSD(revenue)+"\nRemaining: "+FormatUSD(p.USD))
+			"\nProceeds: "+FormatUSD(amount)+"\nRemaining: "+FormatUSD(p.USD))
 }
