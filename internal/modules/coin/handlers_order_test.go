@@ -33,7 +33,7 @@ func TestHandleSellAcceptsCoinFirstOrder(t *testing.T) {
 	_ = s.handleBuy(ctx, rb.Bot, testutil.NewPrivateMessage(7, "/coin_buy 500 BTC"))
 	rb.Reset()
 
-	if err := s.handleSell(ctx, rb.Bot, testutil.NewPrivateMessage(7, "/coin_sell BTC 0.01")); err != nil {
+	if err := s.handleSell(ctx, rb.Bot, testutil.NewPrivateMessage(7, "/coin_sell BTC 500")); err != nil {
 		t.Fatalf("handleSell: %v", err)
 	}
 
