@@ -29,7 +29,7 @@ func New(deps modules.Deps) modules.Module {
 			{
 				Name:        "coin_sell",
 				Visibility:  modules.VisibilityPublic,
-				Description: "Sell coin quantity back to USD",
+				Description: "Sell coin back to USD amount",
 				Handler:     s.handleSell,
 			},
 			{

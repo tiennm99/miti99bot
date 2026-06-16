@@ -124,7 +124,7 @@ func TestHandleBuyAndSell(t *testing.T) {
 		t.Fatalf("after buy = %+v", p)
 	}
 	rb.Reset()
-	if err := s.handleSell(ctx, rb.Bot, testutil.NewPrivateMessage(7, "/coin_sell 0.01 BTC")); err != nil {
+	if err := s.handleSell(ctx, rb.Bot, testutil.NewPrivateMessage(7, "/coin_sell 500 BTC")); err != nil {
 		t.Fatalf("handleSell: %v", err)
 	}
 	rb.AssertSentText(t, "Sold 0.01 BTC")
@@ -146,10 +146,104 @@ func TestHandleBuyInsufficientUSD(t *testing.T) {
 func TestHandleSellInsufficientCoin(t *testing.T) {
 	s := newTestState(map[string]CoinPrice{"ETH": {USD: 3000, Source: "Coinbase"}}, nil)
 	rb := testutil.NewRecordingBot(t)
-	if err := s.handleSell(context.Background(), rb.Bot, testutil.NewPrivateMessage(7, "/coin_sell 1 ETH")); err != nil {
+	if err := s.handleSell(context.Background(), rb.Bot, testutil.NewPrivateMessage(7, "/coin_sell 10 ETH")); err != nil {
 		t.Fatalf("handleSell: %v", err)
 	}
 	rb.AssertSentText(t, "Insufficient ETH")
+}
+
+func TestHandleSellRejectsInvalidUSDAmount(t *testing.T) {
+	s := newTestState(map[string]CoinPrice{"BTC": {USD: 50000, Source: "Binance"}}, nil)
+	rb := testutil.NewRecordingBot(t)
+	if err := s.handleSell(context.Background(), rb.Bot, testutil.NewPrivateMessage(7, "/coin_sell BTC -5")); err != nil {
+		t.Fatalf("handleSell: %v", err)
+	}
+	rb.AssertSentText(t, "USD amount must be a positive finite number within the supported range.")
+}
+
+func TestHandleSellRejectsAmountTooSmall(t *testing.T) {
+	s := newTestState(map[string]CoinPrice{"BTC": {USD: 1e300, Source: "Test"}}, nil)
+	rb := testutil.NewRecordingBot(t)
+	if err := s.handleSell(context.Background(), rb.Bot, testutil.NewPrivateMessage(7, "/coin_sell BTC 1e-300")); err != nil {
+		t.Fatalf("handleSell: %v", err)
+	}
+	rb.AssertSentText(t, "too small")
+}
+
+func TestHandleSellInsufficientCoinWithHoldings(t *testing.T) {
+	ctx := context.Background()
+	s := newTestState(map[string]CoinPrice{"BTC": {USD: 50000, Source: "Binance"}}, nil)
+	rb := testutil.NewRecordingBot(t)
+	_ = s.handleTopup(ctx, rb.Bot, testutil.NewPrivateMessage(7, "/coin_topup 1000"))
+	_ = s.handleBuy(ctx, rb.Bot, testutil.NewPrivateMessage(7, "/coin_buy 500 BTC"))
+	rb.Reset()
+
+	if err := s.handleSell(ctx, rb.Bot, testutil.NewPrivateMessage(7, "/coin_sell 600 BTC")); err != nil {
+		t.Fatalf("handleSell: %v", err)
+	}
+	rb.AssertSentText(t, "Insufficient BTC")
+
+	p, _ := LoadPortfolio(ctx, s.kv, 7, 999)
+	if p.USD != 500 || p.Assets["BTC"] != 0.01 {
+		t.Fatalf("portfolio mutated on failed sell = %+v", p)
+	}
+}
+
+func TestHandleSellRejectsDustQuantity(t *testing.T) {
+	ctx := context.Background()
+	s := newTestState(map[string]CoinPrice{"BTC": {USD: 1e9, Source: "Test"}}, nil)
+	rb := testutil.NewRecordingBot(t)
+	_ = s.handleTopup(ctx, rb.Bot, testutil.NewPrivateMessage(7, "/coin_topup 1000"))
+	_ = s.handleBuy(ctx, rb.Bot, testutil.NewPrivateMessage(7, "/coin_buy 1 BTC"))
+	rb.Reset()
+
+	if err := s.handleSell(ctx, rb.Bot, testutil.NewPrivateMessage(7, "/coin_sell 0.5 BTC")); err != nil {
+		t.Fatalf("handleSell: %v", err)
+	}
+	rb.AssertSentText(t, "too small")
+
+	p, _ := LoadPortfolio(ctx, s.kv, 7, 999)
+	if p.USD != 999 || len(p.Assets) != 1 {
+		t.Fatalf("portfolio mutated on dust sell = %+v", p)
+	}
+}
+
+func TestHandleBuyRejectsDustQuantity(t *testing.T) {
+	ctx := context.Background()
+	s := newTestState(map[string]CoinPrice{"BTC": {USD: 1e9, Source: "Test"}}, nil)
+	rb := testutil.NewRecordingBot(t)
+	_ = s.handleTopup(ctx, rb.Bot, testutil.NewPrivateMessage(7, "/coin_topup 1000"))
+	rb.Reset()
+
+	if err := s.handleBuy(ctx, rb.Bot, testutil.NewPrivateMessage(7, "/coin_buy 0.5 BTC")); err != nil {
+		t.Fatalf("handleBuy: %v", err)
+	}
+	rb.AssertSentText(t, "too small")
+
+	p, _ := LoadPortfolio(ctx, s.kv, 7, 999)
+	if p.USD != 1000 || len(p.Assets) != 0 {
+		t.Fatalf("portfolio mutated on dust buy = %+v", p)
+	}
+}
+
+func TestHandleSellRejectsZeroPrice(t *testing.T) {
+	ctx := context.Background()
+	s := newTestState(map[string]CoinPrice{"BTC": {USD: 0, Source: "Test"}}, nil)
+	rb := testutil.NewRecordingBot(t)
+	if err := s.handleSell(ctx, rb.Bot, testutil.NewPrivateMessage(7, "/coin_sell 10 BTC")); err != nil {
+		t.Fatalf("handleSell: %v", err)
+	}
+	rb.AssertSentText(t, "No coin price available")
+}
+
+func TestHandleBuyRejectsZeroPrice(t *testing.T) {
+	ctx := context.Background()
+	s := newTestState(map[string]CoinPrice{"BTC": {USD: 0, Source: "Test"}}, nil)
+	rb := testutil.NewRecordingBot(t)
+	if err := s.handleBuy(ctx, rb.Bot, testutil.NewPrivateMessage(7, "/coin_buy 10 BTC")); err != nil {
+		t.Fatalf("handleBuy: %v", err)
+	}
+	rb.AssertSentText(t, "No coin price available")
 }
 
 func TestPriceErrorDoesNotMutatePortfolio(t *testing.T) {
