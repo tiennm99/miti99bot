@@ -147,19 +147,20 @@ func (s *state) handleSell(ctx context.Context, b *bot.Bot, update *models.Updat
 		return chathelper.Reply(ctx, b, update.Message, "USD amount is too small to convert to a tradeable coin quantity at the current price.")
 	}
 	defer s.locks.Acquire(strconv.FormatInt(userID, 10))()
-	var insufficientHeld *float64
+	var insufficientHeldQty float64
+	var insufficientHeld bool
 	p, err := UpdatePortfolio(ctx, s.kv, userID, s.now().UnixMilli(), func(p *Portfolio) error {
 		ok, held := p.DeductAsset(coin.Symbol, qty)
 		if !ok {
-			insufficientHeld = &held
+			insufficientHeldQty = held
+			insufficientHeld = true
 			return errInsufficientCoin
 		}
 		p.AddUSD(amount)
 		return nil
 	})
-	if errors.Is(err, errInsufficientCoin) && insufficientHeld != nil {
-		return chathelper.Reply(ctx, b, update.Message,
-			"Insufficient "+coin.Symbol+". You have: "+FormatCoinQty(*insufficientHeld))
+	if errors.Is(err, errInsufficientCoin) && insufficientHeld {
+		return chathelper.Reply(ctx, b, update.Message, formatInsufficientSellMessage(coin, amount, insufficientHeldQty, price.USD))
 	}
 	if err != nil {
 		log.Error("coin_save_portfolio", "user", userID, "err", err)
@@ -168,4 +169,15 @@ func (s *state) handleSell(ctx context.Context, b *bot.Bot, update *models.Updat
 	return chathelper.Reply(ctx, b, update.Message,
 		"Sold "+FormatCoinQty(qty)+" "+coin.Symbol+" @ "+FormatUSD(price.USD)+" ("+price.Source+")"+
 			"\nProceeds: "+FormatUSD(amount)+"\nRemaining: "+FormatUSD(p.USD))
+}
+
+func formatInsufficientSellMessage(coin CoinSymbol, requestedUSD, heldQty, priceUSD float64) string {
+	heldQty = normalizeAmount(heldQty)
+	if heldQty == 0 {
+		return "No " + coin.Symbol + " available to sell.\nTry /coin_buy " + coin.Symbol + " <usd_amount> first."
+	}
+	availableUSD := heldQty * priceUSD
+	return "Not enough " + coin.Symbol + " to sell " + FormatUSD(requestedUSD) + ".\n" +
+		"Available to sell: " + FormatUSD(availableUSD) + " (" + FormatCoinQty(heldQty) + " " + coin.Symbol + " @ " + FormatUSD(priceUSD) + ").\n" +
+		"Try " + FormatUSD(availableUSD) + " or less."
 }

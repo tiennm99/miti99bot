@@ -149,7 +149,17 @@ func TestHandleSellInsufficientCoin(t *testing.T) {
 	if err := s.handleSell(context.Background(), rb.Bot, testutil.NewPrivateMessage(7, "/coin_sell 10 ETH")); err != nil {
 		t.Fatalf("handleSell: %v", err)
 	}
-	rb.AssertSentText(t, "Insufficient ETH")
+	text := rb.LastSent().Text()
+	for _, want := range []string{"No ETH available to sell.", "Try /coin_buy ETH <usd_amount> first."} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("zero-holdings sell message missing %q in %q", want, text)
+		}
+	}
+	for _, unwanted := range []string{"$0.00", "@"} {
+		if strings.Contains(text, unwanted) {
+			t.Fatalf("zero-holdings sell message included %q in %q", unwanted, text)
+		}
+	}
 }
 
 func TestHandleSellRejectsInvalidUSDAmount(t *testing.T) {
@@ -181,7 +191,19 @@ func TestHandleSellInsufficientCoinWithHoldings(t *testing.T) {
 	if err := s.handleSell(ctx, rb.Bot, testutil.NewPrivateMessage(7, "/coin_sell 600 BTC")); err != nil {
 		t.Fatalf("handleSell: %v", err)
 	}
-	rb.AssertSentText(t, "Insufficient BTC")
+	text := rb.LastSent().Text()
+	for _, want := range []string{
+		"Not enough BTC to sell $600.00.",
+		"Available to sell: $500.00 (0.01 BTC @ $50,000.00).",
+		"Try $500.00 or less.",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("insufficient sell message missing %q in %q", want, text)
+		}
+	}
+	if strings.Contains(text, "have") {
+		t.Fatalf("insufficient sell message used ambiguous have wording: %q", text)
+	}
 
 	p, _ := LoadPortfolio(ctx, s.kv, 7, 999)
 	if p.USD != 500 || p.Assets["BTC"] != 0.01 {
