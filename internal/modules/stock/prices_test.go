@@ -104,15 +104,22 @@ func TestPriceClient_BatchNoUsableData_ReturnsErrNoPrice(t *testing.T) {
 	if !errors.Is(err, ErrNoPrice) {
 		t.Errorf("got %v, want ErrNoPrice", err)
 	}
+	if !strings.Contains(err.Error(), "SSI batch returned no usable quotes for NOPE (data_len=1)") {
+		t.Errorf("error = %q, want batch diagnostic", err.Error())
+	}
 }
 
 func TestPriceClient_4xx_ReturnsErrNoPrice(t *testing.T) {
 	c, _ := newTestPriceClient(t, func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte("blocked by upstream"))
 	})
 	_, err := c.FetchPrice(context.Background(), "BADTICKER")
 	if !errors.Is(err, ErrNoPrice) {
 		t.Errorf("got %v, want ErrNoPrice", err)
+	}
+	if !strings.Contains(err.Error(), "SSI status 404 body") || !strings.Contains(err.Error(), "blocked by upstream") {
+		t.Errorf("error = %q, want status/body diagnostic", err.Error())
 	}
 }
 
