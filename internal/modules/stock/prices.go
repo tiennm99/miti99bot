@@ -18,9 +18,10 @@ const kbsDefaultURL = "https://kbbuddywts.kbsec.com.vn/iis-server/investment/sto
 // market holidays — KBS returns the latest bar within the window in [0].
 const kbsLookbackDays = 14
 
-// kbsHTTPTimeout caps the price fetch. KBS is generally fast; 10s leaves
-// headroom for TLS + DNS on a Lambda cold start.
-const kbsHTTPTimeout = 10 * time.Second
+// kbsHTTPTimeout caps a single ticker's price fetch. Kept well under the
+// handler's overall deadline so one slow/hung ticker cannot drain the budget
+// the handler needs to deliver its Telegram reply (see chathelper.FetchContext).
+const kbsHTTPTimeout = 3 * time.Second
 
 // PriceClient is the KBS price fetcher. Zero value uses the default URL +
 // `&{Timeout: kbsHTTPTimeout}` HTTP client; tests inject HTTP + URL.
