@@ -22,29 +22,85 @@ func newTestPriceClient(t *testing.T, handler http.HandlerFunc) (*PriceClient, *
 
 func TestPriceClient_HappyPath(t *testing.T) {
 	c, _ := newTestPriceClient(t, func(w http.ResponseWriter, r *http.Request) {
-		if !strings.Contains(r.URL.Path, "/TCB/data_day") {
+		if r.Method != http.MethodGet {
+			t.Errorf("method = %s, want GET", r.Method)
+		}
+		if r.URL.Path != "/stock/TCB" {
 			t.Errorf("unexpected path: %s", r.URL.Path)
 		}
-		if r.URL.Query().Get("sdate") == "" || r.URL.Query().Get("edate") == "" {
-			t.Errorf("missing sdate/edate: %s", r.URL.RawQuery)
+		if got := r.Header.Get("Origin"); got != "https://iboard.ssi.com.vn" {
+			t.Errorf("origin = %q", got)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"data_day":[{"c":24500}, {"c":24300}]}`))
+		_, _ = w.Write([]byte(`{"data":{"stockSymbol":"TCB","matchedPrice":24500}}`))
 	})
 	got, err := c.FetchPrice(context.Background(), "TCB")
 	if err != nil {
 		t.Fatalf("FetchPrice: %v", err)
 	}
 	if got != 24500 {
-		t.Errorf("price: got %v, want 24500 (latest bar = data_day[0])", got)
+		t.Errorf("price: got %v, want 24500", got)
+	}
+}
+
+func TestPriceClient_BatchHappyPath(t *testing.T) {
+	c, _ := newTestPriceClient(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Errorf("method = %s, want POST", r.Method)
+		}
+		if r.URL.Path != "/stock/multiple" {
+			t.Errorf("unexpected path: %s", r.URL.Path)
+		}
+		if got := r.Header.Get("Content-Type"); got != "application/x-www-form-urlencoded" {
+			t.Errorf("content-type = %q", got)
+		}
+		if err := r.ParseForm(); err != nil {
+			t.Fatalf("ParseForm: %v", err)
+		}
+		stocks := r.Form["stocks"]
+		if strings.Join(stocks, ",") != "TCB,FPT" {
+			t.Errorf("stocks = %v, want [TCB FPT]", stocks)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":[{"stockSymbol":"TCB","matchedPrice":24500},{"stockSymbol":"FPT","matchedPrice":120000}]}`))
+	})
+	got, err := c.FetchPrices(context.Background(), []string{"TCB", "FPT"})
+	if err != nil {
+		t.Fatalf("FetchPrices: %v", err)
+	}
+	if got["TCB"] != 24500 || got["FPT"] != 120000 {
+		t.Errorf("prices = %+v", got)
+	}
+}
+
+func TestPriceClient_BatchOmitsInvalidQuotes(t *testing.T) {
+	c, _ := newTestPriceClient(t, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"data":[{"stockSymbol":"TCB","matchedPrice":24500},{"stockSymbol":"BAD","matchedPrice":0},{"stockSymbol":"NEG","matchedPrice":-1}]}`))
+	})
+	got, err := c.FetchPrices(context.Background(), []string{"TCB", "BAD", "NEG"})
+	if err != nil {
+		t.Fatalf("FetchPrices: %v", err)
+	}
+	if len(got) != 1 || got["TCB"] != 24500 {
+		t.Errorf("prices = %+v, want only TCB", got)
 	}
 }
 
 func TestPriceClient_NoData_ReturnsErrNoPrice(t *testing.T) {
 	c, _ := newTestPriceClient(t, func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte(`{"data_day":[]}`))
+		_, _ = w.Write([]byte(`{"data":null}`))
 	})
 	_, err := c.FetchPrice(context.Background(), "NOPE")
+	if !errors.Is(err, ErrNoPrice) {
+		t.Errorf("got %v, want ErrNoPrice", err)
+	}
+}
+
+func TestPriceClient_BatchNoUsableData_ReturnsErrNoPrice(t *testing.T) {
+	c, _ := newTestPriceClient(t, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"data":[{"stockSymbol":"NOPE","matchedPrice":0}]}`))
+	})
+	_, err := c.FetchPrices(context.Background(), []string{"NOPE"})
 	if !errors.Is(err, ErrNoPrice) {
 		t.Errorf("got %v, want ErrNoPrice", err)
 	}
@@ -60,9 +116,9 @@ func TestPriceClient_4xx_ReturnsErrNoPrice(t *testing.T) {
 	}
 }
 
-func TestPriceClient_NegativeClose_ReturnsErrNoPrice(t *testing.T) {
+func TestPriceClient_NegativeMatchedPrice_ReturnsErrNoPrice(t *testing.T) {
 	c, _ := newTestPriceClient(t, func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte(`{"data_day":[{"c":-1}]}`))
+		_, _ = w.Write([]byte(`{"data":{"stockSymbol":"WEIRD","matchedPrice":-1}}`))
 	})
 	_, err := c.FetchPrice(context.Background(), "WEIRD")
 	if !errors.Is(err, ErrNoPrice) {
@@ -75,21 +131,5 @@ func TestPriceClient_EmptyTicker(t *testing.T) {
 	_, err := c.FetchPrice(context.Background(), "")
 	if err == nil {
 		t.Error("empty ticker: expected error, got nil")
-	}
-}
-
-func TestKBSFormatDate(t *testing.T) {
-	cases := []struct {
-		in   time.Time
-		want string
-	}{
-		{time.Date(2026, 5, 10, 12, 0, 0, 0, time.UTC), "10-05-2026"},
-		{time.Date(2026, 1, 5, 0, 0, 0, 0, time.UTC), "05-01-2026"},
-		{time.Date(2026, 12, 31, 23, 59, 0, 0, time.UTC), "31-12-2026"},
-	}
-	for _, c := range cases {
-		if got := kbsFormatDate(c.in); got != c.want {
-			t.Errorf("kbsFormatDate(%v): got %q, want %q", c.in, got, c.want)
-		}
 	}
 }

@@ -328,9 +328,8 @@ func (s *state) handleConvert(ctx context.Context, b *bot.Bot, update *models.Up
 		"Currency exchange is not available yet.\n"+s.comingSoonMessage)
 }
 
-// handleStats fetches every held ticker's current price sequentially (reusing
-// the pooled KBS connection) and renders the portfolio. Read-only — no
-// portfolio mutation, so no keylock.
+// handleStats fetches current prices for held tickers in one SSI batch request
+// and renders the portfolio. Read-only; no portfolio mutation, so no keylock.
 func (s *state) handleStats(ctx context.Context, b *bot.Bot, update *models.Update) error {
 	userID, ok := senderInfo(update)
 	if !ok {
@@ -366,21 +365,21 @@ func (s *state) handleStats(ctx context.Context, b *bot.Bot, update *models.Upda
 
 	if len(heldList) > 0 {
 		lines = append(lines, "\nStocks:")
-		// Fetch sequentially, NOT concurrently. The memoised HTTP client keeps a
-		// keep-alive connection pool across calls (see PriceClient), so serial
-		// fetches to the same KBS host pay one TLS handshake and reuse the
-		// connection. Firing them in parallel instead opens N simultaneous
-		// handshakes into an empty pool; on the memory-constrained Lambda
-		// (256MB ≈ 0.15 vCPU) those CPU-bound handshakes thrash and each blows
-		// past the per-fetch timeout. The reply-reserved sub-context bounds the
-		// whole loop so the final Reply keeps its budget; a failed/slow ticker
-		// degrades to "(no price)" rather than failing the summary.
 		fetchCtx, cancel := chathelper.FetchContext(ctx)
 		defer cancel()
+
+		symbols := make([]string, 0, len(heldList))
 		for _, h := range heldList {
-			price, err := s.prices.FetchPrice(fetchCtx, h.symbol)
-			if err != nil {
-				log.Error("stock_fetch_price", "symbol", h.symbol, "err", err)
+			symbols = append(symbols, h.symbol)
+		}
+		prices, fetchErr := s.prices.FetchPrices(fetchCtx, symbols)
+		if fetchErr != nil {
+			log.Error("stock_fetch_prices", "symbols", strings.Join(symbols, ","), "err", fetchErr)
+		}
+
+		for _, h := range heldList {
+			price := prices[h.symbol]
+			if fetchErr != nil || price <= 0 {
 				lines = append(lines, "  "+h.symbol+" x"+FormatStock(float64(h.qty))+" (no price)")
 				continue
 			}
@@ -390,7 +389,6 @@ func (s *state) handleStats(ctx context.Context, b *bot.Bot, update *models.Upda
 				" @ "+FormatVND(price)+" = "+FormatVND(val))
 		}
 	}
-
 	lines = append(lines, "\nTotal value: "+FormatVND(totalValue))
 	lines = append(lines, "Invested: "+FormatVND(p.Meta.Invested))
 	lines = append(lines, "P&L: "+FormatPnL(totalValue, p.Meta.Invested))
