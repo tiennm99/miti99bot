@@ -11,7 +11,7 @@ import (
 )
 
 // tickerRe restricts tickers to ASCII alphanumeric, 1-16 chars. Stops
-// Cyrillic / unicode-lookalike inputs from amplifying KBS lookups, and
+// Cyrillic / unicode-lookalike inputs from amplifying price-provider lookups, and
 // guards the cache key alphabet (sym:<TICKER>) from oddities.
 var tickerRe = regexp.MustCompile(`^[A-Z0-9]{1,16}$`)
 
@@ -23,12 +23,12 @@ type ResolvedSymbol struct {
 	Label    string `json:"label"`
 }
 
-// ErrUnknownTicker means KBS has no price data for the given ticker — i.e.
+// ErrUnknownTicker means the price provider has no price data for the given ticker — i.e.
 // the symbol is not a tradeable VN stock as far as our source is concerned.
 var ErrUnknownTicker = errors.New("stock: unknown ticker")
 
 // ResolveSymbol returns the cached ResolvedSymbol if any, otherwise queries
-// KBS to validate the ticker and caches the result permanently. Tickers
+// the price provider to validate the ticker and caches the result permanently. Tickers
 // don't change; permanent caching is correct.
 //
 // The empty-input case returns ErrUnknownTicker to keep the caller's branch
@@ -47,7 +47,7 @@ func ResolveSymbol(ctx context.Context, kv storage.KVStore, prices *PriceClient,
 		return ResolvedSymbol{}, fmt.Errorf("stock: cache read %s: %w", ticker, err)
 	}
 
-	// Cache miss → validate against KBS by attempting a price fetch.
+	// Cache miss → validate against the price provider by attempting a price fetch.
 	if _, err := prices.FetchPrice(ctx, ticker); err != nil {
 		if errors.Is(err, ErrNoPrice) {
 			return ResolvedSymbol{}, ErrUnknownTicker
