@@ -7,7 +7,6 @@ import (
 
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
-	"golang.org/x/sync/errgroup"
 
 	"github.com/tiennm99/miti99bot/internal/log"
 	"github.com/tiennm99/miti99bot/internal/modules/util/chathelper"
@@ -26,44 +25,28 @@ func (s *state) handleStats(ctx context.Context, b *bot.Bot, update *models.Upda
 	lines := []string{"Coin Account Summary\n", "USD: " + FormatUSD(p.USD)}
 	totalValue := p.USD
 
-	// Fetch every held coin's price concurrently (bounded), under a
-	// reply-reserved sub-context so a slow provider cannot drain the budget the
-	// final Reply needs. Per-coin errors degrade to "(price unavailable)";
-	// results are written by index (no shared-write race) and rendered in order.
-	symbols := sortedAssetSymbols(p.Assets)
+	// Fetch sequentially (not concurrently) so the price client's keep-alive
+	// connection pool is reused across coins rather than opening N simultaneous
+	// TLS handshakes — the latter thrashes the CPU-constrained Lambda and times
+	// out. The reply-reserved sub-context bounds the whole loop so the final
+	// Reply keeps its budget; a slow/failed provider degrades to "(price
+	// unavailable)" instead of failing the summary.
 	fetchCtx, cancel := chathelper.FetchContext(ctx)
 	defer cancel()
-	type coinResult struct {
-		line  string
-		value float64
-	}
-	results := make([]coinResult, len(symbols))
-	var g errgroup.Group
-	g.SetLimit(8)
-	for i, symbol := range symbols {
-		i, symbol := i, symbol
-		g.Go(func() error {
-			held := p.Assets[symbol]
-			line := symbol + ": " + FormatCoinQty(held)
-			if coin, err := ResolveCoinSymbol(symbol); err == nil {
-				if price, err := s.prices.FetchUSD(fetchCtx, coin); err == nil {
-					value := held * price.USD
-					results[i] = coinResult{
-						line:  line + " = " + FormatUSD(value) + " @ " + FormatUSD(price.USD) + " (" + price.Source + ")",
-						value: value,
-					}
-					return nil
-				}
+	for _, symbol := range sortedAssetSymbols(p.Assets) {
+		held := p.Assets[symbol]
+		line := symbol + ": " + FormatCoinQty(held)
+		if coin, err := ResolveCoinSymbol(symbol); err == nil {
+			if price, err := s.prices.FetchUSD(fetchCtx, coin); err == nil {
+				value := held * price.USD
+				totalValue += value
+				line += " = " + FormatUSD(value) + " @ " + FormatUSD(price.USD) + " (" + price.Source + ")"
+			} else {
+				log.Error("coin_fetch_price", "symbol", symbol, "err", err)
 				line += " (price unavailable)"
 			}
-			results[i] = coinResult{line: line}
-			return nil
-		})
-	}
-	_ = g.Wait() // closures never return an error; partial results are intended
-	for _, r := range results {
-		lines = append(lines, r.line)
-		totalValue += r.value
+		}
+		lines = append(lines, line)
 	}
 	lines = append(lines, "Total value: "+FormatUSD(totalValue))
 	lines = append(lines, "Invested: "+FormatUSD(p.Meta.Invested))

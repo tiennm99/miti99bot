@@ -2,6 +2,18 @@
 
 Status: DONE (2026-06-25) — implemented, `make vet` + `make test -race` green, code-review DONE (no critical/high).
 
+## Post-deploy correction (2026-06-25)
+
+First deploy delivered the reply (original bug fixed) but every ticker showed "(no price)".
+Cause: parallelizing fetches opened N simultaneous TLS handshakes into an empty connection
+pool; on the 256MB Lambda (~0.15 vCPU) the CPU-bound handshakes thrashed and each exceeded
+the 3s timeout. Sequential fetches reuse the pooled KBS/provider connection (one handshake),
+which is why the original code was sequential by design.
+
+Fix: reverted stock + coin loops to **sequential** (kept `FetchContext` reply reserve and the
+3s per-fetch timeout); dropped errgroup (back to indirect); added per-fetch error logging
+(`stock_fetch_price` / `coin_fetch_price`) to close the swallowed-error diagnostic gap.
+
 ## Problem
 
 Update handler runs under one 10s ctx (`telegram/webhook.go:81`). Stats handlers reuse
