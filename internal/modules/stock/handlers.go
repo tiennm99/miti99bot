@@ -9,7 +9,6 @@ import (
 
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
-	"golang.org/x/sync/errgroup"
 
 	"github.com/tiennm99/miti99bot/internal/keylock"
 	"github.com/tiennm99/miti99bot/internal/log"
@@ -329,8 +328,9 @@ func (s *state) handleConvert(ctx context.Context, b *bot.Bot, update *models.Up
 		"Currency exchange is not available yet.\n"+s.comingSoonMessage)
 }
 
-// handleStats fetches every held ticker's current price (in parallel) and
-// renders the portfolio. Read-only — no portfolio mutation, so no keylock.
+// handleStats fetches every held ticker's current price sequentially (reusing
+// the pooled KBS connection) and renders the portfolio. Read-only — no
+// portfolio mutation, so no keylock.
 func (s *state) handleStats(ctx context.Context, b *bot.Bot, update *models.Update) error {
 	userID, ok := senderInfo(update)
 	if !ok {
@@ -366,42 +366,28 @@ func (s *state) handleStats(ctx context.Context, b *bot.Bot, update *models.Upda
 
 	if len(heldList) > 0 {
 		lines = append(lines, "\nStocks:")
-		// Fetch every held ticker concurrently so total latency is bounded by
-		// the slowest single fetch, not their sum. Fetches run under a
-		// reply-reserved sub-context (FetchContext) so a slow upstream cannot
-		// drain the budget the final Reply needs; per-fetch errors degrade to
-		// "(no price)" rather than failing the whole summary. Results are
-		// written by index — no shared-write race — and rendered in order.
+		// Fetch sequentially, NOT concurrently. The memoised HTTP client keeps a
+		// keep-alive connection pool across calls (see PriceClient), so serial
+		// fetches to the same KBS host pay one TLS handshake and reuse the
+		// connection. Firing them in parallel instead opens N simultaneous
+		// handshakes into an empty pool; on the memory-constrained Lambda
+		// (256MB ≈ 0.15 vCPU) those CPU-bound handshakes thrash and each blows
+		// past the per-fetch timeout. The reply-reserved sub-context bounds the
+		// whole loop so the final Reply keeps its budget; a failed/slow ticker
+		// degrades to "(no price)" rather than failing the summary.
 		fetchCtx, cancel := chathelper.FetchContext(ctx)
 		defer cancel()
-		type stockResult struct {
-			line  string
-			value float64
-		}
-		results := make([]stockResult, len(heldList))
-		var g errgroup.Group
-		g.SetLimit(8)
-		for i, h := range heldList {
-			i, h := i, h
-			g.Go(func() error {
-				price, err := s.prices.FetchPrice(fetchCtx, h.symbol)
-				if err != nil {
-					results[i] = stockResult{line: "  " + h.symbol + " x" + FormatStock(float64(h.qty)) + " (no price)"}
-					return nil
-				}
-				val := float64(h.qty) * price
-				results[i] = stockResult{
-					line: "  " + h.symbol + " x" + FormatStock(float64(h.qty)) +
-						" @ " + FormatVND(price) + " = " + FormatVND(val),
-					value: val,
-				}
-				return nil
-			})
-		}
-		_ = g.Wait() // closures never return an error; partial results are intended
-		for _, r := range results {
-			lines = append(lines, r.line)
-			totalValue += r.value
+		for _, h := range heldList {
+			price, err := s.prices.FetchPrice(fetchCtx, h.symbol)
+			if err != nil {
+				log.Error("stock_fetch_price", "symbol", h.symbol, "err", err)
+				lines = append(lines, "  "+h.symbol+" x"+FormatStock(float64(h.qty))+" (no price)")
+				continue
+			}
+			val := float64(h.qty) * price
+			totalValue += val
+			lines = append(lines, "  "+h.symbol+" x"+FormatStock(float64(h.qty))+
+				" @ "+FormatVND(price)+" = "+FormatVND(val))
 		}
 	}
 
