@@ -14,8 +14,11 @@ const (
 	binanceDefaultURL   = "https://data-api.binance.vision/api/v3/ticker/price"
 	coinbaseDefaultURL  = "https://api.coinbase.com/v2/exchange-rates"
 	coinGeckoDefaultURL = "https://api.coingecko.com/api/v3/simple/price"
-	coinHTTPTimeout     = 10 * time.Second
-	coinPriceCacheTTL   = 30 * time.Second
+	// coinHTTPTimeout caps a single provider call, kept under the handler
+	// deadline so one slow provider cannot starve the Telegram reply budget
+	// (see chathelper.FetchContext).
+	coinHTTPTimeout   = 3 * time.Second
+	coinPriceCacheTTL = 30 * time.Second
 )
 
 var ErrNoCoinPrice = errors.New("coin: no price available")

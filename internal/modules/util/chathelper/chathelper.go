@@ -51,6 +51,31 @@ func ArgAfterCommand(text string) string {
 // NowMillis returns current UTC ms-since-epoch.
 func NowMillis() int64 { return time.Now().UTC().UnixMilli() }
 
+// replyReserve is the slice of the handler's deadline kept aside for delivering
+// the Telegram reply. The whole update handler runs under one bounded context
+// (see internal/telegram/webhook.go); if upstream price fetches consume all of
+// it, the final SendMessage fails with "context deadline exceeded" and the user
+// sees no response. Reserving a fixed tail guarantees delivery headroom.
+const replyReserve = 3 * time.Second
+
+// FetchContext derives a child of ctx for upstream data fetches, leaving
+// replyReserve of the parent's deadline for the subsequent Reply (which must be
+// called with the original ctx, not this child). If ctx has no deadline, or
+// less than replyReserve remains, the child gets a small positive floor so a
+// fetch still attempts rather than failing instantly. Callers must call the
+// returned cancel.
+func FetchContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	dl, ok := ctx.Deadline()
+	if !ok {
+		return context.WithCancel(ctx)
+	}
+	budget := time.Until(dl) - replyReserve
+	if budget < time.Second {
+		budget = time.Second
+	}
+	return context.WithTimeout(ctx, budget)
+}
+
 // Reply sends a plain-text response to the chat the inbound message came from.
 //
 // Forwards MessageThreadID so replies in a forum-supergroup topic stay in the

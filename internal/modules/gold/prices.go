@@ -15,7 +15,7 @@ import (
 
 const (
 	fxDefaultURL       = "https://open.er-api.com/v6/latest/USD"
-	goldHTTPTimeout    = 10 * time.Second
+	goldHTTPTimeout    = 3 * time.Second // kept under the handler deadline; see chathelper.FetchContext
 	fxFallbackCacheTTL = time.Hour
 	gramsPerLuong      = 37.5
 	gramsPerTroyOunce  = 31.1034768
