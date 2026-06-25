@@ -115,7 +115,7 @@ func installTradingIncomeEvents(t *testing.T, eventBody string, now time.Time) (
 
 	priceSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"data_day":[{"c":24500}]}`))
+		_, _ = w.Write([]byte(`{"data":{"stockSymbol":"TCX","matchedPrice":24500}}`))
 	}))
 	t.Cleanup(priceSrv.Close)
 

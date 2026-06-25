@@ -5,7 +5,6 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -18,7 +17,7 @@ func TestResolveSymbol_FirstTime_QueriesAndCaches(t *testing.T) {
 	var hits int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		atomic.AddInt32(&hits, 1)
-		_, _ = w.Write([]byte(`{"data_day":[{"c":24500}]}`))
+		_, _ = w.Write([]byte(`{"data":{"stockSymbol":"TCB","matchedPrice":24500}}`))
 	}))
 	defer srv.Close()
 	prices := &PriceClient{URL: srv.URL}
@@ -31,23 +30,23 @@ func TestResolveSymbol_FirstTime_QueriesAndCaches(t *testing.T) {
 		t.Errorf("resolved: got %+v, want {TCB stock TCB}", got)
 	}
 	if atomic.LoadInt32(&hits) != 1 {
-		t.Errorf("KBS hits: got %d, want 1", hits)
+		t.Errorf("price hits: got %d, want 1", hits)
 	}
 
-	// Second call should hit the cache, not KBS.
+	// Second call should hit the cache, not the price provider.
 	_, err = ResolveSymbol(context.Background(), kv, prices, "TCB")
 	if err != nil {
 		t.Fatalf("ResolveSymbol (cached): %v", err)
 	}
 	if atomic.LoadInt32(&hits) != 1 {
-		t.Errorf("KBS hits after cache: got %d, want 1 (cached)", hits)
+		t.Errorf("price hits after cache: got %d, want 1 (cached)", hits)
 	}
 }
 
 func TestResolveSymbol_Unknown(t *testing.T) {
 	kv := storage.NewMemoryKVStore()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte(`{"data_day":[]}`))
+		_, _ = w.Write([]byte(`{"data":{"stockSymbol":"NOPE","matchedPrice":0}}`))
 	}))
 	defer srv.Close()
 	prices := &PriceClient{URL: srv.URL}
@@ -68,11 +67,11 @@ func TestResolveSymbol_EmptyInput(t *testing.T) {
 func TestResolveSymbol_NormalizesCase(t *testing.T) {
 	kv := storage.NewMemoryKVStore()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// KBS endpoint should receive the upper-cased ticker.
-		if !strings.Contains(r.URL.Path, "/FPT/") {
+		// SSI endpoint should receive the upper-cased ticker.
+		if r.URL.Path != "/stock/FPT" {
 			t.Errorf("ticker not upper-cased in URL: %s", r.URL.Path)
 		}
-		_, _ = w.Write([]byte(`{"data_day":[{"c":120000}]}`))
+		_, _ = w.Write([]byte(`{"data":{"stockSymbol":"FPT","matchedPrice":120000}}`))
 	}))
 	defer srv.Close()
 	prices := &PriceClient{URL: srv.URL}

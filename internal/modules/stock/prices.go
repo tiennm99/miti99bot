@@ -5,34 +5,29 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
+	"strings"
 	"sync"
 	"time"
 )
 
-// kbsDefaultURL is the KBS public stock data endpoint base.
-const kbsDefaultURL = "https://kbbuddywts.kbsec.com.vn/iis-server/investment/stocks"
+// ssiQueryDefaultURL is the SSI iBoard stock-query endpoint base.
+const ssiQueryDefaultURL = "https://iboard-query.ssi.com.vn"
 
-// kbsLookbackDays widens the requested window to absorb weekends and Vietnam
-// market holidays — KBS returns the latest bar within the window in [0].
-const kbsLookbackDays = 14
+// ssiHTTPTimeout caps a stock quote request. Kept under the handler deadline
+// so a slow upstream cannot starve the Telegram reply budget.
+const ssiHTTPTimeout = 3 * time.Second
 
-// kbsHTTPTimeout caps a single ticker's price fetch. Kept well under the
-// handler's overall deadline so one slow/hung ticker cannot drain the budget
-// the handler needs to deliver its Telegram reply (see chathelper.FetchContext).
-const kbsHTTPTimeout = 3 * time.Second
-
-// PriceClient is the KBS price fetcher. Zero value uses the default URL +
-// `&{Timeout: kbsHTTPTimeout}` HTTP client; tests inject HTTP + URL.
+// PriceClient is the SSI iBoard stock quote fetcher. Zero value uses the
+// default SSI URL + a timeout-bound HTTP client; tests inject HTTP + URL.
 type PriceClient struct {
 	HTTP *http.Client
 	URL  string
 
-	// defaultClient memoises the zero-value HTTP fallback so the transport's
-	// connection pool survives across FetchPrice calls — /stock_stats fans
-	// out per held ticker, and a fresh client per call means a fresh TLS
-	// handshake per ticker.
+	// defaultClient memoises the zero-value HTTP client so the transport's
+	// connection pool survives across stock commands.
 	defaultOnce   sync.Once
 	defaultClient *http.Client
 }
@@ -42,84 +37,127 @@ func (c *PriceClient) httpClient() *http.Client {
 		return c.HTTP
 	}
 	c.defaultOnce.Do(func() {
-		c.defaultClient = &http.Client{Timeout: kbsHTTPTimeout}
+		c.defaultClient = &http.Client{Timeout: ssiHTTPTimeout}
 	})
 	return c.defaultClient
 }
 
 func (c *PriceClient) baseURL() string {
 	if c.URL != "" {
-		return c.URL
+		return strings.TrimRight(c.URL, "/")
 	}
-	return kbsDefaultURL
+	return ssiQueryDefaultURL
 }
 
-// kbsResponse is the slice of the KBS payload we care about. We intentionally
-// don't model the full response (open/high/low/volume) — only the latest
-// close. The struct still names them so Json doesn't error on unknown fields
-// (Go's json decoder ignores them by default).
-type kbsResponse struct {
-	DataDay []kbsBar `json:"data_day"`
+type ssiSingleResponse struct {
+	Data ssiStockQuote `json:"data"`
 }
 
-type kbsBar struct {
-	C float64 `json:"c"` // close, already in VND, unscaled
+type ssiMultipleResponse struct {
+	Data []ssiStockQuote `json:"data"`
 }
 
-// kbsFormatDate formats t as "DD-MM-YYYY" — KBS's expected query date shape.
-func kbsFormatDate(t time.Time) string {
-	t = t.UTC()
-	return fmt.Sprintf("%02d-%02d-%04d", t.Day(), int(t.Month()), t.Year())
+type ssiStockQuote struct {
+	StockSymbol  string  `json:"stockSymbol"`
+	MatchedPrice float64 `json:"matchedPrice"`
 }
 
-// FetchPrice returns the latest VND close for ticker, or ErrNoPrice if KBS
-// has no data (unknown ticker, suspended, holiday-only window). Network /
-// decode errors are returned wrapped.
+// FetchPrice returns SSI's current matched price in VND for ticker, or
+// ErrNoPrice if SSI returns no usable quote. Network / decode errors are
+// returned wrapped.
 func (c *PriceClient) FetchPrice(ctx context.Context, ticker string) (float64, error) {
 	if ticker == "" {
 		return 0, errors.New("stock: ticker is empty")
 	}
-	now := time.Now().UTC()
-	edate := kbsFormatDate(now)
-	sdate := kbsFormatDate(now.Add(-time.Duration(kbsLookbackDays) * 24 * time.Hour))
-
-	endpoint := c.baseURL() + "/" + url.PathEscape(ticker) + "/data_day"
-	q := url.Values{}
-	q.Set("sdate", sdate)
-	q.Set("edate", edate)
-	full := endpoint + "?" + q.Encode()
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, full, nil)
+	full := c.baseURL() + "/stock/" + url.PathEscape(ticker)
+	req, err := newSSIRequest(ctx, http.MethodGet, full, nil)
 	if err != nil {
-		return 0, fmt.Errorf("stock: build KBS request: %w", err)
+		return 0, err
 	}
-	req.Header.Set("User-Agent", "Mozilla/5.0 (miti99bot)")
 
+	var body ssiSingleResponse
+	if err := c.doJSON(req, &body); err != nil {
+		return 0, err
+	}
+	price := body.Data.MatchedPrice
+	if price <= 0 {
+		return 0, ErrNoPrice
+	}
+	return price, nil
+}
+
+// FetchPrices returns current matched prices for the requested tickers using
+// SSI's batch quote endpoint. Missing or invalid quotes are omitted from the
+// returned map; callers can degrade those symbols individually.
+func (c *PriceClient) FetchPrices(ctx context.Context, tickers []string) (map[string]float64, error) {
+	if len(tickers) == 0 {
+		return map[string]float64{}, nil
+	}
+	form := url.Values{}
+	for _, ticker := range tickers {
+		ticker = strings.TrimSpace(ticker)
+		if ticker == "" {
+			continue
+		}
+		form.Add("stocks", ticker)
+	}
+	if len(form) == 0 {
+		return nil, errors.New("stock: no tickers to fetch")
+	}
+
+	req, err := newSSIRequest(ctx, http.MethodPost, c.baseURL()+"/stock/multiple", strings.NewReader(form.Encode()))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	var body ssiMultipleResponse
+	if err := c.doJSON(req, &body); err != nil {
+		return nil, err
+	}
+	out := make(map[string]float64, len(body.Data))
+	for _, quote := range body.Data {
+		symbol := strings.ToUpper(strings.TrimSpace(quote.StockSymbol))
+		if symbol == "" || quote.MatchedPrice <= 0 {
+			continue
+		}
+		out[symbol] = quote.MatchedPrice
+	}
+	if len(out) == 0 {
+		return nil, ErrNoPrice
+	}
+	return out, nil
+}
+
+func newSSIRequest(ctx context.Context, method, full string, body io.Reader) (*http.Request, error) {
+	req, err := http.NewRequestWithContext(ctx, method, full, body)
+	if err != nil {
+		return nil, fmt.Errorf("stock: build SSI request: %w", err)
+	}
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Origin", "https://iboard.ssi.com.vn")
+	req.Header.Set("Referer", "https://iboard.ssi.com.vn/")
+	req.Header.Set("User-Agent", "Mozilla/5.0 (miti99bot)")
+	return req, nil
+}
+
+func (c *PriceClient) doJSON(req *http.Request, dst any) error {
 	resp, err := c.httpClient().Do(req)
 	if err != nil {
-		return 0, fmt.Errorf("stock: KBS request: %w", err)
+		return fmt.Errorf("stock: SSI request: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return 0, ErrNoPrice
+		return ErrNoPrice
 	}
-
-	var body kbsResponse
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
-		return 0, fmt.Errorf("stock: KBS decode: %w", err)
+	if err := json.NewDecoder(resp.Body).Decode(dst); err != nil {
+		return fmt.Errorf("stock: SSI decode: %w", err)
 	}
-	if len(body.DataDay) == 0 {
-		return 0, ErrNoPrice
-	}
-	close := body.DataDay[0].C
-	if close <= 0 {
-		return 0, ErrNoPrice
-	}
-	return close, nil
+	return nil
 }
 
-// ErrNoPrice means KBS returned no usable price for the ticker — either the
+// ErrNoPrice means SSI returned no usable price for the ticker - either the
 // symbol is unknown, the market hasn't traded recently, or the data was
 // invalid. Used by symbol resolution to detect "is this a real ticker".
 var ErrNoPrice = errors.New("stock: no price available")
