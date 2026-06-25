@@ -2,6 +2,7 @@ package stock
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -70,6 +71,117 @@ func TestPriceClient_BatchHappyPath(t *testing.T) {
 	}
 	if got["TCB"] != 24500 || got["FPT"] != 120000 {
 		t.Errorf("prices = %+v", got)
+	}
+}
+
+func TestPriceClient_FallsBackToKBSWhenSSIDirectBlocked(t *testing.T) {
+	ssiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte("<title>Security Check - SSI</title>"))
+	}))
+	t.Cleanup(ssiSrv.Close)
+
+	kbsSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Errorf("method = %s, want POST", r.Method)
+		}
+		if r.URL.Path != "/" {
+			t.Errorf("path = %q, want /", r.URL.Path)
+		}
+		var body kbsRequest
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatalf("Decode KBS request: %v", err)
+		}
+		if body.Code != "TCB" {
+			t.Errorf("KBS code = %q, want TCB", body.Code)
+		}
+		if got := r.Header.Get("User-Agent"); !strings.Contains(got, "Chrome/120") {
+			t.Errorf("KBS user-agent = %q, want browser-like", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`[{"SB":"TCB","CP":33400}]`))
+	}))
+	t.Cleanup(kbsSrv.Close)
+
+	c := &PriceClient{HTTP: ssiSrv.Client(), URL: ssiSrv.URL, KBSURL: kbsSrv.URL}
+	got, err := c.FetchPrice(context.Background(), "TCB")
+	if err != nil {
+		t.Fatalf("FetchPrice: %v", err)
+	}
+	if got != 33400 {
+		t.Errorf("price: got %v, want 33400", got)
+	}
+}
+
+func TestPriceClient_BatchFallsBackToKBSWhenSSIDirectBlocked(t *testing.T) {
+	ssiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte("<title>Security Check - SSI</title>"))
+	}))
+	t.Cleanup(ssiSrv.Close)
+
+	var gotCodes []string
+	kbsSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body kbsRequest
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatalf("Decode KBS request: %v", err)
+		}
+		gotCodes = append(gotCodes, body.Code)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`[{"SB":"TCB","CP":33400},{"SB":"FPT","CP":71000}]`))
+	}))
+	t.Cleanup(kbsSrv.Close)
+
+	c := &PriceClient{HTTP: ssiSrv.Client(), URL: ssiSrv.URL, KBSURL: kbsSrv.URL}
+	got, err := c.FetchPrices(context.Background(), []string{"TCB", "FPT"})
+	if err != nil {
+		t.Fatalf("FetchPrices: %v", err)
+	}
+	if got["TCB"] != 33400 || got["FPT"] != 71000 {
+		t.Errorf("prices = %+v", got)
+	}
+	if strings.Join(gotCodes, ",") != "TCB,FPT" {
+		t.Errorf("KBS codes = %v, want one batch TCB,FPT", gotCodes)
+	}
+}
+
+func TestPriceClient_BatchFallsBackToVCIWhenKBSBlocked(t *testing.T) {
+	ssiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte("<title>Security Check - SSI</title>"))
+	}))
+	t.Cleanup(ssiSrv.Close)
+
+	kbsSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
+	}))
+	t.Cleanup(kbsSrv.Close)
+
+	var gotSymbols []string
+	vciSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body vciRequest
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatalf("Decode VCI request: %v", err)
+		}
+		gotSymbols = append(gotSymbols, body.Symbols...)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`[
+			{"listingInfo":{"symbol":"TCB"},"matchPrice":{"matchPrice":33400}},
+			{"listingInfo":{"symbol":"FPT"},"matchPrice":{"matchPrice":71000}}
+		]`))
+	}))
+	t.Cleanup(vciSrv.Close)
+
+	c := &PriceClient{HTTP: ssiSrv.Client(), URL: ssiSrv.URL, KBSURL: kbsSrv.URL, VCIURL: vciSrv.URL}
+	got, err := c.FetchPrices(context.Background(), []string{"TCB", "FPT"})
+	if err != nil {
+		t.Fatalf("FetchPrices: %v", err)
+	}
+	if got["TCB"] != 33400 || got["FPT"] != 71000 {
+		t.Errorf("prices = %+v", got)
+	}
+	if strings.Join(gotSymbols, ",") != "TCB,FPT" {
+		t.Errorf("VCI symbols = %v, want TCB,FPT", gotSymbols)
 	}
 }
 
