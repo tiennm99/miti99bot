@@ -23,7 +23,12 @@ func (s *state) handlePrice(ctx context.Context, b *bot.Bot, update *models.Upda
 	if len(args) != 0 {
 		return chathelper.Reply(ctx, b, update.Message, "Usage: /gold_price")
 	}
-	p, err := s.prices.FetchPrice(ctx)
+	// Fetch under a reply-reserved sub-context (the composite fetcher may try
+	// providers sequentially); reply on the original ctx so delivery keeps its
+	// budget headroom.
+	fetchCtx, cancel := chathelper.FetchContext(ctx)
+	defer cancel()
+	p, err := s.prices.FetchPrice(fetchCtx)
 	if err != nil {
 		return s.replyPriceError(ctx, b, update, err)
 	}
@@ -176,7 +181,10 @@ func (s *state) handleStats(ctx context.Context, b *bot.Bot, update *models.Upda
 
 	lines := []string{"Gold Account Summary\n", "VND: " + FormatVND(p.VND), "Gold: " + FormatLuong(p.Luong) + " luong"}
 	totalValue := p.VND
-	if buyPrice, _, err := s.prices.FetchLuongPrices(ctx); err == nil {
+	// Fetch under a reply-reserved sub-context; reply on the original ctx.
+	fetchCtx, cancel := chathelper.FetchContext(ctx)
+	defer cancel()
+	if buyPrice, _, err := s.prices.FetchLuongPrices(fetchCtx); err == nil {
 		goldValue := p.Luong * buyPrice
 		totalValue += goldValue
 		lines = append(lines, "Price: "+FormatVND(buyPrice)+"/luong")

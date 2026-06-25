@@ -22,7 +22,7 @@ const (
 	vnappmobDefaultURL    = "https://api.vnappmob.com"
 	vnappmobKeyCacheKey   = "vnappmob:api_key"
 	vnappmobRefreshBuffer = 24 * time.Hour
-	vnappmobHTTPTimeout   = 10 * time.Second
+	vnappmobHTTPTimeout   = 3 * time.Second // kept under the handler deadline; see chathelper.FetchContext
 )
 
 // VNAppMobClient fetches Vietnam SJC gold prices from api.vnappmob.com.

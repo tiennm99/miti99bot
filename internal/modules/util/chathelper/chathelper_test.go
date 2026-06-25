@@ -3,11 +3,52 @@ package chathelper
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/go-telegram/bot/models"
 
 	"github.com/tiennm99/miti99bot/internal/testutil"
 )
+
+func TestFetchContext(t *testing.T) {
+	t.Run("reserves reply budget from parent deadline", func(t *testing.T) {
+		parent, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		child, childCancel := FetchContext(parent)
+		defer childCancel()
+		dl, ok := child.Deadline()
+		if !ok {
+			t.Fatal("child has no deadline")
+		}
+		// budget = parent remaining (~10s) - replyReserve (3s) ≈ 7s.
+		if d := time.Until(dl); d > 8*time.Second || d < 6*time.Second {
+			t.Fatalf("fetch budget = %v, want ≈7s (10s parent - 3s reserve)", d)
+		}
+	})
+
+	t.Run("floors to 1s when parent deadline is within the reserve", func(t *testing.T) {
+		parent, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+		defer cancel()
+		child, childCancel := FetchContext(parent)
+		defer childCancel()
+		dl, _ := child.Deadline()
+		if d := time.Until(dl); d < 900*time.Millisecond || d > 1100*time.Millisecond {
+			t.Fatalf("floored budget = %v, want ≈1s", d)
+		}
+	})
+
+	t.Run("no parent deadline yields a cancelable child", func(t *testing.T) {
+		child, childCancel := FetchContext(context.Background())
+		defer childCancel()
+		if _, ok := child.Deadline(); ok {
+			t.Fatal("child unexpectedly has a deadline")
+		}
+		childCancel()
+		if child.Err() == nil {
+			t.Fatal("cancel did not propagate to child")
+		}
+	})
+}
 
 func TestSubjectFor(t *testing.T) {
 	tests := []struct {
