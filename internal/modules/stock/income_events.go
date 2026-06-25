@@ -80,9 +80,9 @@ var (
 )
 
 func (c *IncomeEventClient) FetchRecent(ctx context.Context, ticker string, since, until time.Time) ([]IncomeEvent, error) {
-	ticker = strings.ToUpper(strings.TrimSpace(ticker))
-	if !tickerRe.MatchString(ticker) {
-		return nil, ErrUnknownTicker
+	ticker, err := normalizeStockSymbol(ticker)
+	if err != nil {
+		return nil, err
 	}
 	if strings.TrimSpace(c.URL) == "" {
 		return nil, ErrIncomeEventClientNotConfigured
@@ -341,11 +341,11 @@ func (s *state) handleIncomeEvents(ctx context.Context, b *bot.Bot, update *mode
 
 func (s *state) incomeEventSymbols(ctx context.Context, userID int64, args []string) ([]string, error) {
 	if len(args) > 0 {
-		resolved, err := ResolveSymbol(ctx, s.kv, s.prices, args[0])
+		symbol, err := normalizeStockSymbol(args[0])
 		if err != nil {
 			return nil, err
 		}
-		return []string{resolved.Symbol}, nil
+		return []string{symbol}, nil
 	}
 
 	p, err := LoadPortfolio(ctx, s.kv, userID, s.now().UnixMilli())

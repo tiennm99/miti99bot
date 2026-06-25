@@ -1,86 +1,49 @@
 package stock
 
 import (
-	"context"
 	"errors"
-	"net/http"
-	"net/http/httptest"
-	"sync/atomic"
 	"testing"
-
-	"github.com/tiennm99/miti99bot/internal/storage"
 )
 
-func TestResolveSymbol_FirstTime_QueriesAndCaches(t *testing.T) {
-	kv := storage.NewMemoryKVStore()
-
-	var hits int32
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		atomic.AddInt32(&hits, 1)
-		_, _ = w.Write([]byte(`{"data":{"stockSymbol":"TCB","matchedPrice":24500}}`))
-	}))
-	defer srv.Close()
-	prices := &PriceClient{URL: srv.URL}
-
-	got, err := ResolveSymbol(context.Background(), kv, prices, "tcb")
-	if err != nil {
-		t.Fatalf("ResolveSymbol: %v", err)
-	}
-	if got.Symbol != "TCB" || got.Category != "stock" {
-		t.Errorf("resolved: got %+v, want {TCB stock TCB}", got)
-	}
-	if atomic.LoadInt32(&hits) != 1 {
-		t.Errorf("price hits: got %d, want 1", hits)
+func TestNormalizeStockSymbol(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{name: "uppercases", input: "tcb", want: "TCB"},
+		{name: "trims", input: "  fpt  ", want: "FPT"},
+		{name: "allows digits", input: "abc123", want: "ABC123"},
+		{name: "allows sixteen chars", input: "abcdefghijklmnop", want: "ABCDEFGHIJKLMNOP"},
 	}
 
-	// Second call should hit the cache, not the price provider.
-	_, err = ResolveSymbol(context.Background(), kv, prices, "TCB")
-	if err != nil {
-		t.Fatalf("ResolveSymbol (cached): %v", err)
-	}
-	if atomic.LoadInt32(&hits) != 1 {
-		t.Errorf("price hits after cache: got %d, want 1 (cached)", hits)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := normalizeStockSymbol(tt.input)
+			if err != nil {
+				t.Fatalf("normalizeStockSymbol(%q): %v", tt.input, err)
+			}
+			if got != tt.want {
+				t.Errorf("normalizeStockSymbol(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
 	}
 }
 
-func TestResolveSymbol_Unknown(t *testing.T) {
-	kv := storage.NewMemoryKVStore()
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte(`{"data":{"stockSymbol":"NOPE","matchedPrice":0}}`))
-	}))
-	defer srv.Close()
-	prices := &PriceClient{URL: srv.URL}
-
-	_, err := ResolveSymbol(context.Background(), kv, prices, "NOPE")
-	if !errors.Is(err, ErrUnknownTicker) {
-		t.Errorf("got %v, want ErrUnknownTicker", err)
-	}
-}
-
-func TestResolveSymbol_EmptyInput(t *testing.T) {
-	_, err := ResolveSymbol(context.Background(), storage.NewMemoryKVStore(), &PriceClient{}, "  ")
-	if !errors.Is(err, ErrUnknownTicker) {
-		t.Errorf("got %v, want ErrUnknownTicker for empty input", err)
-	}
-}
-
-func TestResolveSymbol_NormalizesCase(t *testing.T) {
-	kv := storage.NewMemoryKVStore()
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// SSI endpoint should receive the upper-cased ticker.
-		if r.URL.Path != "/stock/FPT" {
-			t.Errorf("ticker not upper-cased in URL: %s", r.URL.Path)
-		}
-		_, _ = w.Write([]byte(`{"data":{"stockSymbol":"FPT","matchedPrice":120000}}`))
-	}))
-	defer srv.Close()
-	prices := &PriceClient{URL: srv.URL}
-
-	got, err := ResolveSymbol(context.Background(), kv, prices, "  fpt  ")
-	if err != nil {
-		t.Fatalf("ResolveSymbol: %v", err)
-	}
-	if got.Symbol != "FPT" {
-		t.Errorf("normalised: got %q, want FPT", got.Symbol)
+func TestNormalizeStockSymbolRejectsInvalid(t *testing.T) {
+	for _, input := range []string{
+		"",
+		"  ",
+		"FPT.VN",
+		"FPT-VN",
+		"đxg",
+		"abcdefghijklmnopq",
+	} {
+		t.Run(input, func(t *testing.T) {
+			_, err := normalizeStockSymbol(input)
+			if !errors.Is(err, ErrUnknownTicker) {
+				t.Fatalf("normalizeStockSymbol(%q) error = %v, want ErrUnknownTicker", input, err)
+			}
+		})
 	}
 }

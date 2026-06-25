@@ -142,8 +142,7 @@ func normalizeTickers(tickers []string) []string {
 	return out
 }
 
-// ErrNoPrice means no provider returned a usable price for the ticker. Used by
-// symbol resolution to detect "is this a real ticker".
+// ErrNoPrice means no provider returned a usable price for the ticker.
 var ErrNoPrice = errors.New("stock: no price available")
 
 type providerError struct {
