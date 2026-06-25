@@ -119,22 +119,21 @@ func (s *state) handleBuy(ctx context.Context, b *bot.Bot, update *models.Update
 		return chathelper.Reply(ctx, b, update.Message, "Quantity must be a positive whole number.")
 	}
 
-	resolved, err := ResolveSymbol(ctx, s.kv, s.prices, args[1])
+	symbol, err := normalizeStockSymbol(args[1])
 	if err != nil {
 		if errors.Is(err, ErrUnknownTicker) {
 			return chathelper.Reply(ctx, b, update.Message,
 				"Unknown stock ticker \""+strings.ToUpper(args[1])+"\".\n"+s.comingSoonMessage)
 		}
-		log.Error("stock_resolve_symbol", "ticker", args[1], "err", err)
-		return chathelper.Reply(ctx, b, update.Message, "Could not look up that ticker. Try again later.")
+		return chathelper.Reply(ctx, b, update.Message, "Could not parse that ticker. Try again later.")
 	}
 
-	price, err := s.prices.FetchPrice(ctx, resolved.Symbol)
+	price, err := s.prices.FetchPrice(ctx, symbol)
 	if err != nil {
 		if errors.Is(err, ErrNoPrice) {
-			return chathelper.Reply(ctx, b, update.Message, "No price available for "+resolved.Symbol+".")
+			return chathelper.Reply(ctx, b, update.Message, "No price available for "+symbol+".")
 		}
-		log.Error("stock_fetch_price", "ticker", resolved.Symbol, "err", err)
+		log.Error("stock_fetch_price", "ticker", symbol, "err", err)
 		return chathelper.Reply(ctx, b, update.Message, "Could not fetch price. Try again later.")
 	}
 	cost := float64(qty) * price
@@ -151,13 +150,13 @@ func (s *state) handleBuy(ctx context.Context, b *bot.Bot, update *models.Update
 		return chathelper.Reply(ctx, b, update.Message,
 			"Insufficient VND. Need "+FormatVND(cost)+", have "+FormatVND(balance)+".")
 	}
-	p.AddAsset(resolved.Symbol, qty)
+	p.AddAsset(symbol, qty)
 	if err := SavePortfolio(ctx, s.kv, userID, p); err != nil {
 		log.Error("stock_save_portfolio", "user", userID, "err", err)
 		return chathelper.Reply(ctx, b, update.Message, "Could not save portfolio. Try again later.")
 	}
 	return chathelper.Reply(ctx, b, update.Message,
-		"Bought "+FormatStock(float64(qty))+" "+resolved.Symbol+
+		"Bought "+FormatStock(float64(qty))+" "+symbol+
 			" @ "+FormatVND(price)+"\nCost: "+FormatVND(cost)+
 			"\nRemaining: "+FormatVND(p.Currency["VND"]))
 }
@@ -177,24 +176,23 @@ func (s *state) handleSell(ctx context.Context, b *bot.Bot, update *models.Updat
 		return chathelper.Reply(ctx, b, update.Message, "Quantity must be a positive whole number.")
 	}
 
-	// Resolve + fetch price BEFORE taking the per-user lock. Mirrors handleBuy:
+	// Normalize + fetch price BEFORE taking the per-user lock. Mirrors handleBuy:
 	// keeps the critical section to a fast Get→mutate→Put, and removes any need
 	// for a rollback path (no in-memory mutation precedes the network call).
-	resolved, err := ResolveSymbol(ctx, s.kv, s.prices, args[1])
+	symbol, err := normalizeStockSymbol(args[1])
 	if err != nil {
 		if errors.Is(err, ErrUnknownTicker) {
 			return chathelper.Reply(ctx, b, update.Message,
 				"Unknown stock ticker \""+strings.ToUpper(args[1])+"\".")
 		}
-		log.Error("stock_resolve_symbol", "ticker", args[1], "err", err)
-		return chathelper.Reply(ctx, b, update.Message, "Could not look up that ticker. Try again later.")
+		return chathelper.Reply(ctx, b, update.Message, "Could not parse that ticker. Try again later.")
 	}
-	price, err := s.prices.FetchPrice(ctx, resolved.Symbol)
+	price, err := s.prices.FetchPrice(ctx, symbol)
 	if err != nil {
 		if errors.Is(err, ErrNoPrice) {
-			return chathelper.Reply(ctx, b, update.Message, "No price available for "+resolved.Symbol+".")
+			return chathelper.Reply(ctx, b, update.Message, "No price available for "+symbol+".")
 		}
-		log.Error("stock_fetch_price", "ticker", resolved.Symbol, "err", err)
+		log.Error("stock_fetch_price", "ticker", symbol, "err", err)
 		return chathelper.Reply(ctx, b, update.Message, "Could not fetch price. Try again later.")
 	}
 
@@ -205,10 +203,10 @@ func (s *state) handleSell(ctx context.Context, b *bot.Bot, update *models.Updat
 		log.Error("stock_load_portfolio", "user", userID, "err", err)
 		return chathelper.Reply(ctx, b, update.Message, "Could not load portfolio. Try again later.")
 	}
-	ok, held := p.DeductAsset(resolved.Symbol, qty)
+	ok, held := p.DeductAsset(symbol, qty)
 	if !ok {
 		return chathelper.Reply(ctx, b, update.Message,
-			"Insufficient "+resolved.Symbol+". You have: "+FormatStock(float64(held)))
+			"Insufficient "+symbol+". You have: "+FormatStock(float64(held)))
 	}
 	revenue := float64(qty) * price
 	p.AddCurrency("VND", revenue)
@@ -217,7 +215,7 @@ func (s *state) handleSell(ctx context.Context, b *bot.Bot, update *models.Updat
 		return chathelper.Reply(ctx, b, update.Message, "Could not save portfolio. Try again later.")
 	}
 	return chathelper.Reply(ctx, b, update.Message,
-		"Sold "+FormatStock(float64(qty))+" "+resolved.Symbol+
+		"Sold "+FormatStock(float64(qty))+" "+symbol+
 			" @ "+FormatVND(price)+"\nRevenue: "+FormatVND(revenue)+
 			"\nRemaining: "+FormatVND(p.Currency["VND"]))
 }
@@ -238,14 +236,13 @@ func (s *state) handleIncomeStock(ctx context.Context, b *bot.Bot, update *model
 		return chathelper.Reply(ctx, b, update.Message, "Quantity must be a positive whole number.")
 	}
 
-	resolved, err := ResolveSymbol(ctx, s.kv, s.prices, args[1])
+	symbol, err := normalizeStockSymbol(args[1])
 	if err != nil {
 		if errors.Is(err, ErrUnknownTicker) {
 			return chathelper.Reply(ctx, b, update.Message,
 				"Unknown stock ticker \""+strings.ToUpper(args[1])+"\".")
 		}
-		log.Error("stock_resolve_symbol", "ticker", args[1], "err", err)
-		return chathelper.Reply(ctx, b, update.Message, "Could not look up that ticker. Try again later.")
+		return chathelper.Reply(ctx, b, update.Message, "Could not parse that ticker. Try again later.")
 	}
 
 	defer s.locks.Acquire(strconv.FormatInt(userID, 10))()
@@ -255,19 +252,19 @@ func (s *state) handleIncomeStock(ctx context.Context, b *bot.Bot, update *model
 		log.Error("stock_load_portfolio", "user", userID, "err", err)
 		return chathelper.Reply(ctx, b, update.Message, "Could not load portfolio. Try again later.")
 	}
-	held := p.Assets[resolved.Symbol]
+	held := p.Assets[symbol]
 	if held == 0 {
 		return chathelper.Reply(ctx, b, update.Message,
-			"You don't hold any "+resolved.Symbol+" to receive a stock dividend.")
+			"You don't hold any "+symbol+" to receive a stock dividend.")
 	}
-	p.AddAsset(resolved.Symbol, qty)
+	p.AddAsset(symbol, qty)
 	if err := SavePortfolio(ctx, s.kv, userID, p); err != nil {
 		log.Error("stock_save_portfolio", "user", userID, "err", err)
 		return chathelper.Reply(ctx, b, update.Message, "Could not save portfolio. Try again later.")
 	}
 	return chathelper.Reply(ctx, b, update.Message,
-		"Stock dividend: +"+FormatStock(float64(qty))+" "+resolved.Symbol+
-			"\nHolding: "+FormatStock(float64(held))+" → "+FormatStock(float64(p.Assets[resolved.Symbol])))
+		"Stock dividend: +"+FormatStock(float64(qty))+" "+symbol+
+			"\nHolding: "+FormatStock(float64(held))+" → "+FormatStock(float64(p.Assets[symbol])))
 }
 
 func (s *state) handleIncomeVND(ctx context.Context, b *bot.Bot, update *models.Update) error {
@@ -286,14 +283,13 @@ func (s *state) handleIncomeVND(ctx context.Context, b *bot.Bot, update *models.
 		return chathelper.Reply(ctx, b, update.Message, "Amount per share must be a positive number.")
 	}
 
-	resolved, err := ResolveSymbol(ctx, s.kv, s.prices, args[1])
+	symbol, err := normalizeStockSymbol(args[1])
 	if err != nil {
 		if errors.Is(err, ErrUnknownTicker) {
 			return chathelper.Reply(ctx, b, update.Message,
 				"Unknown stock ticker \""+strings.ToUpper(args[1])+"\".")
 		}
-		log.Error("stock_resolve_symbol", "ticker", args[1], "err", err)
-		return chathelper.Reply(ctx, b, update.Message, "Could not look up that ticker. Try again later.")
+		return chathelper.Reply(ctx, b, update.Message, "Could not parse that ticker. Try again later.")
 	}
 
 	defer s.locks.Acquire(strconv.FormatInt(userID, 10))()
@@ -303,10 +299,10 @@ func (s *state) handleIncomeVND(ctx context.Context, b *bot.Bot, update *models.
 		log.Error("stock_load_portfolio", "user", userID, "err", err)
 		return chathelper.Reply(ctx, b, update.Message, "Could not load portfolio. Try again later.")
 	}
-	held := p.Assets[resolved.Symbol]
+	held := p.Assets[symbol]
 	if held == 0 {
 		return chathelper.Reply(ctx, b, update.Message,
-			"You don't hold any "+resolved.Symbol+" to receive a cash dividend.")
+			"You don't hold any "+symbol+" to receive a cash dividend.")
 	}
 	total := amountPerShare * float64(held)
 	p.AddCurrency("VND", total)
@@ -315,7 +311,7 @@ func (s *state) handleIncomeVND(ctx context.Context, b *bot.Bot, update *models.
 		return chathelper.Reply(ctx, b, update.Message, "Could not save portfolio. Try again later.")
 	}
 	return chathelper.Reply(ctx, b, update.Message,
-		"Cash dividend: "+FormatVND(amountPerShare)+" × "+FormatStock(float64(held))+" "+resolved.Symbol+
+		"Cash dividend: "+FormatVND(amountPerShare)+" × "+FormatStock(float64(held))+" "+symbol+
 			" = "+FormatVND(total)+
 			"\nRemaining: "+FormatVND(p.Currency["VND"]))
 }

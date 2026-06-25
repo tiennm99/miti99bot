@@ -10,8 +10,7 @@ import (
 )
 
 // Portfolio is the per-user stock state. Currency is a map for forward-
-// compat with USD/EUR (currently VND-only). Assets is a flat ticker→qty map
-// — category lives in the symbol cache, not the portfolio.
+// compat with USD/EUR (currently VND-only). Assets is a flat ticker→qty map.
 type Portfolio struct {
 	Currency map[string]float64 `json:"currency"`
 	Assets   map[string]int64   `json:"assets"`
