@@ -328,8 +328,8 @@ func (s *state) handleConvert(ctx context.Context, b *bot.Bot, update *models.Up
 		"Currency exchange is not available yet.\n"+s.comingSoonMessage)
 }
 
-// handleStats fetches current prices for held tickers in one SSI batch request
-// and renders the portfolio. Read-only; no portfolio mutation, so no keylock.
+// handleStats fetches current prices for held tickers and renders the
+// portfolio. Read-only; no portfolio mutation, so no keylock.
 func (s *state) handleStats(ctx context.Context, b *bot.Bot, update *models.Update) error {
 	userID, ok := senderInfo(update)
 	if !ok {

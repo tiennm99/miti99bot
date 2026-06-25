@@ -111,6 +111,16 @@ fixes, non-public commands) need no menu action.
 
 FireAnt response is an array of timescale marks with `id`, `label`, `date`, `title`, and `color`. The bot keeps marks whose label/title indicate dividends, ex-right dates, final registration dates, rights issues, or bonus/share dividends.
 
+## Stock price providers
+
+`/stock_buy`, `/stock_sell`, and `/stock_stats` use unofficial public quote endpoints. Zero-value provider order is:
+
+1. KBS current price board (`/stock/iss`).
+2. VCI current quote board (`/price/symbols/getList`).
+3. SSI iBoard direct quote.
+
+This order is intentional for current-price commands. KBS and VCI both support batch current quotes, while SSI can return a Cloudflare security page. Treat all three as unofficial app-internal endpoints and keep provider/source errors visible in Lambda logs.
+
 ## Gold module
 
 `gold` is opt-in for first deploy. Enable it by adding `gold` to the `ModulesCSV` parameter / `MODULES` env, for example `util,misc,wordle,loldle,lolschedule,twentyq,stock,stats,gold`.
