@@ -20,6 +20,9 @@ const ssiQueryDefaultURL = "https://iboard-query.ssi.com.vn"
 // so a slow upstream cannot starve the Telegram reply budget.
 const ssiHTTPTimeout = 3 * time.Second
 
+// ssiErrorBodyLimit keeps upstream diagnostics useful without dumping large responses.
+const ssiErrorBodyLimit = 512
+
 // PriceClient is the SSI iBoard stock quote fetcher. Zero value uses the
 // default SSI URL + a timeout-bound HTTP client; tests inject HTTP + URL.
 type PriceClient struct {
@@ -81,7 +84,7 @@ func (c *PriceClient) FetchPrice(ctx context.Context, ticker string) (float64, e
 	}
 	price := body.Data.MatchedPrice
 	if price <= 0 {
-		return 0, ErrNoPrice
+		return 0, fmt.Errorf("%w: SSI quote has no matchedPrice for %s", ErrNoPrice, strings.ToUpper(ticker))
 	}
 	return price, nil
 }
@@ -94,12 +97,15 @@ func (c *PriceClient) FetchPrices(ctx context.Context, tickers []string) (map[st
 		return map[string]float64{}, nil
 	}
 	form := url.Values{}
+	requested := make([]string, 0, len(tickers))
 	for _, ticker := range tickers {
 		ticker = strings.TrimSpace(ticker)
 		if ticker == "" {
 			continue
 		}
+		ticker = strings.ToUpper(ticker)
 		form.Add("stocks", ticker)
+		requested = append(requested, ticker)
 	}
 	if len(form) == 0 {
 		return nil, errors.New("stock: no tickers to fetch")
@@ -124,7 +130,7 @@ func (c *PriceClient) FetchPrices(ctx context.Context, tickers []string) (map[st
 		out[symbol] = quote.MatchedPrice
 	}
 	if len(out) == 0 {
-		return nil, ErrNoPrice
+		return nil, fmt.Errorf("%w: SSI batch returned no usable quotes for %s (data_len=%d)", ErrNoPrice, strings.Join(requested, ","), len(body.Data))
 	}
 	return out, nil
 }
@@ -149,7 +155,8 @@ func (c *PriceClient) doJSON(req *http.Request, dst any) error {
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return ErrNoPrice
+		snippet, _ := io.ReadAll(io.LimitReader(resp.Body, ssiErrorBodyLimit))
+		return fmt.Errorf("%w: SSI status %d body %q", ErrNoPrice, resp.StatusCode, strings.TrimSpace(string(snippet)))
 	}
 	if err := json.NewDecoder(resp.Body).Decode(dst); err != nil {
 		return fmt.Errorf("stock: SSI decode: %w", err)
