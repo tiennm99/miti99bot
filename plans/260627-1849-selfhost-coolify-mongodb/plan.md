@@ -18,7 +18,7 @@ source: skill
 
 Run miti99bot as a long-lived container on Coolify (docker-compose) instead of AWS Lambda, using MongoDB Atlas (`MONGO_URL` + `MONGO_DATABASE`) instead of DynamoDB. Existing DynamoDB data is migrated into Atlas. At the **code** level this is additive — a 4th KV backend + a self-host run mode; the DynamoDB/Lambda code path is NOT ripped out (kept for portability and to run the migrator). At the **infrastructure** level, the deployed AWS stack is fully decommissioned after a verified cutover (Phase 5, validated decision).
 
-Why this is low-risk: storage is already a pluggable `KVProvider` interface with 3 backends (`memory`, `firestore`, `dynamodb`); adding `mongodb` follows the exact `firestore` collection-per-module pattern. Secrets already fall back to plain env vars when `*_PARAMETER_NAME` is unset, so Coolify env vars need no code change. The only genuine gap is cron: EventBridge Scheduler triggers `/cron/{name}` today, which does not exist off-AWS.
+Why this is low-risk: storage is already a pluggable `KVProvider` interface with 3 backends (`memory`, `firestore`, `dynamodb`); adding `mongodb` follows the exact `firestore` collection-per-module pattern. Secrets already fall back to plain env vars when `*_PARAMETER_NAME` is unset, so Coolify env vars need no code change. Two gaps to close, both with minimal code: (1) **cron** — EventBridge Scheduler triggers `/cron/{name}` today, replaced by an in-process scheduler (Phase 2); (2) **transport** — the bot runs webhook-only today, switched to **long polling** (Phase 3) via the same `go-telegram/bot` library's built-in polling mode, which removes the need for any public inbound ingress on the self-hosted box.
 
 ## Phases
 
@@ -26,7 +26,7 @@ Why this is low-risk: storage is already a pluggable `KVProvider` interface with
 |-------|------|--------|
 | 1 | [MongoDB Storage Provider](./phase-01-mongodb-storage-provider.md) | Pending |
 | 2 | [In-Process Cron Scheduler](./phase-02-in-process-cron-scheduler.md) | Pending |
-| 3 | [Containerize and Coolify Deploy](./phase-03-containerize-and-coolify-deploy.md) | Pending |
+| 3 | [Long-Polling Runtime + Containerize + Coolify Deploy](./phase-03-containerize-and-coolify-deploy.md) | Pending |
 | 4 | [Data Migration and Cutover](./phase-04-data-migration-and-cutover.md) | Pending |
 | 5 | [AWS Full Decommission](./phase-05-aws-decommission.md) | Pending |
 
@@ -34,7 +34,7 @@ Why this is low-risk: storage is already a pluggable `KVProvider` interface with
 
 - Phase 2 is independent of Phase 1 (cron touches no storage).
 - Phase 3 depends on 1 + 2 (container must boot with mongo + internal cron).
-- Phase 4 depends on Phase 1 (Mongo document schema must be final before copying data) and is the last step before flipping the Telegram webhook to the Coolify URL.
+- Phase 4 depends on Phase 1 (Mongo document schema must be final before copying data) and Phase 3 (the polling container must exist before cutover); it is the last step before switching Telegram to the polling container.
 - Phase 5 (AWS decommission) depends on Phase 4 `--verify` passing — it destroys DynamoDB, so it runs only after data is migrated and the bot is confirmed live on Coolify.
 
 Suggested order: 1 → 2 → 3 → 4 → 5. Phases 1 and 2 can be done in parallel by separate developers (disjoint files).
@@ -43,20 +43,21 @@ Suggested order: 1 → 2 → 3 → 4 → 5. Phases 1 and 2 can be done in parall
 
 ```
                  BEFORE (AWS)                         AFTER (Coolify self-host)
-   Telegram ──webhook──> Lambda Function URL    Telegram ──webhook──> Coolify domain
+   Telegram ──webhook──> Lambda Function URL    Telegram <──long poll── container (outbound only)
    EventBridge Scheduler ──> /cron/{name}        in-process scheduler ──> cron.Handler
    DynamoDB (pk=module, sk=key)                  MongoDB Atlas (db / collection-per-module)
    SSM Parameter Store secrets                   Coolify env vars (plain)
+   public HTTPS ingress (Function URL)           NO public ingress (polling = outbound only)
 ```
 
 Same Go binary (`cmd/server`), same HTTP server on `:8080`, same module framework. Backend + cron + secret source are all selected by env vars at startup.
 
 ## Acceptance Criteria
 
-- [ ] `KV_PROVIDER=mongodb MONGO_URL=… MONGO_DATABASE=…` boots and serves `/webhook` with persistent storage.
+- [ ] `MONGO_URL=… MONGO_DATABASE=…` (mongodb auto-selected, no `KV_PROVIDER`) boots, runs the cron scheduler by default, and consumes updates via long polling (the only transport) with persistent storage; no `/webhook` route, no webhook secret.
 - [ ] `make test` green; new mongo provider has parity tests with the firestore/dynamodb suites.
 - [ ] Self-hosted container fires the lolschedule daily push at 01:00 UTC (08:00 ICT) without EventBridge.
-- [ ] `docker compose up` (Coolify) brings the bot live behind a public HTTPS domain; `/` health check passes.
+- [ ] `docker compose up` (Coolify) brings the bot live via long polling with NO public domain/ingress (outbound-only); `/` health check passes internally; exactly 1 replica.
 - [ ] All existing prod DynamoDB items present in Atlas with identical values; migration is idempotent + verifiable by per-module counts.
 - [ ] After cutover, ALL miti99bot AWS resources are deleted — CloudFormation stack AND the manually-created SSM secrets, GitHub OIDC role, and SAM S3 bucket; `app=miti99bot` tag sweep is empty and Cost Explorer trends to $0.
 - [ ] `.github/workflows/deploy.yml` is removed/disabled so `main` pushes no longer recreate the AWS stack.
@@ -94,7 +95,7 @@ Re-read all phase files after applying findings. Reconciled:
 - Migrator writes **through `MongoKVStore.Put`** in Phase 4 architecture, risk, and success criteria (no raw `UpdateOne`).
 - Health endpoint described as **plain text `miti99bot ok`** in Phase 3 requirements, architecture, and risk (was "JSON"); bogus `-healthcheck` CMD removed from the compose snippet.
 - Cron dispatcher named **`DispatchScheduled`** in Phase 2 with scheduler-local timeout/recover.
-- Cutover ordering (disable EventBridge → migrate → `CRON_MODE=internal` → `setWebhook`) consistent across Phase 2 risk and Phase 4 runbook.
+- Cutover ordering (disable EventBridge → `deleteWebhook` → migrate → start polling container, whose scheduler runs by default) consistent across Phase 2 risk and Phase 4 runbook. <!-- Session 2: polling cutover supersedes setWebhook -->
 No unresolved contradictions remain.
 
 ## Validation Log
@@ -112,6 +113,23 @@ Verification pass skipped: `## Red Team Review` already carries full `file:line`
 | 6 | Mongo driver | `go.mongodb.org/mongo-driver/v2` (current stable); `robfig/cron/v3` for the scheduler. | Phase 1, Phase 2 |
 | 7 | Atlas tier | Free **M0** (512 MB) — sufficient for the tiny paper-trading KV. | Phase 3 |
 | 8 | `updatedAt` reader | Confirmed write-only today; store as int64 for cheap parity. No TTL/sort planned. | Phase 1, Phase 4 |
+
+### Session 2 — 2026-06-27 (Telegram transport)
+User directive: use long polling, **as the only mode — no env toggle**. Decision: keep the existing `go-telegram/bot` library (native polling via `b.Start(ctx)` — no library swap, handlers unchanged) and **delete the webhook code path entirely** (webhook existed only for Lambda, which is being decommissioned — YAGNI). Removed: `internal/telegram/webhook.go` + test, the `/webhook` route, and the `WebhookSecret` config + its startup fatal. Consequences propagated to Phase 3 (no public ingress/domain/TLS/webhook secret; health server internal-only; single replica = single polling consumer) and Phase 4 (cutover = `deleteWebhook` → start polling container, which drains the buffered queue; no `setWebhook`). Rollback during the pre-`sam delete` window still works because the live Lambda keeps its own already-built webhook code until teardown. This eliminated the earlier "public ingress DDoS" risk entirely.
+
+### Session 3 — 2026-06-27 (minimize env surface)
+User directive: don't require `KV_PROVIDER`/`CRON_MODE`; mongo + in-process cron are defaults; remove unneeded system envs. Decisions: (1) `buildProvider` auto-selects `mongodb` when `MONGO_URL` is set (else `memory`); `KV_PROVIDER` is an optional override; the old `AWS_LAMBDA_FUNCTION_NAME → dynamodb` auto-detect is removed. (2) The cron scheduler runs unconditionally at container start — `CRON_MODE` env removed (cutover safety is from ordering + the idempotency guard, not a gate). (3) Dropped from required env: `KV_PROVIDER`, `CRON_MODE`, `PORT` (defaults 8080). Final required env = `TELEGRAM_BOT_TOKEN`, `MONGO_URL`, `MONGO_DATABASE`; operational = `MODULES`, `OWNER_ID`, `ADMIN_IDS`; optional = `GEMINI_API_KEY`. Propagated to Phases 1-4.
+
+### Session 4 — 2026-06-27 (drop per-module API URL overrides + two credentials)
+User directive: remove the stock/coin/gold URL envs; use the providers configured in code. Decisions:
+- **URL overrides dropped** — self-host sets NONE of `STOCK_INCOME_EVENTS_API_URL`, `GOLD_PRICE_API_URL`, `GOLD_FX_API_URL`, `GOLD_VNAPP_API_URL`, `COIN_BINANCE_API_URL`, `COIN_COINBASE_API_URL`, `COIN_COINGECKO_API_URL`; modules use coded default endpoints. Override plumbing stays (dormant) unless later cleaned.
+- **`GOLD_VNAPP_API_KEY` dropped** — already unnecessary: `gold/vnappmob_client.go` auto-fetches a VNAppMob API key via the refresh endpoint and caches it in KV (`vnappmob:api_key`, 24h refresh buffer). With Mongo as the KV the key auto-caches to the DB. The env var was only an optional override. No code change — just don't set it.
+- **`STOCK_INCOME_EVENTS_API_TOKEN` dropped AND the income-events feature removed** — delete the `stock_income_events` command + its FireAnt `IncomeEventClient` (`internal/modules/stock/income_events.go` + test), the token env, and any user-facing notice/description. The other stock commands (`stock_income_stock`, `stock_income_vnd`) stay. Removing a public command requires updating the command catalog (`aws/telegram-commands.json` → the self-host `setMyCommands` source). Code task added to Phase 3.
+
+Final optional env reduces to `GEMINI_API_KEY` only.
+
+### Session 5 — 2026-06-27 (rename owner/admin envs)
+User directive: cleaner names. `BOT_OWNER_ID` → `OWNER_ID`, `ADMIN_USER_IDS` → `ADMIN_IDS`. Rename the env keys in `cmd/server/main.go` `loadConfig`; no backward-compat (the AWS template + workflow that set the old names are being deleted). The Go config field names + the `Auth{BotOwnerID, AdminUserIDs}` struct can keep their internal names — only the env keys change.
 
 ### Whole-Plan Consistency Sweep (post-validation)
 - Phase 4 rollback/teardown rewritten: AWS torn down after verify; reverse-migrator option removed; rollback framed as "coordinate users, short window" not "keep Lambda N days."

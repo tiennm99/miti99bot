@@ -11,7 +11,7 @@ effort: "M"
 
 ## Overview
 
-Add `mongodb` as a 4th `KVProvider`, modeled exactly on the existing `firestore` provider (collection-per-module isolation). Wire it into `buildProvider` and config via `KV_PROVIDER=mongodb`, `MONGO_URL`, `MONGO_DATABASE`. No module code changes — the `KVStore` interface is the only contract.
+Add `mongodb` as a 4th `KVProvider`, modeled exactly on the existing `firestore` provider (collection-per-module isolation). Make it the **default backend when `MONGO_URL` is set** — no `KV_PROVIDER` needed. Config: `MONGO_URL` + `MONGO_DATABASE`. `KV_PROVIDER` stays as an optional override (e.g. `memory` for local dev). No module code changes — the `KVStore` interface is the only contract.
 
 ## Requirements
 
@@ -47,7 +47,7 @@ Store `value` as BSON binary (`bson.Binary`) so non-UTF-8 round-trips; on read a
 - Create: `internal/storage/mongodb_provider.go` — `MongoProvider{ db *mongo.Database }`, `For(module)` returns `invalidStore` on bad name else `NewMongoKVStore`. Mirror `firestore_provider.go`.
 - Create: `internal/storage/mongodb_kv.go` — `MongoKVStore`, all methods. Mirror `firestore_kv.go`.
 - Create: `internal/storage/mongodb_kv_test.go` + `mongodb_provider_test.go` — parity tests, gated on `MONGODB_TEST_URL` (skip when unset), mirroring `dynamodb_kv_test.go` gating on `DYNAMODB_LOCAL_URL`.
-- Modify: `cmd/server/main.go` — add `mongodb` case to `buildProvider`; add `MongoURL`, `MongoDatabase` to `config` + `loadConfig` (`MONGO_URL`, `MONGO_DATABASE`); update `buildProvider` doc comment + auto-detect note (mongo is explicit-only).
+- Modify: `cmd/server/main.go` — add `mongodb` case to `buildProvider`; add `MongoURL`, `MongoDatabase` to `config` + `loadConfig` (`MONGO_URL`, `MONGO_DATABASE`). Change the auto-detect default: when `KV_PROVIDER` is empty, pick `mongodb` if `MONGO_URL` is set, else `memory` (the old `AWS_LAMBDA_FUNCTION_NAME → dynamodb` auto-detect is removed — AWS is gone; `dynamodb`/`firestore` remain reachable only via explicit `KV_PROVIDER`, kept for the migrator/tests).
 - Modify: `go.mod` / `go.sum` — add `go.mongodb.org/mongo-driver/v2`.
 - Modify: `Makefile` — add `mongo-local` (docker `mongo:7`) + `test-mongo` target gated by `MONGODB_TEST_URL`, mirroring `dynamodb-local`/`test-dynamodb`.
 - Modify: `README.md` — add `mongodb` to the storage backend list + local-run snippet.
@@ -59,14 +59,14 @@ Store `value` as BSON binary (`bson.Binary`) so non-UTF-8 round-trips; on read a
 3. Write `mongodb_kv.go`: implement methods per Architecture; reuse `validateKey`, `validatePrefix`, `prefixSuccessor`; constants `mongoValueField="value"`, `mongoUpdatedAtField="updatedAt"`.
 4. Write `mongodb_provider.go`: `For` guards with `collectionNameRe`, returns `db.Collection(module)`-backed store.
 5. Wire `buildProvider`: `case "mongodb"`: require `MONGO_URL` + `MONGO_DATABASE` (error if missing, mirror dynamodb's `DYNAMODB_TABLE` check); construct client under timeout; closer calls `client.Disconnect`. **The startup `log.Info("storage backend", …)` line MUST log only non-secret fields — `"backend","mongodb","database",cfg.MongoDatabase`. NEVER log `MONGO_URL`** (it is `mongodb+srv://user:pass@…`; the firestore/dynamodb cases at `main.go:234-253` log a benign identifier, but the mongo equivalent is a credential). If a host is wanted for diagnostics, parse and log only the host, never the userinfo.
-6. Add config fields + env reads. Mongo is explicit-only (not in the auto-detect switch) to avoid surprising Lambda.
+6. Add config fields + env reads. Set the auto-detect default to `mongodb` when `MONGO_URL` is present (else `memory`); `KV_PROVIDER` overrides.
 7. Tests: replicate the firestore/dynamodb test bodies against a real Mongo (`mongo-local`), covering Get/Put/Delete/List/prefix/CAS-absent/CAS-match/CAS-conflict/ErrNotFound + cross-module isolation.
 8. `make vet && make test && MONGODB_TEST_URL=mongodb://localhost:27017 make test-mongo`.
 
 ## Success Criteria
 
 - [ ] `internal/storage` exposes `MongoProvider`/`MongoKVStore` passing the same test matrix as `DynamoDBKVStore`.
-- [ ] `KV_PROVIDER=mongodb` with `MONGO_URL`/`MONGO_DATABASE` boots; missing either errors clearly at startup.
+- [ ] Setting `MONGO_URL` + `MONGO_DATABASE` (no `KV_PROVIDER`) boots as mongodb; `MONGO_URL` set but `MONGO_DATABASE` missing errors clearly; no env → memory.
 - [ ] Cross-module isolation verified (collection-per-module).
 - [ ] CompareAndSwap returns `ErrConflict` on stale expected + on absent-with-non-nil-expected; succeeds on nil-expected insert.
 - [ ] **(blocking)** Concurrent-writer CAS test: N goroutines race a nil-expected insert + a stale-update on the same key against a real Mongo; assert exactly one winner, losers get `ErrConflict`. Plus a "doc exists without value field" edge case.
