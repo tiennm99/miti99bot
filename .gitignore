@@ -43,3 +43,6 @@ bin/
 
 # Per-developer SAM overrides (samconfig.toml IS checked in)
 samconfig.local.toml
+
+# wrangler local cache
+.wrangler/
