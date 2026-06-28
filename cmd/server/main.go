@@ -60,11 +60,6 @@ func factories() map[string]modules.Factory {
 	}
 }
 
-// firestoreInitTimeout caps Firestore client construction at startup. Cloud
-// Run cold start budget is 500ms target; firestore.NewClient is normally fast
-// but network blips can make it hang. Fail fast and let Lambda restart us.
-const firestoreInitTimeout = 10 * time.Second
-
 // dynamodbInitTimeout caps DynamoDB client construction at startup. Lambda
 // has a 10s init phase; we want to leave headroom for module wiring.
 const dynamodbInitTimeout = 5 * time.Second
@@ -215,13 +210,13 @@ func main() {
 }
 
 // buildProvider picks the storage backend. Selection order:
-//  1. Explicit KV_PROVIDER env (memory|firestore|dynamodb|mongodb) wins.
+//  1. Explicit KV_PROVIDER env (memory|dynamodb|mongodb) wins.
 //  2. Auto-detect: MONGO_URL set → mongodb; otherwise memory.
 //
 // The self-host default is mongodb (just set MONGO_URL + MONGO_DATABASE — no
-// KV_PROVIDER needed). dynamodb/firestore remain reachable only via an explicit
-// KV_PROVIDER, kept for the data migrator and the integration tests; the old
-// AWS_LAMBDA_FUNCTION_NAME auto-detect is removed (AWS is decommissioned).
+// KV_PROVIDER needed). dynamodb remains reachable only via an explicit
+// KV_PROVIDER, kept for the data migrator and integration tests. The legacy
+// firestore backend and the AWS_LAMBDA_FUNCTION_NAME auto-detect are removed.
 //
 // Returned closer is always non-nil and safe to call exactly once.
 func buildProvider(ctx context.Context, cfg config) (storage.KVProvider, func(), error) {
@@ -266,30 +261,6 @@ func buildProvider(ctx context.Context, cfg config) (storage.KVProvider, func(),
 		log.Info("storage backend", "backend", "mongodb", "database", cfg.MongoDatabase)
 		return storage.NewMongoProvider(db), closer, nil
 
-	case "firestore":
-		// Emulator ignores the project ID but the SDK still requires *some*
-		// non-empty value; supply a placeholder so emulator-only local dev works.
-		projectID := cfg.FirestoreProject
-		if projectID == "" && cfg.FirestoreEmulatorHost != "" {
-			projectID = "miti99bot-emulator"
-		}
-		initCtx, cancel := context.WithTimeout(ctx, firestoreInitTimeout)
-		defer cancel()
-		client, err := storage.NewFirestoreClient(initCtx, projectID)
-		if err != nil {
-			return nil, func() {}, err
-		}
-		closer := func() {
-			if err := client.Close(); err != nil {
-				log.Error("firestore close failed", "err", err)
-			}
-		}
-		log.Info("storage backend",
-			"backend", "firestore",
-			"project", projectID,
-			"emulator", cfg.FirestoreEmulatorHost)
-		return storage.NewFirestoreProvider(client), closer, nil
-
 	case "dynamodb":
 		if cfg.DynamoDBTable == "" {
 			return nil, func() {}, errors.New("KV_PROVIDER=dynamodb requires DYNAMODB_TABLE")
@@ -308,7 +279,7 @@ func buildProvider(ctx context.Context, cfg config) (storage.KVProvider, func(),
 		return storage.NewDynamoDBProvider(client, cfg.DynamoDBTable), func() {}, nil
 
 	default:
-		return nil, func() {}, fmt.Errorf("unknown KV_PROVIDER %q (want memory|firestore|dynamodb|mongodb)", backend)
+		return nil, func() {}, fmt.Errorf("unknown KV_PROVIDER %q (want memory|dynamodb|mongodb)", backend)
 	}
 }
 
@@ -316,8 +287,6 @@ type config struct {
 	Port                  string
 	TelegramBotToken      string
 	CronSecret            string
-	FirestoreProject      string
-	FirestoreEmulatorHost string
 	GeminiAPIKey          string
 	GoldPriceAPIURL       string
 	GoldFXAPIURL          string
@@ -329,7 +298,7 @@ type config struct {
 	Modules               []string
 	BotOwnerID            int64
 	AdminUserIDs          map[int64]bool
-	KVProvider            string // empty = auto-detect; or "memory"|"firestore"|"dynamodb"|"mongodb"
+	KVProvider            string // empty = auto-detect; or "memory"|"dynamodb"|"mongodb"
 	DynamoDBTable         string // required when KVProvider=dynamodb
 	MongoURL              string // required when KVProvider=mongodb (Atlas SRV connection string; SECRET — never log)
 	MongoDatabase         string // required when KVProvider=mongodb
@@ -360,8 +329,6 @@ func loadConfig() config {
 		Port:                  port,
 		TelegramBotToken:      envMap["TELEGRAM_BOT_TOKEN"],
 		CronSecret:            envMap["CRON_SHARED_SECRET"],
-		FirestoreProject:      envMap["GOOGLE_CLOUD_PROJECT"],
-		FirestoreEmulatorHost: envMap["FIRESTORE_EMULATOR_HOST"],
 		GeminiAPIKey:          envMap["GEMINI_API_KEY"],
 		GoldPriceAPIURL:       envMap["GOLD_PRICE_API_URL"],
 		GoldFXAPIURL:          envMap["GOLD_FX_API_URL"],

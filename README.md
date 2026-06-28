@@ -28,7 +28,7 @@ internal/server/             HTTP routes (/ health, /cron/{name} manual trigger)
 internal/telegram/           Telegram long-polling bot wrapper
 internal/cron/               in-process cron scheduler (replaces EventBridge)
 internal/modules/            Module framework, registry, dispatchers, modules
-internal/storage/            KVProvider interface; memory + firestore + dynamodb + mongodb
+internal/storage/            KVProvider interface; memory + dynamodb + mongodb (values stored as native BSON documents)
 internal/ai/                 Gemini client (used by twentyq)
 docker-compose.yml           Coolify self-host stack (single bot service)
 docs/deploy-coolify-selfhosted.md    Self-host onboarding + cutover runbook
