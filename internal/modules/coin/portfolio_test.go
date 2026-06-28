@@ -72,7 +72,11 @@ type conflictOnceStore struct {
 	conflicted bool
 }
 
-func (s *conflictOnceStore) CompareAndSwap(ctx context.Context, key string, expected []byte, val []byte) error {
+func (s *conflictOnceStore) GetVersioned(ctx context.Context, key string) ([]byte, int64, error) {
+	return s.KVStore.(storage.VersionedStore).GetVersioned(ctx, key)
+}
+
+func (s *conflictOnceStore) PutVersioned(ctx context.Context, key string, expectedVersion int64, val []byte) error {
 	if !s.conflicted {
 		s.conflicted = true
 		competing := NewPortfolio(1)
@@ -82,7 +86,7 @@ func (s *conflictOnceStore) CompareAndSwap(ctx context.Context, key string, expe
 		}
 		return storage.ErrConflict
 	}
-	return s.KVStore.(storage.CompareAndSwapStore).CompareAndSwap(ctx, key, expected, val)
+	return s.KVStore.(storage.VersionedStore).PutVersioned(ctx, key, expectedVersion, val)
 }
 
 func TestUpdatePortfolioRetriesAfterWriteConflict(t *testing.T) {

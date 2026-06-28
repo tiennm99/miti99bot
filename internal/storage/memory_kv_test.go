@@ -6,86 +6,53 @@ import (
 	"testing"
 )
 
-func TestMemoryKVStore_CompareAndSwap(t *testing.T) {
+func TestMemoryKVStore_Versioned(t *testing.T) {
 	ctx := context.Background()
+	s := NewMemoryKVStore()
 
-	tests := []struct {
-		name     string
-		existing []byte // nil = key absent before the call
-		expected []byte
-		val      []byte
-		wantErr  error
-		wantVal  string // stored value after the call
-	}{
-		{
-			name:     "create when absent",
-			existing: nil,
-			expected: nil,
-			val:      []byte("v1"),
-			wantErr:  nil,
-			wantVal:  "v1",
-		},
-		{
-			name:     "create when exists conflicts",
-			existing: []byte("v1"),
-			expected: nil,
-			val:      []byte("v2"),
-			wantErr:  ErrConflict,
-			wantVal:  "v1",
-		},
-		{
-			name:     "swap when expected matches",
-			existing: []byte("v1"),
-			expected: []byte("v1"),
-			val:      []byte("v2"),
-			wantErr:  nil,
-			wantVal:  "v2",
-		},
-		{
-			name:     "swap when expected stale conflicts",
-			existing: []byte("v2"),
-			expected: []byte("v1"),
-			val:      []byte("v3"),
-			wantErr:  ErrConflict,
-			wantVal:  "v2",
-		},
-		{
-			name:     "swap when key missing conflicts",
-			existing: nil,
-			expected: []byte("v1"),
-			val:      []byte("v2"),
-			wantErr:  ErrConflict,
-			wantVal:  "",
-		},
+	// Absent key reports ErrNotFound + version 0.
+	if _, v, err := s.GetVersioned(ctx, "k"); !errors.Is(err, ErrNotFound) || v != 0 {
+		t.Fatalf("GetVersioned absent: got (v=%d, %v), want (0, ErrNotFound)", v, err)
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			s := NewMemoryKVStore()
-			if tt.existing != nil {
-				if err := s.Put(ctx, "k", tt.existing); err != nil {
-					t.Fatalf("Put: %v", err)
-				}
-			}
+	// Create when absent (expectedVersion 0).
+	if err := s.PutVersioned(ctx, "k", 0, []byte("v1")); err != nil {
+		t.Fatalf("PutVersioned create: %v", err)
+	}
+	val, ver, err := s.GetVersioned(ctx, "k")
+	if err != nil || string(val) != "v1" || ver != 1 {
+		t.Fatalf("after create: got (%q, v=%d, %v), want (v1, 1, nil)", val, ver, err)
+	}
 
-			err := s.CompareAndSwap(ctx, "k", tt.expected, tt.val)
-			if !errors.Is(err, tt.wantErr) {
-				t.Fatalf("CompareAndSwap: got %v, want %v", err, tt.wantErr)
-			}
+	// Create over existing conflicts.
+	if err := s.PutVersioned(ctx, "k", 0, []byte("v2")); !errors.Is(err, ErrConflict) {
+		t.Errorf("create over existing: got %v, want ErrConflict", err)
+	}
 
-			got, err := s.Get(ctx, "k")
-			if tt.wantVal == "" {
-				if !errors.Is(err, ErrNotFound) {
-					t.Fatalf("Get after failed create: got (%q, %v), want ErrNotFound", got, err)
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("Get: %v", err)
-			}
-			if string(got) != tt.wantVal {
-				t.Errorf("stored value = %q, want %q", got, tt.wantVal)
-			}
-		})
+	// Swap with matching version succeeds and bumps version.
+	if err := s.PutVersioned(ctx, "k", 1, []byte("v2")); err != nil {
+		t.Fatalf("swap matching version: %v", err)
+	}
+	if _, ver, _ := s.GetVersioned(ctx, "k"); ver != 2 {
+		t.Errorf("version after swap = %d, want 2", ver)
+	}
+
+	// Stale version conflicts.
+	if err := s.PutVersioned(ctx, "k", 1, []byte("v3")); !errors.Is(err, ErrConflict) {
+		t.Errorf("stale version: got %v, want ErrConflict", err)
+	}
+
+	// Swap on a missing key conflicts.
+	if err := s.PutVersioned(ctx, "missing", 1, []byte("x")); !errors.Is(err, ErrConflict) {
+		t.Errorf("swap missing key: got %v, want ErrConflict", err)
+	}
+
+	// A plain Put bumps the version, so a versioned writer holding the old
+	// version sees a conflict.
+	if err := s.Put(ctx, "k", []byte("v4")); err != nil {
+		t.Fatalf("Put: %v", err)
+	}
+	if err := s.PutVersioned(ctx, "k", 2, []byte("v5")); !errors.Is(err, ErrConflict) {
+		t.Errorf("versioned write after plain Put: got %v, want ErrConflict", err)
 	}
 }

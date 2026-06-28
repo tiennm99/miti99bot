@@ -76,7 +76,11 @@ type conflictOnceStore struct {
 	conflicted bool
 }
 
-func (s *conflictOnceStore) CompareAndSwap(ctx context.Context, key string, expected []byte, val []byte) error {
+func (s *conflictOnceStore) GetVersioned(ctx context.Context, key string) ([]byte, int64, error) {
+	return s.KVStore.(storage.VersionedStore).GetVersioned(ctx, key)
+}
+
+func (s *conflictOnceStore) PutVersioned(ctx context.Context, key string, expectedVersion int64, val []byte) error {
 	if !s.conflicted {
 		s.conflicted = true
 		competing := NewPortfolio(1)
@@ -86,7 +90,7 @@ func (s *conflictOnceStore) CompareAndSwap(ctx context.Context, key string, expe
 		}
 		return storage.ErrConflict
 	}
-	return s.KVStore.(storage.CompareAndSwapStore).CompareAndSwap(ctx, key, expected, val)
+	return s.KVStore.(storage.VersionedStore).PutVersioned(ctx, key, expectedVersion, val)
 }
 
 func TestUpdatePortfolioRetriesAfterWriteConflict(t *testing.T) {
@@ -116,7 +120,11 @@ type alwaysConflictStore struct {
 	attempts int
 }
 
-func (s *alwaysConflictStore) CompareAndSwap(context.Context, string, []byte, []byte) error {
+func (s *alwaysConflictStore) GetVersioned(ctx context.Context, key string) ([]byte, int64, error) {
+	return s.KVStore.(storage.VersionedStore).GetVersioned(ctx, key)
+}
+
+func (s *alwaysConflictStore) PutVersioned(context.Context, string, int64, []byte) error {
 	s.attempts++
 	return storage.ErrConflict
 }
@@ -144,9 +152,9 @@ type countingCASStore struct {
 	casCalls int
 }
 
-func (s *countingCASStore) CompareAndSwap(ctx context.Context, key string, expected, val []byte) error {
+func (s *countingCASStore) PutVersioned(ctx context.Context, key string, expectedVersion int64, val []byte) error {
 	s.casCalls++
-	return s.MemoryKVStore.CompareAndSwap(ctx, key, expected, val)
+	return s.MemoryKVStore.PutVersioned(ctx, key, expectedVersion, val)
 }
 
 func TestUpdatePortfolioMutateErrorDoesNotRetryOrPersist(t *testing.T) {
@@ -212,8 +220,8 @@ func TestUpdatePortfolioConcurrentIncrementsLoseNoUpdates(t *testing.T) {
 	}
 }
 
-// plainKVStore hides the embedded store's CompareAndSwap method to model a
-// backend without CAS support.
+// plainKVStore hides the embedded store's versioned methods to model a backend
+// without optimistic-locking support.
 type plainKVStore struct {
 	storage.KVStore
 }
