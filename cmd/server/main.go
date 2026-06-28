@@ -44,12 +44,16 @@ var gitSHA string
 
 // resolveCommitSHA returns the commit identifier for the deploy notification.
 // Coolify injects SOURCE_COMMIT into the container environment at runtime, so
-// prefer it; fall back to the ldflags-baked gitSHA for local builds.
+// prefer it; fall back to the ldflags-baked gitSHA for local builds; and when
+// neither is set, report "unknown" so the owner still gets the startup DM.
 func resolveCommitSHA(envSourceCommit string) string {
 	if s := strings.TrimSpace(envSourceCommit); s != "" {
 		return s
 	}
-	return gitSHA
+	if gitSHA != "" {
+		return gitSHA
+	}
+	return "unknown"
 }
 
 // factories is the static module catalog. Adding a new module is a one-line
@@ -166,7 +170,6 @@ func main() {
 
 	deploynotify.Run(rootCtx, deploynotify.Config{
 		Bot:     b,
-		Store:   deploynotify.NewStore(provider.Collection("deploynotify")),
 		OwnerID: cfg.BotOwnerID,
 		GitSHA:  resolveCommitSHA(cfg.SourceCommit),
 	})
