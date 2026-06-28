@@ -34,6 +34,7 @@ Copy [`.env.example`](../.env.example) → `.env` (gitignored) and fill in.
 | `OWNER_ID` | optional | owner-only commands (renamed from `BOT_OWNER_ID`) |
 | `ADMIN_IDS` | optional | CSV of admin ids (renamed from `ADMIN_USER_IDS`) |
 | `GEMINI_API_KEY` | optional | only the `twentyq` module needs it |
+| `WC_FOOTBALL_DATA_TOKEN` | optional | football-data.org token for the `wc` module |
 
 **Leave UNSET on self-host:** `KV_PROVIDER`, `PORT`,
 `TELEGRAM_WEBHOOK_SECRET`, `GOLD_VNAPP_API_KEY`, and the `STOCK/COIN/GOLD
@@ -64,7 +65,7 @@ Copy [`.env.example`](../.env.example) → `.env` (gitignored) and fill in.
 > document — `{ _id: <user key>, ...payload fields, version, updatedAt }` with no
 > `value` envelope. Payload fields are hoisted to the document root so they
 > expand and are queryable in Compass. The two non-object values are wrapped in a
-> named field: lolschedule subscribers under `subscribers` (array) and the daily
+> named field: schedule subscribers under `subscribers` (array) and the daily
 > push date under `date`. Concurrency uses the `version` field (optimistic lock);
 > `updatedAt` is a BSON Date.
 

@@ -48,21 +48,21 @@ func TestComposeDoesNotOverrideSourceCommit(t *testing.T) {
 	}
 }
 
-func TestFactoriesIncludesGoldAndCoin(t *testing.T) {
+func TestFactoriesIncludesExpectedModules(t *testing.T) {
 	catalog := factories()
-	if catalog["gold"] == nil {
-		t.Fatal("factories missing gold")
+	for _, name := range []string{"gold", "coin", "wc"} {
+		if catalog[name] == nil {
+			t.Fatalf("factories missing %s", name)
+		}
 	}
-	if catalog["coin"] == nil {
-		t.Fatal("factories missing coin")
-	}
-	reg, err := modules.Build([]string{"gold", "coin"}, catalog, storage.NewMemoryProvider(), modules.BuildOptions{})
+	reg, err := modules.Build([]string{"gold", "coin", "wc"}, catalog, storage.NewMemoryProvider(), modules.BuildOptions{})
 	if err != nil {
-		t.Fatalf("Build gold: %v", err)
+		t.Fatalf("Build selected modules: %v", err)
 	}
 	for _, name := range []string{
 		"gold_price", "gold_topup", "gold_buy", "gold_sell", "gold_stats",
 		"coin_price", "coin_topup", "coin_buy", "coin_sell", "coin_stats",
+		"wc", "wc_today", "wc_week", "wc_subscribe", "wc_unsubscribe",
 	} {
 		if _, ok := reg.AllCommands[name]; !ok {
 			t.Fatalf("missing command %s", name)

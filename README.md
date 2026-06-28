@@ -12,6 +12,7 @@ Atlas via long polling and an in-process cron scheduler.
 | `wordle` | Daily Wordle game |
 | `loldle` | League-of-Legends "guess the champion" |
 | `lolschedule` | Pro-match schedule + daily push |
+| `wc` | World Cup schedule + daily push |
 | `twentyq` | 20-questions game (requires Gemini API key) |
 | `stock` | VN-stocks paper trading |
 | `gold` | Gold paper trading (opt-in; primary VNAppMob SJC buy/sell VND/luong, fallback spot XAU) |
@@ -41,6 +42,7 @@ In-memory storage (no database required):
 
 ```sh
 TELEGRAM_BOT_TOKEN=… \
+WC_FOOTBALL_DATA_TOKEN=… \
 MODULES= \
 go run ./cmd/server
 ```
@@ -52,6 +54,7 @@ Persistent MongoDB locally (auto-selected when `MONGO_URL` is set):
 ```sh
 make mongo-local
 TELEGRAM_BOT_TOKEN=… \
+WC_FOOTBALL_DATA_TOKEN=… \
 MONGO_URL=mongodb://127.0.0.1:27017 \
 MONGO_DATABASE=miti99bot_dev \
 go run ./cmd/server

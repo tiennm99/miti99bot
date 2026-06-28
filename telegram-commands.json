@@ -61,6 +61,26 @@
       "description": "Stop the daily LoL schedule digest"
     },
     {
+      "command": "wc",
+      "description": "World Cup matches for a date"
+    },
+    {
+      "command": "wc_today",
+      "description": "Today's World Cup matches"
+    },
+    {
+      "command": "wc_week",
+      "description": "World Cup matches for this week"
+    },
+    {
+      "command": "wc_subscribe",
+      "description": "Get the daily World Cup schedule digest"
+    },
+    {
+      "command": "wc_unsubscribe",
+      "description": "Stop the daily World Cup schedule digest"
+    },
+    {
       "command": "twentyq",
       "description": "20 questions; ask yes/no questions"
     },
