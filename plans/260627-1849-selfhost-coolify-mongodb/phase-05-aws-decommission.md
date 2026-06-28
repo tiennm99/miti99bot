@@ -1,7 +1,7 @@
 ---
 phase: 5
 title: "AWS Full Decommission"
-status: pending
+status: code-complete-operator-pending
 priority: P1
 dependencies: [4]
 effort: "S"

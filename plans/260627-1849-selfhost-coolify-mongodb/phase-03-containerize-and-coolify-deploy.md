@@ -1,7 +1,7 @@
 ---
 phase: 3
 title: "Long-Polling Runtime + Containerize + Coolify Deploy"
-status: pending
+status: code-complete-operator-pending
 priority: P2
 dependencies: [1, 2]
 effort: "M"

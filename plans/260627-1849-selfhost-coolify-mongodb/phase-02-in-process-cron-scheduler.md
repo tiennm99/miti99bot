@@ -1,7 +1,7 @@
 ---
 phase: 2
 title: "In-Process Cron Scheduler"
-status: pending
+status: done
 priority: P1
 dependencies: []
 effort: "S"
