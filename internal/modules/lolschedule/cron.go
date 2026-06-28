@@ -12,6 +12,7 @@ import (
 
 	"github.com/tiennm99/miti99bot/internal/log"
 	"github.com/tiennm99/miti99bot/internal/modules"
+	"github.com/tiennm99/miti99bot/internal/storage"
 )
 
 // terminalKind classifies a permanent send failure by blast radius.
@@ -76,14 +77,23 @@ func classifyTerminal(err error) terminalKind {
 	return terminalNone
 }
 
-// dailyPushCronName is the cron route segment + EventBridge schedule key.
+// dailyPushCronName is the cron route segment + in-process scheduler key.
 // Must match the regex in internal/server/router.go (^[a-z0-9_]{1,32}$).
 const dailyPushCronName = "lolschedule_daily_push"
 
-// dailyPushSchedule is documentation only — the real fire time lives in
-// EventBridge Scheduler. Cron expression is UTC;
-// 01:00 UTC == 08:00 ICT.
+// dailyPushSchedule drives the in-process scheduler (internal/cron) on
+// self-host; it was also the documented EventBridge time on AWS. Cron
+// expression is UTC; 01:00 UTC == 08:00 ICT.
 const dailyPushSchedule = "0 1 * * *"
+
+// lastPushDateKey records the UTC date (YYYY-MM-DD) of the most recent
+// completed daily push. The handler claims this key before fanning out and
+// no-ops if it is already today's date, making the push idempotent per UTC
+// date. This defends against every double-fire window — cutover overlap
+// (EventBridge still live while the container's scheduler runs), rolling
+// deploys that briefly run two containers, and operator misconfiguration —
+// none of which a single trigger source can prevent.
+const lastPushDateKey = "daily_push:last_date"
 
 // telegramRateLimitThreshold is the subscriber count above which we throttle
 // sends to stay under Telegram's global 30 msg/sec cap. Below it we send hot.
@@ -119,6 +129,50 @@ func (s *state) dailyPushHandler(ctx context.Context, deps modules.Deps) error {
 	return runDailyPush(ctx, s, deps.Bot)
 }
 
+// claimDailyPush atomically records that today's UTC push is happening and
+// reports whether THIS caller won the claim. It is the idempotency primitive
+// for the daily push: a winner proceeds to fan out; a loser (another trigger
+// already claimed today) returns false and sends nothing.
+//
+// The claim is a compare-and-swap on lastPushDateKey so two simultaneous
+// triggers cannot both win. Every real KV backend implements
+// CompareAndSwapStore; if a bare store without CAS is used (only in narrow
+// tests), it falls back to a plain Put — losing the atomic guarantee but
+// preserving the "no-op if already today" behaviour.
+func claimDailyPush(ctx context.Context, kv storage.KVStore, today string) (bool, error) {
+	current, err := kv.Get(ctx, lastPushDateKey)
+	switch {
+	case err == nil:
+		if string(current) == today {
+			return false, nil // already pushed today
+		}
+	case errors.Is(err, storage.ErrNotFound):
+		current = nil // never pushed
+	default:
+		return false, err
+	}
+
+	cas, ok := kv.(storage.CompareAndSwapStore)
+	if !ok {
+		if err := kv.Put(ctx, lastPushDateKey, []byte(today)); err != nil {
+			return false, err
+		}
+		return true, nil
+	}
+
+	var expected []byte
+	if len(current) > 0 {
+		expected = current
+	}
+	if err := cas.CompareAndSwap(ctx, lastPushDateKey, expected, []byte(today)); err != nil {
+		if errors.Is(err, storage.ErrConflict) {
+			return false, nil // another trigger claimed today first
+		}
+		return false, err
+	}
+	return true, nil
+}
+
 // runDailyPush is the testable core: fetch subscribers, fetch today's matches,
 // fan out to every subscriber. Per-chat send failures are logged but do not
 // abort the batch — one bad chat does not deny the rest.
@@ -143,6 +197,20 @@ func runDailyPush(ctx context.Context, s *state, sender messageSender) error {
 	}
 	filtered := FilterMajor(events)
 	text := RenderToday(filtered, from)
+
+	// Idempotency gate: claim today's push before sending. A lost claim means
+	// another trigger already pushed (or is pushing) for this UTC date, so we
+	// send nothing. Placed after the fetch so a transient fetch failure does
+	// not consume the day's claim.
+	today := s.now().UTC().Format("2006-01-02")
+	won, err := claimDailyPush(ctx, s.kv, today)
+	if err != nil {
+		return fmt.Errorf("lolschedule daily push: claim date: %w", err)
+	}
+	if !won {
+		log.Info("lolschedule daily push: already pushed today, skipping", "date", today)
+		return nil
+	}
 
 	throttle := len(subs) > telegramRateLimitThreshold
 	var sent, failed int

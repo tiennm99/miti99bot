@@ -28,9 +28,11 @@ const (
 // purely for logging/metrics, not flow control.
 type CommandHandler func(ctx context.Context, b *bot.Bot, update *models.Update) error
 
-// CronHandler runs when EventBridge Scheduler hits /cron/{name}. Crons receive the
-// per-module-prefixed Deps via the registry; handlers should not capture the
-// base Deps from the factory closure or KV writes will collide across modules.
+// CronHandler runs when a cron fires — driven by the in-process scheduler
+// (internal/cron) on self-host, or by a POST to /cron/{name} for manual
+// triggers. Crons receive the per-module-prefixed Deps via the registry;
+// handlers should not capture the base Deps from the factory closure or KV
+// writes will collide across modules.
 type CronHandler func(ctx context.Context, deps Deps) error
 
 // Command is a single Telegram bot command exposed by a module.
@@ -43,7 +45,7 @@ type Command struct {
 
 // Cron is a single scheduled job exposed by a module.
 type Cron struct {
-	Schedule string      // documentation only; real schedule lives in EventBridge Scheduler
+	Schedule string      // 5-field cron expr (UTC); the in-process scheduler fires the handler on it
 	Name     string      // unique within module
 	Handler  CronHandler // required
 }
