@@ -10,17 +10,18 @@ import (
 
 	"github.com/tiennm99/miti99bot/internal/log"
 	"github.com/tiennm99/miti99bot/internal/modules/util/chathelper"
-	"github.com/tiennm99/miti99bot/internal/storage"
 )
 
 // state captures everything a lolschedule handler needs at runtime.
 type state struct {
-	kv     storage.KVStore
-	client *Client
+	subscribers SubscriberStore
+	pushDate    PushDateStore
+	cache       CacheStore
+	client      *Client
 	// nowFn allows tests to inject a deterministic clock. Production code
 	// uses time.Now via the default zero-value.
 	nowFn func() time.Time
-	// subscribersMu serializes Get→mutate→Put on the single subscribers KV
+	// subscribersMu serializes Get→mutate→Put on the single subscribers store
 	// slot. Two concurrent /lolschedule_subscribe calls in the same
 	// millisecond would otherwise race and drop one append.
 	subscribersMu sync.Mutex
@@ -72,7 +73,7 @@ func (s *state) handleWeek(ctx context.Context, b *bot.Bot, update *models.Updat
 // replyForRange fetches + filters + renders a date window. week=true uses
 // RenderWeek; false uses RenderToday.
 func (s *state) replyForRange(ctx context.Context, b *bot.Bot, msg *models.Message, from, to time.Time, week bool) error {
-	events, err := s.client.GetEventsCached(ctx, s.kv, from, to)
+	events, err := s.client.GetEventsCached(ctx, s.cache, from, to)
 	if err != nil {
 		log.Error("lolschedule_fetch_fail", "err", err, "from", from, "to", to)
 		hint := "Could not fetch matches. Try again later."
@@ -100,7 +101,7 @@ func (s *state) handleSubscribe(ctx context.Context, b *bot.Bot, update *models.
 	}
 	s.subscribersMu.Lock()
 	defer s.subscribersMu.Unlock()
-	added, err := addSubscriber(ctx, s.kv, msg.Chat.ID, msg.MessageThreadID)
+	added, err := addSubscriber(ctx, s.subscribers, msg.Chat.ID, msg.MessageThreadID)
 	if err != nil {
 		return err
 	}
@@ -120,7 +121,7 @@ func (s *state) handleUnsubscribe(ctx context.Context, b *bot.Bot, update *model
 	}
 	s.subscribersMu.Lock()
 	defer s.subscribersMu.Unlock()
-	removed, err := removeSubscriber(ctx, s.kv, msg.Chat.ID, msg.MessageThreadID)
+	removed, err := removeSubscriber(ctx, s.subscribers, msg.Chat.ID, msg.MessageThreadID)
 	if err != nil {
 		return err
 	}

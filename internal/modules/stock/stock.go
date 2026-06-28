@@ -2,13 +2,14 @@ package stock
 
 import (
 	"github.com/tiennm99/miti99bot/internal/modules"
+	"github.com/tiennm99/miti99bot/internal/storage"
 )
 
 // New is the stock module Factory. Five user-facing commands; no crons.
 // (Original miti99bot only has a SQL retention cron, which our KV-only port
 // does not implement — keeping commits paper-ledger-only is acceptable.)
 func New(deps modules.Deps) modules.Module {
-	s := newState(deps.KV)
+	s := newState(storage.Typed[Portfolio](deps.Store))
 	return modules.Module{
 		Commands: []modules.Command{
 			{

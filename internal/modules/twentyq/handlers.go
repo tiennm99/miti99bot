@@ -15,7 +15,6 @@ import (
 	"github.com/tiennm99/miti99bot/internal/keylock"
 	"github.com/tiennm99/miti99bot/internal/log"
 	"github.com/tiennm99/miti99bot/internal/modules/util/chathelper"
-	"github.com/tiennm99/miti99bot/internal/storage"
 )
 
 const (
@@ -26,7 +25,8 @@ const (
 )
 
 type state struct {
-	kv      storage.KVStore
+	games   GameStore
+	stats   StatsStore
 	chatter ai.Chatter
 	limiter *ai.PerUserLimiter
 
@@ -88,7 +88,7 @@ func (s *state) handleTwentyq(ctx context.Context, b *bot.Bot, update *models.Up
 
 	arg := chathelper.ArgAfterCommand(msg.Text)
 
-	game, err := loadGame(ctx, s.kv, subject)
+	game, err := loadGame(ctx, s.games, subject)
 	if err != nil {
 		return err
 	}
@@ -99,7 +99,7 @@ func (s *state) handleTwentyq(ctx context.Context, b *bot.Bot, update *models.Up
 		// branch re-enters every call and the user is stuck. Log but keep
 		// going — the fresh-round write below will overwrite the slot
 		// regardless.
-		if err := clearGame(ctx, s.kv, subject); err != nil {
+		if err := clearGame(ctx, s.games, subject); err != nil {
 			log.Warn("twentyq clearGame on solved-relaunch failed", "subject", subject, "err", err)
 		}
 		game = nil
@@ -117,7 +117,7 @@ func (s *state) handleTwentyq(ctx context.Context, b *bot.Bot, update *models.Up
 			log.Warn("twentyq roundstart failed", "err", err)
 			return chathelper.Reply(ctx, b, msg, upstreamFail)
 		}
-		if err := saveGame(ctx, s.kv, subject, fresh); err != nil {
+		if err := saveGame(ctx, s.games, subject, fresh); err != nil {
 			return err
 		}
 		if arg == "" {
@@ -182,17 +182,17 @@ func (s *state) submitTurn(ctx context.Context, b *bot.Bot, msg *models.Message,
 	if won {
 		game.Solved = true
 		count := len(game.Turns)
-		if _, err := recordResult(ctx, s.kv, subject, true, count, chathelper.NowMillis()); err != nil {
+		if _, err := recordResult(ctx, s.stats, subject, true, count, chathelper.NowMillis()); err != nil {
 			return err
 		}
-		if err := clearGame(ctx, s.kv, subject); err != nil {
+		if err := clearGame(ctx, s.games, subject); err != nil {
 			return err
 		}
 		return chathelper.ReplyHTML(ctx, b, msg,
 			formatTurnReply(turn, true, game.Target, count))
 	}
 
-	if err := saveGame(ctx, s.kv, subject, game); err != nil {
+	if err := saveGame(ctx, s.games, subject, game); err != nil {
 		return err
 	}
 	return chathelper.ReplyHTML(ctx, b, msg,
@@ -209,17 +209,17 @@ func (s *state) handleGiveup(ctx context.Context, b *bot.Bot, update *models.Upd
 		return chathelper.Reply(ctx, b, msg, "Cannot identify chat.")
 	}
 	defer s.locks.Acquire(subject)()
-	game, err := loadGame(ctx, s.kv, subject)
+	game, err := loadGame(ctx, s.games, subject)
 	if err != nil {
 		return err
 	}
 	if game == nil {
 		return chathelper.ReplyHTML(ctx, b, msg, noRound)
 	}
-	if _, err := recordResult(ctx, s.kv, subject, false, len(game.Turns), chathelper.NowMillis()); err != nil {
+	if _, err := recordResult(ctx, s.stats, subject, false, len(game.Turns), chathelper.NowMillis()); err != nil {
 		return err
 	}
-	if err := clearGame(ctx, s.kv, subject); err != nil {
+	if err := clearGame(ctx, s.games, subject); err != nil {
 		return err
 	}
 	return chathelper.ReplyHTML(ctx, b, msg, formatGiveup(*game))
@@ -234,7 +234,7 @@ func (s *state) handleStats(ctx context.Context, b *bot.Bot, update *models.Upda
 	if subject == "" {
 		return chathelper.Reply(ctx, b, msg, "Cannot identify chat.")
 	}
-	st, err := loadStats(ctx, s.kv, subject)
+	st, err := loadStats(ctx, s.stats, subject)
 	if err != nil {
 		return err
 	}

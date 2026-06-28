@@ -10,6 +10,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
+	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	"github.com/tiennm99/miti99bot/internal/storage"
@@ -95,15 +96,16 @@ func TestMigrateAndVerify(t *testing.T) {
 		t.Fatalf("runVerify: %v", err)
 	}
 
-	// Spot-check byte-identical round trip through the app's read path.
+	// Spot-check the migrated value round-trips through the typed store as a
+	// flattened native doc: bal hoisted to the root, preserved as int64.
 	db := mongoDatabase(t, ctx, mongoURL, mongoDB)
 	provider := storage.NewMongoProvider(db)
-	got, err := provider.For("coin").Get(ctx, "user:1")
+	got, _, err := storage.Typed[bson.M](provider.Collection("coin")).Get(ctx, "user:1")
 	if err != nil {
 		t.Fatalf("Get migrated value: %v", err)
 	}
-	if string(got) != `{"bal":100}` {
-		t.Errorf("migrated value = %q, want %q", got, `{"bal":100}`)
+	if got["bal"] != int64(100) {
+		t.Errorf("migrated value bal = %v (%T), want int64(100)", got["bal"], got["bal"])
 	}
 }
 

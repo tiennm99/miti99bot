@@ -31,9 +31,11 @@ test: ## Unit tests (no emulator required)
 # Run DynamoDB integration tests against DynamoDB Local.
 # Override DDB_PORT if 8001 is taken on your host.
 DDB_PORT ?= 8001
-test-dynamodb: dynamodb-local ## Run DynamoDB tests against DynamoDB Local
-	DYNAMODB_LOCAL_URL=http://localhost:$(DDB_PORT) LOG_LEVEL=error \
-		go test -race -count=1 ./internal/storage/...
+test-dynamodb: dynamodb-local mongo-local ## Run the DynamoDB→Mongo migrator e2e against local emulators
+	DYNAMODB_LOCAL_URL=http://localhost:$(DDB_PORT) \
+	MONGODB_TEST_URL=mongodb://127.0.0.1:$(MONGO_PORT) \
+	MONGO_DATABASE=migrate_test LOG_LEVEL=error \
+		go test -race -count=1 ./cmd/migrate-dynamo-to-mongo/...
 
 # Run MongoDB integration tests against a local Mongo container.
 # Override MONGO_PORT if 27017 is taken on your host.

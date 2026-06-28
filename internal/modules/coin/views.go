@@ -17,7 +17,7 @@ func (s *state) handleStats(ctx context.Context, b *bot.Bot, update *models.Upda
 	if !ok {
 		return chathelper.Reply(ctx, b, update.Message, "Cannot identify user - /coin_stats needs a sender.")
 	}
-	p, err := LoadPortfolio(ctx, s.kv, userID, s.now().UnixMilli())
+	p, err := LoadPortfolio(ctx, s.store, userID, s.now().UnixMilli())
 	if err != nil {
 		log.Error("coin_load_portfolio", "user", userID, "err", err)
 		return chathelper.Reply(ctx, b, update.Message, "Could not load coin portfolio. Try again later.")

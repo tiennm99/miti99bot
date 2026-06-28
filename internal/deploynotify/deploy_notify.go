@@ -6,7 +6,7 @@
 // (see Makefile). An empty gitSHA — e.g. `go run` or a build without the
 // ldflags — is treated as a signal to stay silent.
 //
-// Dedup: a single KV record (key=last_notified_sha) holds the most recently
+// Dedup: a single store record (key=last_notified_sha) holds the most recently
 // notified SHA. On match we return early; on miss we send first, then write
 // — so a transient Telegram failure doesn't permanently silence retries.
 package deploynotify
@@ -23,10 +23,10 @@ import (
 	"github.com/tiennm99/miti99bot/internal/storage"
 )
 
-// kvKey is the single KV slot this package owns.
-const kvKey = "last_notified_sha"
+// storeKey is the single store slot this package owns.
+const storeKey = "last_notified_sha"
 
-// defaultTimeout caps the whole Run path (KV read + Telegram send + KV write)
+// defaultTimeout caps the whole Run path (store read + Telegram send + store write)
 // so a misbehaving network can never block Lambda init past its 10s budget.
 const defaultTimeout = 3 * time.Second
 
@@ -34,7 +34,7 @@ const defaultTimeout = 3 * time.Second
 // nil, Run falls back to bot.SendMessage.
 type Config struct {
 	Bot     *bot.Bot
-	KV      storage.KVStore
+	Store   storage.DocStore[notifyRecord]
 	OwnerID int64
 	GitSHA  string
 	Timeout time.Duration
@@ -43,11 +43,18 @@ type Config struct {
 	Sender func(ctx context.Context, chatID int64, text string) error
 }
 
-// notifyRecord is the KV value shape. At is informational only — useful for
-// eyeballing in the DynamoDB console; not consulted by the code path.
+// notifyRecord is the store value shape. At is informational only — useful for
+// eyeballing in the database console; not consulted by the code path.
 type notifyRecord struct {
-	SHA string `json:"sha"`
-	At  int64  `json:"at"`
+	SHA string `json:"sha" bson:"sha"`
+	At  int64  `json:"at" bson:"at"`
+}
+
+// NewStore builds the typed store this package needs from a module Collection.
+// notifyRecord is unexported, so callers cannot name DocStore[notifyRecord]
+// directly — this is the seam that lets cmd/server wire the store.
+func NewStore(c storage.Collection) storage.DocStore[notifyRecord] {
+	return storage.Typed[notifyRecord](c)
 }
 
 // Run is the entry point. Fire-and-forget — never returns an error and
@@ -64,12 +71,12 @@ func Run(ctx context.Context, cfg Config) {
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	notify, err := shouldNotify(ctx, cfg.KV, cfg.GitSHA)
+	notify, err := shouldNotify(ctx, cfg.Store, cfg.GitSHA)
 	if err != nil {
-		// Treat KV errors as "not notified yet": worst case is one extra
+		// Treat store errors as "not notified yet": worst case is one extra
 		// DM on the next cold start, which is far better than going
-		// silent on every deploy because DynamoDB threw a transient.
-		log.Warn("deploynotify kv read failed; will attempt send anyway", "err", err)
+		// silent on every deploy because the store threw a transient error.
+		log.Warn("deploynotify store read failed; will attempt send anyway", "err", err)
 		notify = true
 	}
 	if !notify {
@@ -80,23 +87,23 @@ func Run(ctx context.Context, cfg Config) {
 		log.Warn("deploynotify telegram send failed", "err", err, "owner", cfg.OwnerID)
 		return
 	}
-	if err := markNotified(ctx, cfg.KV, cfg.GitSHA); err != nil {
-		log.Warn("deploynotify kv write failed (owner was notified)", "err", err)
+	if err := markNotified(ctx, cfg.Store, cfg.GitSHA); err != nil {
+		log.Warn("deploynotify store write failed (owner was notified)", "err", err)
 		return
 	}
 	log.Info("deploynotify sent", "sha", cfg.GitSHA, "owner", cfg.OwnerID)
 }
 
 // skipReason returns a non-empty short string when Run should no-op without
-// touching KV or Telegram. Empty string ⇒ proceed.
+// touching the store or Telegram. Empty string ⇒ proceed.
 func skipReason(cfg Config) string {
 	switch {
 	case cfg.GitSHA == "":
 		return "empty gitSHA (build without -ldflags)"
 	case cfg.OwnerID == 0:
 		return "no OWNER_ID configured"
-	case cfg.KV == nil:
-		return "no KV configured"
+	case cfg.Store == nil:
+		return "no Store configured"
 	case cfg.Bot == nil && cfg.Sender == nil:
 		return "no bot or sender configured"
 	}
@@ -105,9 +112,8 @@ func skipReason(cfg Config) string {
 
 // shouldNotify reports whether sha differs from the last notified value.
 // A missing record (ErrNotFound) is treated as "yes, notify".
-func shouldNotify(ctx context.Context, kv storage.KVStore, sha string) (bool, error) {
-	var prev notifyRecord
-	err := kv.GetJSON(ctx, kvKey, &prev)
+func shouldNotify(ctx context.Context, store storage.DocStore[notifyRecord], sha string) (bool, error) {
+	prev, _, err := store.Get(ctx, storeKey)
 	if errors.Is(err, storage.ErrNotFound) {
 		return true, nil
 	}
@@ -117,9 +123,9 @@ func shouldNotify(ctx context.Context, kv storage.KVStore, sha string) (bool, er
 	return prev.SHA != sha, nil
 }
 
-// markNotified writes the SHA + current timestamp to KV.
-func markNotified(ctx context.Context, kv storage.KVStore, sha string) error {
-	return kv.PutJSON(ctx, kvKey, notifyRecord{
+// markNotified writes the SHA + current timestamp to the store.
+func markNotified(ctx context.Context, store storage.DocStore[notifyRecord], sha string) error {
+	return store.Put(ctx, storeKey, notifyRecord{
 		SHA: sha,
 		At:  time.Now().UTC().UnixMilli(),
 	})

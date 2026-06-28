@@ -60,7 +60,7 @@ func (s *state) handleTopup(ctx context.Context, b *bot.Bot, update *models.Upda
 	}
 
 	defer s.locks.Acquire(strconv.FormatInt(userID, 10))()
-	p, err := UpdatePortfolio(ctx, s.kv, userID, s.now().UnixMilli(), func(p *Portfolio) error {
+	p, err := UpdatePortfolio(ctx, s.store, userID, s.now().UnixMilli(), func(p *Portfolio) error {
 		p.AddVND(amount)
 		p.Meta.Invested += amount
 		return nil
@@ -98,7 +98,7 @@ func (s *state) handleBuy(ctx context.Context, b *bot.Bot, update *models.Update
 
 	defer s.locks.Acquire(strconv.FormatInt(userID, 10))()
 	var insufficientBalance *float64
-	p, err := UpdatePortfolio(ctx, s.kv, userID, s.now().UnixMilli(), func(p *Portfolio) error {
+	p, err := UpdatePortfolio(ctx, s.store, userID, s.now().UnixMilli(), func(p *Portfolio) error {
 		ok, balance := p.DeductVND(cost)
 		if !ok {
 			insufficientBalance = &balance
@@ -145,7 +145,7 @@ func (s *state) handleSell(ctx context.Context, b *bot.Bot, update *models.Updat
 		return chathelper.Reply(ctx, b, update.Message, "Trade value is too large.")
 	}
 	var insufficientHeld *float64
-	p, err := UpdatePortfolio(ctx, s.kv, userID, s.now().UnixMilli(), func(p *Portfolio) error {
+	p, err := UpdatePortfolio(ctx, s.store, userID, s.now().UnixMilli(), func(p *Portfolio) error {
 		ok, held := p.DeductLuong(qty)
 		if !ok {
 			insufficientHeld = &held
@@ -173,7 +173,7 @@ func (s *state) handleStats(ctx context.Context, b *bot.Bot, update *models.Upda
 		return chathelper.Reply(ctx, b, update.Message,
 			"Cannot identify user - /gold_stats needs a sender.")
 	}
-	p, err := LoadPortfolio(ctx, s.kv, userID, s.now().UnixMilli())
+	p, err := LoadPortfolio(ctx, s.store, userID, s.now().UnixMilli())
 	if err != nil {
 		log.Error("gold_load_portfolio", "user", userID, "err", err)
 		return chathelper.Reply(ctx, b, update.Message, "Could not load gold portfolio. Try again later.")

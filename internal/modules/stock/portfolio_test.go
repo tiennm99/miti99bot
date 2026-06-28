@@ -7,9 +7,14 @@ import (
 	"github.com/tiennm99/miti99bot/internal/storage"
 )
 
+// newStockStore returns a fresh in-memory typed portfolio store for tests.
+func newStockStore() Store {
+	return storage.Typed[Portfolio](storage.NewMemoryProvider().Collection("stock"))
+}
+
 func TestLoadPortfolio_FirstTimeUser(t *testing.T) {
-	kv := storage.NewMemoryKVStore()
-	p, err := LoadPortfolio(context.Background(), kv, 42, 1234567890)
+	store := newStockStore()
+	p, err := LoadPortfolio(context.Background(), store, 42, 1234567890)
 	if err != nil {
 		t.Fatalf("LoadPortfolio: %v", err)
 	}
@@ -25,15 +30,15 @@ func TestLoadPortfolio_FirstTimeUser(t *testing.T) {
 }
 
 func TestSaveAndLoadRoundTrip(t *testing.T) {
-	kv := storage.NewMemoryKVStore()
-	p, _ := LoadPortfolio(context.Background(), kv, 42, 1)
+	store := newStockStore()
+	p, _ := LoadPortfolio(context.Background(), store, 42, 1)
 	p.AddCurrency("VND", 5_000_000)
 	p.AddAsset("TCB", 100)
 	p.Meta.Invested = 5_000_000
-	if err := SavePortfolio(context.Background(), kv, 42, p); err != nil {
+	if err := SavePortfolio(context.Background(), store, 42, p); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
-	got, err := LoadPortfolio(context.Background(), kv, 42, 999) // CreatedAt should NOT be reset
+	got, err := LoadPortfolio(context.Background(), store, 42, 999) // CreatedAt should NOT be reset
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}

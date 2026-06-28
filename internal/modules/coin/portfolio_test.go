@@ -10,7 +10,7 @@ import (
 )
 
 func TestLoadPortfolioFirstTimeUser(t *testing.T) {
-	p, err := LoadPortfolio(context.Background(), storage.NewMemoryKVStore(), 42, 123)
+	p, err := LoadPortfolio(context.Background(), newCoinStore(), 42, 123)
 	if err != nil {
 		t.Fatalf("LoadPortfolio: %v", err)
 	}
@@ -67,32 +67,31 @@ func TestNormalizeAmountSpecialValues(t *testing.T) {
 	}
 }
 
+// conflictOnceStore wraps a real typed store and forces exactly one write
+// conflict (after committing a competing value) before delegating, to exercise
+// UpdatePortfolio's optimistic-lock retry.
 type conflictOnceStore struct {
-	storage.KVStore
+	Store
 	conflicted bool
 }
 
-func (s *conflictOnceStore) GetVersioned(ctx context.Context, key string) ([]byte, int64, error) {
-	return s.KVStore.(storage.VersionedStore).GetVersioned(ctx, key)
-}
-
-func (s *conflictOnceStore) PutVersioned(ctx context.Context, key string, expectedVersion int64, val []byte) error {
+func (s *conflictOnceStore) PutVersioned(ctx context.Context, key string, expectedVersion int64, val Portfolio) error {
 	if !s.conflicted {
 		s.conflicted = true
 		competing := NewPortfolio(1)
 		competing.AddUSD(10)
-		if err := s.PutJSON(ctx, key, competing); err != nil {
+		if err := s.Store.Put(ctx, key, competing); err != nil {
 			return err
 		}
 		return storage.ErrConflict
 	}
-	return s.KVStore.(storage.VersionedStore).PutVersioned(ctx, key, expectedVersion, val)
+	return s.Store.PutVersioned(ctx, key, expectedVersion, val)
 }
 
 func TestUpdatePortfolioRetriesAfterWriteConflict(t *testing.T) {
 	ctx := context.Background()
-	kv := &conflictOnceStore{KVStore: storage.NewMemoryKVStore()}
-	got, err := UpdatePortfolio(ctx, kv, 7, 1, func(p *Portfolio) error {
+	store := &conflictOnceStore{Store: newCoinStore()}
+	got, err := UpdatePortfolio(ctx, store, 7, 1, func(p *Portfolio) error {
 		p.AddUSD(5)
 		return nil
 	})
@@ -106,14 +105,14 @@ func TestUpdatePortfolioRetriesAfterWriteConflict(t *testing.T) {
 
 func TestUpdatePortfolioMutateErrorDoesNotPersist(t *testing.T) {
 	ctx := context.Background()
-	kv := storage.NewMemoryKVStore()
-	_, err := UpdatePortfolio(ctx, kv, 7, 1, func(p *Portfolio) error {
+	store := newCoinStore()
+	_, err := UpdatePortfolio(ctx, store, 7, 1, func(p *Portfolio) error {
 		return errInsufficientUSD
 	})
 	if !errors.Is(err, errInsufficientUSD) {
 		t.Fatalf("got %v, want errInsufficientUSD", err)
 	}
-	if _, err := kv.Get(ctx, "user:7"); !errors.Is(err, storage.ErrNotFound) {
+	if _, _, err := store.Get(ctx, "user:7"); !errors.Is(err, storage.ErrNotFound) {
 		t.Fatalf("failed mutate must not persist, Get = %v", err)
 	}
 }

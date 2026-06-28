@@ -12,16 +12,18 @@
 // exactly `dynamodb:Scan` on the table ARN (nothing else, no write actions).
 // For local testing, set DYNAMODB_LOCAL_URL to point at DynamoDB Local.
 //
-//   - default: scan + write every item through MongoKVStore.Put (same value
-//     encoding as the live app — JSON objects stored as native BSON), then
-//     report per-module counts.
+//   - default: scan + write every item through the typed Mongo store as a
+//     flattened native document (payload fields hoisted to the root, no `value`
+//     envelope) — the exact shape the live app writes — then report per-module
+//     counts.
 //   - --dry-run: scan + report counts, write nothing.
 //   - --verify: tally DynamoDB per pk via Scan vs Mongo CountDocuments per
 //     collection; print a table and exit non-zero on any mismatch.
 //
-// Note: writing through Put gives each doc the app's native-BSON value encoding
-// and a fresh updatedAt/version; nothing in the app reads updatedAt (write-only
-// today), and --verify compares counts, so this is intentional and harmless.
+// Note: each migrated doc gets a fresh updatedAt and version=1; nothing in the
+// app reads updatedAt, and --verify compares counts, so this is intentional and
+// harmless. The two non-object values (lolschedule subscribers array and
+// last-push date) are wrapped into named root fields (see encode.go).
 package main
 
 import (
@@ -142,11 +144,13 @@ func sortedKeys(m map[string]int) []string {
 }
 
 // runMigrate scans the table, then (unless dry-run) writes every item through
-// MongoKVStore.Put so the value uses the same native-BSON encoding the live app
-// writes — guaranteeing idempotent re-runs and correct version-based CAS. Put
-// also runs validateKey on each sk and upserts by _id, so a re-run produces no
-// duplicates and an invalid key fails loud rather than writing data
-// the app's read path cannot load.
+// the typed Mongo store as a flattened native document (payload fields hoisted
+// to the root, no `value` envelope) — the exact shape the live app writes.
+// payloadForItem wraps the two non-object values (lolschedule subscribers array
+// and last-push date) into named-struct fields. Writing through
+// storage.Typed[bson.M] reuses the store's module/key validation and version
+// semantics, so a re-run produces no duplicates (upsert by _id) and an invalid
+// module name or key fails loud rather than writing data the app cannot load.
 func runMigrate(ctx context.Context, ddb *dynamodb.Client, mdb *mongo.Database, table string, dryRun bool) error {
 	items, err := scanTable(ctx, ddb, table)
 	if err != nil {
@@ -160,9 +164,11 @@ func runMigrate(ctx context.Context, ddb *dynamodb.Client, mdb *mongo.Database, 
 		if dryRun {
 			continue
 		}
-		// For invalid module names For returns a store that errors on Put;
-		// Put validates the key. Either way an error aborts loudly.
-		if err := provider.For(it.pk).Put(ctx, it.sk, it.value); err != nil {
+		payload, err := payloadForItem(it.pk, it.sk, it.value)
+		if err != nil {
+			return err
+		}
+		if err := storage.Typed[bson.M](provider.Collection(it.pk)).Put(ctx, it.sk, payload); err != nil {
 			return fmt.Errorf("put %s/%s: %w", it.pk, it.sk, err)
 		}
 	}

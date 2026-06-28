@@ -71,10 +71,10 @@ type Module struct {
 // Modules that need to introspect commands (e.g. /help) capture this pointer
 // in their handler closures.
 type Deps struct {
-	KV       storage.KVStore // already prefixed with the module name when passed to a Factory
-	Registry *Registry       // populated by Build; safe to capture but read-only at module use
-	Chatter  ai.Chatter      // nil if GEMINI_API_KEY unset; twentyq must check
-	Bot      *bot.Bot        // nil-safe: only crons that fan-out (lolschedule daily push) need it
+	Store    storage.Collection // the module's own collection; build typed views with storage.Typed[T]
+	Registry *Registry          // populated by Build; safe to capture but read-only at module use
+	Chatter  ai.Chatter         // nil if GEMINI_API_KEY unset; twentyq must check
+	Bot      *bot.Bot           // nil-safe: only crons that fan-out (lolschedule daily push) need it
 }
 
 // Factory constructs a Module from its Deps. Deps are passed directly (instead

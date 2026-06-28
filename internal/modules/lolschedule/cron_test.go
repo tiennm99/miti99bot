@@ -56,9 +56,19 @@ func fixedNow() time.Time {
 	return time.Date(2026, 5, 10, 5, 0, 0, 0, time.UTC)
 }
 
+// newTestStore builds a fresh set of typed stores over a shared in-memory
+// collection, matching what the factory wires in production.
+func newTestStore(t *testing.T) (SubscriberStore, PushDateStore, CacheStore) {
+	t.Helper()
+	col := storage.NewMemoryProvider().Collection("lolschedule")
+	return storage.Typed[subscribersDoc](col),
+		storage.Typed[lastPushDoc](col),
+		storage.Typed[cacheRecord](col)
+}
+
 // seedFreshCache writes a cacheRecord with `now` as timestamp so the first
 // GetEventsCached call returns it without hitting the network.
-func seedFreshCache(t *testing.T, kv storage.KVStore, events []ScheduleEvent) {
+func seedFreshCache(t *testing.T, cache CacheStore, events []ScheduleEvent) {
 	t.Helper()
 	from := ictDayStartOf(fixedNow())
 	to := addDays(from, 1)
@@ -66,24 +76,26 @@ func seedFreshCache(t *testing.T, kv storage.KVStore, events []ScheduleEvent) {
 		Ts:     time.Now().UTC().UnixMilli(),
 		Events: events,
 	}
-	if err := kv.PutJSON(context.Background(), cacheKey(from, to), rec); err != nil {
+	if err := cache.Put(context.Background(), cacheKey(from, to), rec); err != nil {
 		t.Fatalf("seed cache: %v", err)
 	}
 }
 
 func newTestState(t *testing.T) *state {
 	t.Helper()
-	kv := storage.NewMemoryKVStore()
+	subs, pd, cache := newTestStore(t)
 	return &state{
-		kv:     kv,
-		client: &Client{}, // zero value; tests must seed cache to avoid HTTP
-		nowFn:  fixedNow,
+		subscribers: subs,
+		pushDate:    pd,
+		cache:       cache,
+		client:      &Client{}, // zero value; tests must seed cache to avoid HTTP
+		nowFn:       fixedNow,
 	}
 }
 
 func TestRunDailyPush_NoSubscribers(t *testing.T) {
 	s := newTestState(t)
-	seedFreshCache(t, s.kv, nil)
+	seedFreshCache(t, s.cache, nil)
 
 	sender := &fakeSender{}
 	if err := runDailyPush(context.Background(), s, sender); err != nil {
@@ -96,11 +108,11 @@ func TestRunDailyPush_NoSubscribers(t *testing.T) {
 
 func TestRunDailyPush_SendsToAllSubscribers(t *testing.T) {
 	s := newTestState(t)
-	seedFreshCache(t, s.kv, nil) // empty schedule still produces a "no matches" message
+	seedFreshCache(t, s.cache, nil) // empty schedule still produces a "no matches" message
 
 	chatIDs := []int64{100, 200, 300}
 	for _, id := range chatIDs {
-		if _, err := addSubscriber(context.Background(), s.kv, id, 0); err != nil {
+		if _, err := addSubscriber(context.Background(), s.subscribers, id, 0); err != nil {
 			t.Fatalf("addSubscriber %d: %v", id, err)
 		}
 	}
@@ -138,7 +150,7 @@ func TestRunDailyPush_SendsToAllSubscribers(t *testing.T) {
 // topic, not in General.
 func TestRunDailyPush_ForwardsMessageThreadID(t *testing.T) {
 	s := newTestState(t)
-	seedFreshCache(t, s.kv, nil)
+	seedFreshCache(t, s.cache, nil)
 
 	subs := []Subscriber{
 		{ChatID: 100, ThreadID: 0},
@@ -146,7 +158,7 @@ func TestRunDailyPush_ForwardsMessageThreadID(t *testing.T) {
 		{ChatID: 200, ThreadID: 42},
 	}
 	for _, sub := range subs {
-		if _, err := addSubscriber(context.Background(), s.kv, sub.ChatID, sub.ThreadID); err != nil {
+		if _, err := addSubscriber(context.Background(), s.subscribers, sub.ChatID, sub.ThreadID); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -173,11 +185,11 @@ func TestRunDailyPush_ForwardsMessageThreadID(t *testing.T) {
 // misconfiguration (all double-fire windows the daily push must survive).
 func TestRunDailyPush_IdempotentPerDate(t *testing.T) {
 	s := newTestState(t)
-	seedFreshCache(t, s.kv, nil)
+	seedFreshCache(t, s.cache, nil)
 
 	chatIDs := []int64{100, 200, 300}
 	for _, id := range chatIDs {
-		if _, err := addSubscriber(context.Background(), s.kv, id, 0); err != nil {
+		if _, err := addSubscriber(context.Background(), s.subscribers, id, 0); err != nil {
 			t.Fatalf("addSubscriber %d: %v", id, err)
 		}
 	}
@@ -196,11 +208,11 @@ func TestRunDailyPush_IdempotentPerDate(t *testing.T) {
 
 func TestRunDailyPush_PartialFailureContinues(t *testing.T) {
 	s := newTestState(t)
-	seedFreshCache(t, s.kv, nil)
+	seedFreshCache(t, s.cache, nil)
 
 	chatIDs := []int64{100, 200, 300}
 	for _, id := range chatIDs {
-		if _, err := addSubscriber(context.Background(), s.kv, id, 0); err != nil {
+		if _, err := addSubscriber(context.Background(), s.subscribers, id, 0); err != nil {
 			t.Fatalf("addSubscriber %d: %v", id, err)
 		}
 	}
@@ -220,7 +232,7 @@ func TestRunDailyPush_PartialFailureContinues(t *testing.T) {
 // terminal error removes every topic subscription for that chat.
 func TestRunDailyPush_PrunesDeadSubscribers(t *testing.T) {
 	s := newTestState(t)
-	seedFreshCache(t, s.kv, nil)
+	seedFreshCache(t, s.cache, nil)
 
 	// Chat 400 has two topic subs; both should be pruned when the chat
 	// returns a chat-wide terminal error.
@@ -232,7 +244,7 @@ func TestRunDailyPush_PrunesDeadSubscribers(t *testing.T) {
 		{ChatID: 400, ThreadID: 9},
 	}
 	for _, sub := range seedSubs {
-		if _, err := addSubscriber(context.Background(), s.kv, sub.ChatID, sub.ThreadID); err != nil {
+		if _, err := addSubscriber(context.Background(), s.subscribers, sub.ChatID, sub.ThreadID); err != nil {
 			t.Fatalf("addSubscriber %v: %v", sub, err)
 		}
 	}
@@ -245,7 +257,7 @@ func TestRunDailyPush_PrunesDeadSubscribers(t *testing.T) {
 		t.Fatalf("runDailyPush: %v", err)
 	}
 
-	remaining, err := listSubscribers(context.Background(), s.kv)
+	remaining, err := listSubscribers(context.Background(), s.subscribers)
 	if err != nil {
 		t.Fatalf("listSubscribers: %v", err)
 	}
@@ -265,7 +277,7 @@ func TestRunDailyPush_PrunesDeadSubscribers(t *testing.T) {
 // (ChatID, ThreadID) entry — sister topics in the same chat stay subscribed.
 func TestRunDailyPush_TopicOnlyTerminalPrunesOneTopic(t *testing.T) {
 	s := newTestState(t)
-	seedFreshCache(t, s.kv, nil)
+	seedFreshCache(t, s.cache, nil)
 
 	seedSubs := []Subscriber{
 		{ChatID: 500, ThreadID: 0},
@@ -273,7 +285,7 @@ func TestRunDailyPush_TopicOnlyTerminalPrunesOneTopic(t *testing.T) {
 		{ChatID: 500, ThreadID: 22},
 	}
 	for _, sub := range seedSubs {
-		if _, err := addSubscriber(context.Background(), s.kv, sub.ChatID, sub.ThreadID); err != nil {
+		if _, err := addSubscriber(context.Background(), s.subscribers, sub.ChatID, sub.ThreadID); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -286,7 +298,7 @@ func TestRunDailyPush_TopicOnlyTerminalPrunesOneTopic(t *testing.T) {
 		t.Fatalf("runDailyPush: %v", err)
 	}
 
-	remaining, _ := listSubscribers(context.Background(), s.kv)
+	remaining, _ := listSubscribers(context.Background(), s.subscribers)
 	if len(remaining) != 0 {
 		t.Errorf("expected all topic-only entries pruned, got %v", remaining)
 	}
@@ -296,7 +308,7 @@ func TestRunDailyPush_TopicOnlyTerminalPrunesOneTopic(t *testing.T) {
 // chat goes bad; the other topics in the same chat must stay.
 func TestRunDailyPush_TopicOnlyTerminalKeepsOtherTopics(t *testing.T) {
 	s := newTestState(t)
-	seedFreshCache(t, s.kv, nil)
+	seedFreshCache(t, s.cache, nil)
 
 	// Two distinct chats, each with multiple topic subs. Only chat 600 hits
 	// the topic-terminal error; chat 700 sends cleanly.
@@ -306,7 +318,7 @@ func TestRunDailyPush_TopicOnlyTerminalKeepsOtherTopics(t *testing.T) {
 		{ChatID: 700, ThreadID: 3},
 	}
 	for _, sub := range seedSubs {
-		if _, err := addSubscriber(context.Background(), s.kv, sub.ChatID, sub.ThreadID); err != nil {
+		if _, err := addSubscriber(context.Background(), s.subscribers, sub.ChatID, sub.ThreadID); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -317,7 +329,7 @@ func TestRunDailyPush_TopicOnlyTerminalKeepsOtherTopics(t *testing.T) {
 		t.Fatalf("runDailyPush: %v", err)
 	}
 
-	remaining, _ := listSubscribers(context.Background(), s.kv)
+	remaining, _ := listSubscribers(context.Background(), s.subscribers)
 	if len(remaining) != 1 || remaining[0] != (Subscriber{ChatID: 700, ThreadID: 3}) {
 		t.Errorf("after topic-terminal prune of chat 600: got %v, want [{700 3}]", remaining)
 	}
@@ -362,7 +374,7 @@ func TestClassifyTerminal(t *testing.T) {
 
 func TestDailyPushHandler_NilBot_ReturnsError(t *testing.T) {
 	s := newTestState(t)
-	deps := modules.Deps{KV: s.kv} // Bot intentionally nil
+	deps := modules.Deps{Store: storage.NewMemoryProvider().Collection("lolschedule")}
 	err := s.dailyPushHandler(context.Background(), deps)
 	if err == nil {
 		t.Fatal("expected error when deps.Bot is nil, got nil")
