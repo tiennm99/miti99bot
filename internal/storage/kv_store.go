@@ -22,9 +22,20 @@ type KVStore interface {
 	List(ctx context.Context, prefix string) ([]string, error)
 }
 
-// CompareAndSwapStore is implemented by stores that can conditionally replace
-// a value only when it still equals the bytes read by the caller. A nil expected
-// value means the key must not exist.
-type CompareAndSwapStore interface {
-	CompareAndSwap(ctx context.Context, key string, expected []byte, val []byte) error
+// VersionedStore is implemented by stores that support version-based optimistic
+// locking. It replaces value-bytes compare-and-swap: each key carries a
+// monotonic version, so a writer swaps only if the version it read is unchanged.
+// This decouples concurrency control from the value encoding (so values can be
+// stored as native documents rather than exact byte blobs).
+//
+// Contract:
+//   - GetVersioned returns the value and its current version, or ErrNotFound.
+//     A key that exists without a recorded version (written by an older build)
+//     reports version 0 and no error.
+//   - PutVersioned writes val only if the stored version still equals
+//     expectedVersion, then bumps the version. expectedVersion == 0 means
+//     "create, or adopt a not-yet-versioned key". A mismatch returns ErrConflict.
+type VersionedStore interface {
+	GetVersioned(ctx context.Context, key string) (val []byte, version int64, err error)
+	PutVersioned(ctx context.Context, key string, expectedVersion int64, val []byte) error
 }

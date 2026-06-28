@@ -134,37 +134,39 @@ func (s *state) dailyPushHandler(ctx context.Context, deps modules.Deps) error {
 // for the daily push: a winner proceeds to fan out; a loser (another trigger
 // already claimed today) returns false and sends nothing.
 //
-// The claim is a compare-and-swap on lastPushDateKey so two simultaneous
-// triggers cannot both win. Every real KV backend implements
-// CompareAndSwapStore; if a bare store without CAS is used (only in narrow
-// tests), it falls back to a plain Put — losing the atomic guarantee but
-// preserving the "no-op if already today" behaviour.
+// The claim is a version-based optimistic write on lastPushDateKey so two
+// simultaneous triggers cannot both win. Every real KV backend implements
+// VersionedStore; if a bare store without it is used (only in narrow tests), it
+// falls back to a plain Put — losing the atomic guarantee but preserving the
+// "no-op if already today" behaviour.
 func claimDailyPush(ctx context.Context, kv storage.KVStore, today string) (bool, error) {
-	current, err := kv.Get(ctx, lastPushDateKey)
+	vs, ok := kv.(storage.VersionedStore)
+	if !ok {
+		// No versioned support (a bare store in narrow tests): best-effort Put,
+		// losing the atomic guarantee but preserving "no-op if already today".
+		current, err := kv.Get(ctx, lastPushDateKey)
+		if err == nil && string(current) == today {
+			return false, nil
+		}
+		if err != nil && !errors.Is(err, storage.ErrNotFound) {
+			return false, err
+		}
+		return true, kv.Put(ctx, lastPushDateKey, []byte(today))
+	}
+
+	current, version, err := vs.GetVersioned(ctx, lastPushDateKey)
 	switch {
 	case err == nil:
 		if string(current) == today {
 			return false, nil // already pushed today
 		}
 	case errors.Is(err, storage.ErrNotFound):
-		current = nil // never pushed
+		version = 0 // never pushed
 	default:
 		return false, err
 	}
 
-	cas, ok := kv.(storage.CompareAndSwapStore)
-	if !ok {
-		if err := kv.Put(ctx, lastPushDateKey, []byte(today)); err != nil {
-			return false, err
-		}
-		return true, nil
-	}
-
-	var expected []byte
-	if len(current) > 0 {
-		expected = current
-	}
-	if err := cas.CompareAndSwap(ctx, lastPushDateKey, expected, []byte(today)); err != nil {
+	if err := vs.PutVersioned(ctx, lastPushDateKey, version, []byte(today)); err != nil {
 		if errors.Is(err, storage.ErrConflict) {
 			return false, nil // another trigger claimed today first
 		}

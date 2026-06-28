@@ -152,41 +152,8 @@ func TestDynamoDBKVStore_ListPrefix(t *testing.T) {
 	}
 }
 
-func TestDynamoDBKVStore_CompareAndSwap(t *testing.T) {
-	client, table, cleanup := dynamoDBLocalSetup(t)
-	defer cleanup()
-
-	ctx := context.Background()
-	s := NewDynamoDBKVStore(client, table, "gold")
-
-	// Create-if-absent succeeds once, then conflicts.
-	if err := s.CompareAndSwap(ctx, "user:1", nil, []byte("v1")); err != nil {
-		t.Fatalf("CompareAndSwap create: %v", err)
-	}
-	if err := s.CompareAndSwap(ctx, "user:1", nil, []byte("v2")); !errors.Is(err, ErrConflict) {
-		t.Errorf("CompareAndSwap create over existing: got %v, want ErrConflict", err)
-	}
-
-	// Swap with matching expected succeeds; stale expected conflicts.
-	if err := s.CompareAndSwap(ctx, "user:1", []byte("v1"), []byte("v2")); err != nil {
-		t.Fatalf("CompareAndSwap matching: %v", err)
-	}
-	if err := s.CompareAndSwap(ctx, "user:1", []byte("v1"), []byte("v3")); !errors.Is(err, ErrConflict) {
-		t.Errorf("CompareAndSwap stale: got %v, want ErrConflict", err)
-	}
-	got, err := s.Get(ctx, "user:1")
-	if err != nil {
-		t.Fatalf("Get: %v", err)
-	}
-	if string(got) != "v2" {
-		t.Errorf("stored value = %q, want %q", got, "v2")
-	}
-
-	// Non-nil expected on a missing key conflicts (caller reloads and retries).
-	if err := s.CompareAndSwap(ctx, "user:missing", []byte("v1"), []byte("v2")); !errors.Is(err, ErrConflict) {
-		t.Errorf("CompareAndSwap missing key: got %v, want ErrConflict", err)
-	}
-}
+// DynamoDB intentionally no longer implements optimistic locking — it is
+// migrate-only post-self-host (Scan + Put). No CAS/versioned test here.
 
 func TestDynamoDBKVStore_DeleteMissingNoError(t *testing.T) {
 	client, table, cleanup := dynamoDBLocalSetup(t)
