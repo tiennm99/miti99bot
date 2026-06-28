@@ -1,7 +1,7 @@
 ---
 title: "Self-host miti99bot on Coolify with MongoDB Atlas"
 description: "Add a MongoDB Atlas storage backend + in-process cron, containerize for Coolify docker-compose, migrate existing DynamoDB data."
-status: pending
+status: in-progress
 priority: P2
 branch: "feature/selfhosted"
 tags: [selfhost, coolify, mongodb, migration]
@@ -24,11 +24,20 @@ Why this is low-risk: storage is already a pluggable `KVProvider` interface with
 
 | Phase | Name | Status |
 |-------|------|--------|
-| 1 | [MongoDB Storage Provider](./phase-01-mongodb-storage-provider.md) | Pending |
-| 2 | [In-Process Cron Scheduler](./phase-02-in-process-cron-scheduler.md) | Pending |
-| 3 | [Long-Polling Runtime + Containerize + Coolify Deploy](./phase-03-containerize-and-coolify-deploy.md) | Pending |
-| 4 | [Data Migration and Cutover](./phase-04-data-migration-and-cutover.md) | Pending |
-| 5 | [AWS Full Decommission](./phase-05-aws-decommission.md) | Pending |
+| 1 | [MongoDB Storage Provider](./phase-01-mongodb-storage-provider.md) | Done (code + tests) |
+| 2 | [In-Process Cron Scheduler](./phase-02-in-process-cron-scheduler.md) | Done (code + tests) |
+| 3 | [Long-Polling Runtime + Containerize + Coolify Deploy](./phase-03-containerize-and-coolify-deploy.md) | Done (code + compose + docs); operator runs Atlas/Coolify setup |
+| 4 | [Data Migration and Cutover](./phase-04-data-migration-and-cutover.md) | Migrator done (code + e2e test); operator runs the live cutover |
+| 5 | [AWS Full Decommission](./phase-05-aws-decommission.md) | Runbook delivered + deploy.yml disabled; operator runs teardown (admin creds) |
+
+## Implementation Log
+
+### Session — 2026-06-28 (/cook full code until deployable)
+All code for Phases 1-4 implemented + Phase 5 runbook delivered. `go build`, `go vet`, full `go test ./...` green. Storage Mongo parity tests (incl. the blocking concurrent-CAS linearizability gate), DynamoDB parity tests, and the migrator e2e (migrate→idempotent re-run→verify→byte-identical round-trip) all PASS against real MongoDB 7 + DynamoDB Local (run in-container; `-race` skipped only because the alpine image lacks cgo/gcc). Code review (code-reviewer subagent): 0 Critical/High, all 8 acceptance criteria verified; one Low cosmetic (stale `BOT_OWNER_ID` log string) fixed.
+
+**Implementation decision (within plan intent):** the container calls `DeleteWebhook(drop_pending_updates=false)` on startup before `b.Start`, making the "deleteWebhook before first poll" requirement automatic + idempotent (the manual `make telegram-deletewebhook-selfhost` target remains for the explicit cutover step). Reviewer confirmed safe vs the manual-cutover framing.
+
+**Remaining (operator-run, need live creds/infra, out of code scope):** create Atlas M0 + DB user + network access; create the Coolify resource + env vars + deploy; run the live cutover (disable EventBridge → deleteWebhook → migrate → verify → start container); execute the AWS teardown runbook with the admin profile.
 
 ## Dependencies
 
