@@ -86,16 +86,37 @@ recreate the stack).
 
 ## Verification checklist
 
-- [ ] `describe-stacks --stack-name miti99bot` → does not exist.
-- [ ] No `/miti99bot/*` SSM parameters remain (secrets purged).
-- [ ] `github-deploy-miti99bot` role gone; OIDC provider gone.
-- [ ] SAM bucket + bootstrap stack deleted.
-- [ ] `resourcegroupstaggingapi` for `app=miti99bot` returns empty.
-- [ ] `deploy.yml` no longer recreates the stack on `main`.
+Teardown executed and verified 2026-06-28 (account `225603493174`, region
+`ap-southeast-1`).
+
+- [x] `describe-stacks --stack-name miti99bot` → does not exist.
+- [x] No `/miti99bot/*` SSM parameters remain (secrets purged).
+- [x] `github-deploy-miti99bot` role gone; OIDC provider gone.
+- [x] SAM bucket + bootstrap stack deleted.
+- [x] `resourcegroupstaggingapi` for `app=miti99bot` returns empty.
+- [x] `deploy.yml` no longer recreates the stack on `main` (trigger is
+      `workflow_dispatch`-only and depends on the deleted OIDC role).
 - [ ] Cost Explorer shows $0 the following billing period.
 - [x] Cloudflare verified clean (2026-06-27): legacy KV/D1 already gone; the 4
       remaining Workers are separate active projects. No action.
-- [ ] GCP: no `miti99bot-prod` project (`gcloud projects list | grep miti99bot`).
+- [x] GCP: project never used GCP (README lists AWS + Cloudflare only); `gcloud`
+      not installed in the teardown environment, nothing to clean.
+
+## Deviations during execution (2026-06-28)
+
+Two steps differed from the assumptions above; recorded for future reference:
+
+- **IAM role policies:** `github-deploy-miti99bot` had **10 AWS-managed
+  policies attached** (`AmazonSSMFullAccess`, `IAMFullAccess`, ...), not the
+  inline `miti99bot-deploy` policy this runbook assumed — likely the broad-access
+  fallback from `aws/iam-rollback-fullaccess.sh`. Had to `detach-role-policy`
+  for all 10 (AWS-managed, so detach only unlinks them) before `delete-role`.
+- **Versioned SAM bucket:** `s3 rb --force` failed with `BucketNotEmpty` because
+  the bucket had versioning on — `--force` removes only current versions, leaving
+  126 non-current versions + 126 delete markers. Purged every version + delete
+  marker via `s3api list-object-versions` + `delete-objects`, then
+  `delete-bucket`, then retried the bootstrap `delete-stack` (it had gone
+  `DELETE_FAILED` solely because the bucket couldn't be emptied).
 
 ## Notes
 
