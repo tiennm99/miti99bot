@@ -32,7 +32,7 @@ internal/modules/            Module framework, registry, dispatchers, modules
 internal/storage/            typed DocStore[T] (Provider + Typed); mongodb runtime + memory (tests). Values persist as flattened native BSON root documents
 internal/ai/                 Gemini client (used by twentyq)
 compose.yml                  Coolify self-host stack (single bot service)
-telegram-commands.json       Telegram command menu source
+telegram-commands.json       Manual Telegram command menu source
 docs/deploy-coolify-selfhosted.md    Self-host deploy and operations guide
 ```
 

@@ -135,6 +135,11 @@ func main() {
 		"modules", len(reg.Modules),
 		"commands", len(reg.AllCommands),
 		"crons", len(reg.Crons()))
+	if n, err := registerCommandMenu(rootCtx, b, reg); err != nil {
+		log.Warn("telegram command menu registration failed", "commands", n, "err", err)
+	} else {
+		log.Info("telegram command menu registered", "commands", n)
+	}
 
 	// In-process cron scheduler runs unconditionally so the long-lived container
 	// fires module crons (e.g. the lolschedule daily push) on their Schedule.
