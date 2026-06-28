@@ -35,7 +35,7 @@ func factory(name string, cmds []Command, crons []Cron) Factory {
 	}
 }
 
-func newProvider() storage.KVProvider { return storage.NewMemoryProvider() }
+func newProvider() storage.Provider { return storage.NewMemoryProvider() }
 
 func TestBuild_EmptyModulesBootsCleanly(t *testing.T) {
 	reg, err := Build(nil, map[string]Factory{}, newProvider(), BuildOptions{})
@@ -44,6 +44,27 @@ func TestBuild_EmptyModulesBootsCleanly(t *testing.T) {
 	}
 	if len(reg.AllCommands) != 0 {
 		t.Errorf("expected 0 commands, got %d", len(reg.AllCommands))
+	}
+}
+
+func TestBuild_EmptyModulesLoadsAllRegistered(t *testing.T) {
+	// Empty/unset MODULES is the documented "load every module" contract.
+	factories := map[string]Factory{
+		"alpha": factory("alpha", []Command{noopCmd("a1")}, nil),
+		"beta":  factory("beta", []Command{noopCmd("b1")}, []Cron{noopCron("daily")}),
+	}
+	reg, err := Build(nil, factories, newProvider(), BuildOptions{})
+	if err != nil {
+		t.Fatalf("Build nil enabled: %v", err)
+	}
+	if len(reg.Modules) != len(factories) {
+		t.Fatalf("expected all %d modules loaded, got %d", len(factories), len(reg.Modules))
+	}
+	if _, ok := reg.AllCommands["a1"]; !ok {
+		t.Error("missing command a1 from auto-loaded alpha")
+	}
+	if _, ok := reg.Cron("daily"); !ok {
+		t.Error("missing cron daily from auto-loaded beta")
 	}
 }
 
@@ -165,7 +186,7 @@ func TestDispatchScheduled_UnknownReturnsErrCronNotFound(t *testing.T) {
 	}
 }
 
-func TestDispatchScheduled_PassesPrefixedDeps(t *testing.T) {
+func TestDispatchScheduled_PassesScopedDeps(t *testing.T) {
 	ctx := context.Background()
 	provider := storage.NewMemoryProvider()
 
@@ -174,7 +195,7 @@ func TestDispatchScheduled_PassesPrefixedDeps(t *testing.T) {
 			return Module{Crons: []Cron{{
 				Name: "tick_a",
 				Handler: func(ctx context.Context, deps Deps) error {
-					return deps.KV.Put(ctx, "last", []byte("A"))
+					return storage.Typed[string](deps.Store).Put(ctx, "last", "A")
 				},
 			}}}
 		},
@@ -182,7 +203,7 @@ func TestDispatchScheduled_PassesPrefixedDeps(t *testing.T) {
 			return Module{Crons: []Cron{{
 				Name: "tick_b",
 				Handler: func(ctx context.Context, deps Deps) error {
-					return deps.KV.Put(ctx, "last", []byte("B"))
+					return storage.Typed[string](deps.Store).Put(ctx, "last", "B")
 				},
 			}}}
 		},
@@ -198,14 +219,14 @@ func TestDispatchScheduled_PassesPrefixedDeps(t *testing.T) {
 		t.Fatalf("tick_b: %v", err)
 	}
 
-	// Underlying base store should hold each module's prefixed key separately.
-	gotA, err := provider.Base().Get(ctx, "alpha:last")
-	if err != nil || string(gotA) != "A" {
-		t.Errorf("alpha:last = %q (err=%v), want A", gotA, err)
+	// Each module's per-collection store holds its own "last" key separately.
+	gotA, _, err := storage.Typed[string](provider.Collection("alpha")).Get(ctx, "last")
+	if err != nil || gotA != "A" {
+		t.Errorf("alpha/last = %q (err=%v), want A", gotA, err)
 	}
-	gotB, err := provider.Base().Get(ctx, "beta:last")
-	if err != nil || string(gotB) != "B" {
-		t.Errorf("beta:last = %q (err=%v), want B", gotB, err)
+	gotB, _, err := storage.Typed[string](provider.Collection("beta")).Get(ctx, "last")
+	if err != nil || gotB != "B" {
+		t.Errorf("beta/last = %q (err=%v), want B", gotB, err)
 	}
 }
 
@@ -280,12 +301,12 @@ func TestBuild_RejectsDuplicateModuleInEnv(t *testing.T) {
 	}
 }
 
-func TestBuild_PerModulePrefixedKV(t *testing.T) {
+func TestBuild_PerModuleStoreIsolation(t *testing.T) {
 	ctx := context.Background()
 	provider := storage.NewMemoryProvider()
 
-	// Each module writes a value to the same key; with per-module prefixing
-	// they must not collide.
+	// Each module writes a value to the same key; with one collection per
+	// module they must not collide.
 	captured := map[string]Deps{}
 	factories := map[string]Factory{
 		"alpha": func(d Deps) Module {
@@ -301,19 +322,19 @@ func TestBuild_PerModulePrefixedKV(t *testing.T) {
 		t.Fatalf("Build: %v", err)
 	}
 
-	if err := captured["alpha"].KV.Put(ctx, "score", []byte("1")); err != nil {
+	alpha := storage.Typed[string](captured["alpha"].Store)
+	beta := storage.Typed[string](captured["beta"].Store)
+	if err := alpha.Put(ctx, "score", "1"); err != nil {
 		t.Fatal(err)
 	}
-	if err := captured["beta"].KV.Put(ctx, "score", []byte("2")); err != nil {
+	if err := beta.Put(ctx, "score", "2"); err != nil {
 		t.Fatal(err)
 	}
 
-	got, _ := captured["alpha"].KV.Get(ctx, "score")
-	if string(got) != "1" {
-		t.Errorf("alpha.KV.score = %q, want 1", got)
+	if got, _, _ := alpha.Get(ctx, "score"); got != "1" {
+		t.Errorf("alpha/score = %q, want 1", got)
 	}
-	got, _ = captured["beta"].KV.Get(ctx, "score")
-	if string(got) != "2" {
-		t.Errorf("beta.KV.score = %q, want 2", got)
+	if got, _, _ := beta.Get(ctx, "score"); got != "2" {
+		t.Errorf("beta/score = %q, want 2", got)
 	}
 }

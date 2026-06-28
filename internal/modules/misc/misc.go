@@ -20,7 +20,7 @@ import (
 	"github.com/tiennm99/miti99bot/internal/storage"
 )
 
-// lastPingKey is the per-module KV key /ping writes and /mstats reads.
+// lastPingKey is the per-module store key /ping writes and /mstats reads.
 const lastPingKey = "last_ping"
 
 // defaultTarget is the substituted "investigator" name when /trongtruonghop is
@@ -35,23 +35,24 @@ const trongTruongHopTemplate = "Trong trường hợp nhóm này bị điều tr
 // int64 ms-epoch (not time.Time → RFC3339) keeps the on-disk shape compact
 // and consistent with every other timestamp field in the bot's KV.
 type lastPing struct {
-	At int64 `json:"at"`
+	At int64 `json:"at" bson:"at"`
 }
 
-// New is the module Factory. Captures the per-module Deps via closure so each
-// command handler has direct access to its KV store.
+// New is the module Factory. Builds a typed store from deps.Store and captures
+// it via closure so each command handler has direct access.
 func New(deps modules.Deps) modules.Module {
+	store := storage.Typed[lastPing](deps.Store)
 	return modules.Module{
 		Commands: []modules.Command{
-			pingCommand(deps),
-			mstatsCommand(deps),
+			pingCommand(store),
+			mstatsCommand(store),
 			fortytwoCommand(),
 			trongTruongHopCommand(),
 		},
 	}
 }
 
-func pingCommand(deps modules.Deps) modules.Command {
+func pingCommand(store storage.DocStore[lastPing]) modules.Command {
 	return modules.Command{
 		Name:        "ping",
 		Visibility:  modules.VisibilityPublic,
@@ -60,17 +61,17 @@ func pingCommand(deps modules.Deps) modules.Command {
 			if update.Message == nil {
 				return nil
 			}
-			// Best-effort write — if KV is unavailable, still reply.
+			// Best-effort write — if store is unavailable, still reply.
 			payload := lastPing{At: chathelper.NowMillis()}
-			if err := deps.KV.PutJSON(ctx, lastPingKey, payload); err != nil {
-				log.Error("kv put failed", "module", "misc", "command", "ping", "key", lastPingKey, "err", err)
+			if err := store.Put(ctx, lastPingKey, payload); err != nil {
+				log.Error("store put failed", "module", "misc", "command", "ping", "key", lastPingKey, "err", err)
 			}
 			return chathelper.Reply(ctx, b, update.Message, "pong")
 		},
 	}
 }
 
-func mstatsCommand(deps modules.Deps) modules.Command {
+func mstatsCommand(store storage.DocStore[lastPing]) modules.Command {
 	return modules.Command{
 		Name:        "mstats",
 		Visibility:  modules.VisibilityProtected,
@@ -79,18 +80,17 @@ func mstatsCommand(deps modules.Deps) modules.Command {
 			if update.Message == nil {
 				return nil
 			}
-			var last lastPing
 			text := "last ping: never"
-			err := deps.KV.GetJSON(ctx, lastPingKey, &last)
+			last, _, err := store.Get(ctx, lastPingKey)
 			switch {
 			case err == nil && last.At > 0:
 				text = fmt.Sprintf("last ping: %s",
 					time.UnixMilli(last.At).UTC().Format(time.RFC3339))
 			case err != nil && !errors.Is(err, storage.ErrNotFound):
 				// User-visible reply mirrors how stock/wordle/loldle handle
-				// transient KV failures — returning the error here would leave
+				// transient store failures — returning the error here would leave
 				// the user with no reply at all.
-				log.Error("kv get failed", "module", "misc", "command", "mstats", "key", lastPingKey, "err", err)
+				log.Error("store get failed", "module", "misc", "command", "mstats", "key", lastPingKey, "err", err)
 				text = "Could not load stats. Try again later."
 			}
 			return chathelper.Reply(ctx, b, update.Message, text)

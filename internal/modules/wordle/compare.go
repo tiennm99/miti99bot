@@ -14,10 +14,12 @@ const (
 	ResultWrong   = "wrong"
 )
 
-// LetterScore is the JSON shape stored in KV per guess.
+// LetterScore is the shape stored per guess (nested in GameState). bson tags
+// mirror the json names so migrated docs (which keep the original JSON keys)
+// read back verbatim.
 type LetterScore struct {
-	Letter string `json:"letter"`
-	Result string `json:"result"`
+	Letter string `json:"letter" bson:"letter"`
+	Result string `json:"result" bson:"result"`
 }
 
 // CompareWords scores guess against target letter-by-letter. Both are assumed

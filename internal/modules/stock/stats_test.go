@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tiennm99/miti99bot/internal/storage"
 	"github.com/tiennm99/miti99bot/internal/testutil"
 )
 
@@ -37,19 +36,19 @@ func TestHandleStats_UsesSSIBatchPrices(t *testing.T) {
 	}))
 	t.Cleanup(priceSrv.Close)
 
-	kv := storage.NewMemoryKVStore()
+	store := newStockStore()
 	p := NewPortfolio(now.UnixMilli())
 	p.Currency["VND"] = 2335000
 	p.Meta.Invested = 1000000000
 	p.AddAsset("MWG", 1800)
 	p.AddAsset("TCB", 4200)
 	p.AddAsset("FPT", 2300)
-	if err := SavePortfolio(ctx, kv, 7, p); err != nil {
+	if err := SavePortfolio(ctx, store, 7, p); err != nil {
 		t.Fatalf("SavePortfolio: %v", err)
 	}
 
 	s := &state{
-		kv:     kv,
+		store:  store,
 		prices: &PriceClient{HTTP: priceSrv.Client(), URL: priceSrv.URL},
 		nowFn:  func() time.Time { return now },
 	}

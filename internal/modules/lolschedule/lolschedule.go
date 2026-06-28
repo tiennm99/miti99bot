@@ -2,6 +2,7 @@ package lolschedule
 
 import (
 	"github.com/tiennm99/miti99bot/internal/modules"
+	"github.com/tiennm99/miti99bot/internal/storage"
 )
 
 // New is the lolschedule module Factory. The 5 user-facing commands plus the
@@ -10,7 +11,12 @@ import (
 // time — main.go must wire BuildOptions.Bot for the cron to function;
 // without it the handler fails fast with a clear error.
 func New(deps modules.Deps) modules.Module {
-	s := &state{kv: deps.KV, client: &Client{}}
+	s := &state{
+		subscribers: storage.Typed[subscribersDoc](deps.Store),
+		pushDate:    storage.Typed[lastPushDoc](deps.Store),
+		cache:       storage.Typed[cacheRecord](deps.Store),
+		client:      &Client{},
+	}
 	return modules.Module{
 		Commands: []modules.Command{
 			{

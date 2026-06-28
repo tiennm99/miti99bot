@@ -49,7 +49,7 @@ func (s *state) handleTopup(ctx context.Context, b *bot.Bot, update *models.Upda
 		return chathelper.Reply(ctx, b, update.Message, "Amount must be a positive finite USD number within the supported range.")
 	}
 	defer s.locks.Acquire(strconv.FormatInt(userID, 10))()
-	p, err := UpdatePortfolio(ctx, s.kv, userID, s.now().UnixMilli(), func(p *Portfolio) error {
+	p, err := UpdatePortfolio(ctx, s.store, userID, s.now().UnixMilli(), func(p *Portfolio) error {
 		p.AddUSD(amount)
 		p.Meta.Invested += amount
 		return nil
@@ -94,7 +94,7 @@ func (s *state) handleBuy(ctx context.Context, b *bot.Bot, update *models.Update
 	}
 	defer s.locks.Acquire(strconv.FormatInt(userID, 10))()
 	var insufficientBalance *float64
-	p, err := UpdatePortfolio(ctx, s.kv, userID, s.now().UnixMilli(), func(p *Portfolio) error {
+	p, err := UpdatePortfolio(ctx, s.store, userID, s.now().UnixMilli(), func(p *Portfolio) error {
 		ok, balance := p.DeductUSD(amount)
 		if !ok {
 			insufficientBalance = &balance
@@ -149,7 +149,7 @@ func (s *state) handleSell(ctx context.Context, b *bot.Bot, update *models.Updat
 	defer s.locks.Acquire(strconv.FormatInt(userID, 10))()
 	var insufficientHeldQty float64
 	var insufficientHeld bool
-	p, err := UpdatePortfolio(ctx, s.kv, userID, s.now().UnixMilli(), func(p *Portfolio) error {
+	p, err := UpdatePortfolio(ctx, s.store, userID, s.now().UnixMilli(), func(p *Portfolio) error {
 		ok, held := p.DeductAsset(coin.Symbol, qty)
 		if !ok {
 			insufficientHeldQty = held

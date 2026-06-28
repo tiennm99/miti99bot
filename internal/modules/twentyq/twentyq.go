@@ -7,6 +7,7 @@ import (
 
 	"github.com/tiennm99/miti99bot/internal/ai"
 	"github.com/tiennm99/miti99bot/internal/modules"
+	"github.com/tiennm99/miti99bot/internal/storage"
 )
 
 // New is the twentyq module Factory. If Deps.Chatter is nil
@@ -14,7 +15,8 @@ import (
 // config-error message — keeps the rest of the bot functional.
 func New(deps modules.Deps) modules.Module {
 	s := &state{
-		kv:      deps.KV,
+		games:   storage.Typed[GameState](deps.Store),
+		stats:   storage.Typed[Stats](deps.Store),
 		chatter: deps.Chatter,
 		limiter: ai.NewPerUserLimiter(5.0/60.0, 5),
 		rng:     newRNG(),

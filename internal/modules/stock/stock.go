@@ -2,13 +2,14 @@ package stock
 
 import (
 	"github.com/tiennm99/miti99bot/internal/modules"
+	"github.com/tiennm99/miti99bot/internal/storage"
 )
 
 // New is the stock module Factory. Five user-facing commands; no crons.
 // (Original miti99bot only has a SQL retention cron, which our KV-only port
 // does not implement — keeping commits paper-ledger-only is acceptable.)
 func New(deps modules.Deps) modules.Module {
-	s := newState(deps.KV)
+	s := newState(storage.Typed[Portfolio](deps.Store))
 	return modules.Module{
 		Commands: []modules.Command{
 			{
@@ -40,12 +41,6 @@ func New(deps modules.Deps) modules.Module {
 				Visibility:  modules.VisibilityPublic,
 				Description: "Record cash dividend (VND per share)",
 				Handler:     s.handleIncomeVND,
-			},
-			{
-				Name:        "stock_income_events",
-				Visibility:  modules.VisibilityPublic,
-				Description: "Check recent income events from FireAnt",
-				Handler:     s.handleIncomeEvents,
 			},
 			{
 				Name:        "stock_convert",

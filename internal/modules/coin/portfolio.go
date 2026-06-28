@@ -2,7 +2,6 @@ package coin
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -14,15 +13,18 @@ import (
 const coinDustEpsilon = 1e-9
 const portfolioUpdateAttempts = 5
 
+// Store is the coin module's typed portfolio store.
+type Store = storage.DocStore[Portfolio]
+
 type Portfolio struct {
-	USD    float64            `json:"usd"`
-	Assets map[string]float64 `json:"assets"`
-	Meta   PortfolioMeta      `json:"meta"`
+	USD    float64            `json:"usd" bson:"usd"`
+	Assets map[string]float64 `json:"assets" bson:"assets"`
+	Meta   PortfolioMeta      `json:"meta" bson:"meta"`
 }
 
 type PortfolioMeta struct {
-	Invested  float64 `json:"invested"`
-	CreatedAt int64   `json:"createdAt"`
+	Invested  float64 `json:"invested" bson:"invested"`
+	CreatedAt int64   `json:"createdAt" bson:"createdAt"`
 }
 
 func NewPortfolio(now int64) Portfolio {
@@ -33,42 +35,26 @@ func portfolioKey(userID int64) string {
 	return "user:" + strconv.FormatInt(userID, 10)
 }
 
-func LoadPortfolio(ctx context.Context, kv storage.KVStore, userID int64, now int64) (Portfolio, error) {
-	var p Portfolio
-	err := kv.GetJSON(ctx, portfolioKey(userID), &p)
-	switch {
-	case err == nil:
-		p.normalize()
-		if p.Assets == nil {
-			p.Assets = map[string]float64{}
-		}
-		if p.Meta.CreatedAt == 0 {
-			p.Meta.CreatedAt = now
-		}
-		return p, nil
-	case errors.Is(err, storage.ErrNotFound):
-		return NewPortfolio(now), nil
-	default:
+func LoadPortfolio(ctx context.Context, store Store, userID int64, now int64) (Portfolio, error) {
+	p, _, err := loadPortfolioForUpdate(ctx, store, portfolioKey(userID), now)
+	if err != nil {
 		return Portfolio{}, fmt.Errorf("coin: load portfolio %d: %w", userID, err)
 	}
+	return p, nil
 }
 
-func SavePortfolio(ctx context.Context, kv storage.KVStore, userID int64, p Portfolio) error {
+func SavePortfolio(ctx context.Context, store Store, userID int64, p Portfolio) error {
 	p.normalize()
-	if err := kv.PutJSON(ctx, portfolioKey(userID), p); err != nil {
+	if err := store.Put(ctx, portfolioKey(userID), p); err != nil {
 		return fmt.Errorf("coin: save portfolio %d: %w", userID, err)
 	}
 	return nil
 }
 
-func UpdatePortfolio(ctx context.Context, kv storage.KVStore, userID int64, now int64, mutate func(*Portfolio) error) (Portfolio, error) {
-	cas, ok := kv.(storage.CompareAndSwapStore)
-	if !ok {
-		return Portfolio{}, fmt.Errorf("coin: storage does not support conditional portfolio updates")
-	}
+func UpdatePortfolio(ctx context.Context, store Store, userID int64, now int64, mutate func(*Portfolio) error) (Portfolio, error) {
 	key := portfolioKey(userID)
 	for attempt := 0; attempt < portfolioUpdateAttempts; attempt++ {
-		p, expected, err := loadPortfolioForUpdate(ctx, kv, key, now)
+		p, version, err := loadPortfolioForUpdate(ctx, store, key, now)
 		if err != nil {
 			return Portfolio{}, fmt.Errorf("coin: load portfolio %d: %w", userID, err)
 		}
@@ -76,11 +62,7 @@ func UpdatePortfolio(ctx context.Context, kv storage.KVStore, userID int64, now 
 			return p, err
 		}
 		p.normalize()
-		next, err := json.Marshal(p)
-		if err != nil {
-			return Portfolio{}, fmt.Errorf("coin: save portfolio %d: json encode: %w", userID, err)
-		}
-		if err := cas.CompareAndSwap(ctx, key, expected, next); err == nil {
+		if err := store.PutVersioned(ctx, key, version, p); err == nil {
 			return p, nil
 		} else if !errors.Is(err, storage.ErrConflict) {
 			return Portfolio{}, fmt.Errorf("coin: save portfolio %d: %w", userID, err)
@@ -89,14 +71,10 @@ func UpdatePortfolio(ctx context.Context, kv storage.KVStore, userID int64, now 
 	return Portfolio{}, fmt.Errorf("coin: save portfolio %d: %w", userID, storage.ErrConflict)
 }
 
-func loadPortfolioForUpdate(ctx context.Context, kv storage.KVStore, key string, now int64) (Portfolio, []byte, error) {
-	raw, err := kv.Get(ctx, key)
+func loadPortfolioForUpdate(ctx context.Context, store Store, key string, now int64) (Portfolio, int64, error) {
+	p, version, err := store.Get(ctx, key)
 	switch {
 	case err == nil:
-		var p Portfolio
-		if err := json.Unmarshal(raw, &p); err != nil {
-			return Portfolio{}, nil, fmt.Errorf("json decode: %w", err)
-		}
 		p.normalize()
 		if p.Assets == nil {
 			p.Assets = map[string]float64{}
@@ -104,11 +82,11 @@ func loadPortfolioForUpdate(ctx context.Context, kv storage.KVStore, key string,
 		if p.Meta.CreatedAt == 0 {
 			p.Meta.CreatedAt = now
 		}
-		return p, raw, nil
+		return p, version, nil
 	case errors.Is(err, storage.ErrNotFound):
-		return NewPortfolio(now), nil, nil
+		return NewPortfolio(now), 0, nil
 	default:
-		return Portfolio{}, nil, err
+		return Portfolio{}, 0, err
 	}
 }
 

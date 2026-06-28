@@ -2,148 +2,63 @@ package telegram
 
 import (
 	"context"
-	"crypto/subtle"
 	"encoding/json"
-	"errors"
+	"fmt"
+	"io"
 	"net/http"
-	"runtime/debug"
 	"time"
-	"unicode/utf8"
-
-	"github.com/go-telegram/bot"
-	"github.com/go-telegram/bot/models"
-
-	"github.com/tiennm99/miti99bot/internal/log"
 )
 
-// secretTokenHeader is the case-insensitive HTTP header Telegram sets when it
-// POSTs an update to the webhook. It must equal the value passed to setWebhook.
-// See: https://core.telegram.org/bots/api#setwebhook
-// #nosec G101 — header name, not credential value
-const secretTokenHeader = "X-Telegram-Bot-Api-Secret-Token"
+// telegramAPIBase is the Bot API host (matches go-telegram's default).
+const telegramAPIBase = "https://api.telegram.org"
 
-// maxWebhookBody bounds inbound JSON. Telegram updates are well under 100 KiB
-// even with media; 1 MiB is a defensive ceiling against malformed clients.
-const maxWebhookBody = 1 << 20
+// webhookDeleteTimeout bounds a single deleteWebhook HTTP call so a stalled
+// connection cannot wedge startup.
+const webhookDeleteTimeout = 10 * time.Second
 
-// handlerTimeout caps a single Telegram update handler. Telegram retries after
-// 60s of no 2xx; 10s leaves headroom for outbound API calls inside handlers
-// without holding a Lambda instance long enough to block other updates.
-const handlerTimeout = 10 * time.Second
-
-// WebhookHandler returns an http.HandlerFunc that validates Telegram's secret
-// token (constant-time) and dispatches the update synchronously to the bot.
+// DeleteWebhook clears any configured webhook via a plain Bot API GET.
 //
-// Dispatch is synchronous because the bot is constructed with
-// bot.WithNotAsyncHandlers — handlers run inside this goroutine, so r.Context()
-// stays live and bounded by handlerTimeout.
-//
-// secret must be non-empty; main is responsible for failing-fast at startup.
-func WebhookHandler(b *bot.Bot, secret string) http.HandlerFunc {
-	secretBytes := []byte(secret)
-	return func(w http.ResponseWriter, r *http.Request) {
-		// Rejection paths use bare status codes (no response body) so internet
-		// scanners hitting the public Function URL can't fingerprint this as a
-		// Telegram webhook from the response text. CloudWatch metric filters
-		// still see the distinct status codes (401 / 405 / 413 / 400), and the
-		// structured log lines below carry the *reason* for operator triage.
-		if r.Method != http.MethodPost {
-			log.Warn("webhook rejected", "reason", "method", "method", r.Method)
-			w.WriteHeader(http.StatusMethodNotAllowed)
-			return
-		}
-		got := []byte(r.Header.Get(secretTokenHeader))
-		if subtle.ConstantTimeCompare(got, secretBytes) != 1 {
-			log.Warn("webhook rejected", "reason", "secret_mismatch")
-			w.WriteHeader(http.StatusUnauthorized)
-			return
-		}
-
-		r.Body = http.MaxBytesReader(w, r.Body, maxWebhookBody)
-		var update models.Update
-		if err := json.NewDecoder(r.Body).Decode(&update); err != nil {
-			// MaxBytesReader returns *http.MaxBytesError when the cap is hit;
-			// surface 413 distinctly so Telegram (and ops dashboards) can
-			// distinguish "body too big" from generic malformed JSON.
-			var maxBytesErr *http.MaxBytesError
-			if errors.As(err, &maxBytesErr) {
-				log.Warn("webhook rejected", "reason", "body_too_large")
-				w.WriteHeader(http.StatusRequestEntityTooLarge)
-				return
-			}
-			log.Warn("webhook rejected", "reason", "bad_json", "err", err)
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-
-		logDispatch(&update)
-
-		ctx, cancel := context.WithTimeout(r.Context(), handlerTimeout)
-		defer cancel()
-		// Recover panics so a buggy handler does not propagate up to the
-		// http.Server (which would close the response mid-write and trigger
-		// Telegram's 24-hour retry loop on the same poisoned update).
-		panicked := false
-		func() {
-			defer func() {
-				if rec := recover(); rec != nil {
-					panicked = true
-					log.Error("webhook handler panic",
-						"panic", rec,
-						"stack", string(debug.Stack()))
-				}
-			}()
-			b.ProcessUpdate(ctx, &update)
-		}()
-		// Suppress the trailing 200 if a panic occurred: a poisoned handler
-		// may have already written headers/body, and a second WriteHeader
-		// here emits `superfluous response.WriteHeader` noise. The
-		// LogRequests middleware will mark this as 500 from its own recover
-		// path; we just stay quiet here.
-		if !panicked {
-			w.WriteHeader(http.StatusOK)
-		}
-	}
+// go-telegram's b.DeleteWebhook posts an empty multipart form (DeleteWebhookParams
+// is all-omitempty), and some networks answer that bodyless POST with an empty
+// response body — decoded as "unexpected end of JSON input" — so the webhook is
+// never actually removed and getUpdates keeps returning 409. A GET with no body
+// sidesteps that request shape. Pending updates are intentionally kept (the API
+// default) so the long poller drains the buffered queue for a lossless cutover.
+func DeleteWebhook(ctx context.Context, token string) error {
+	return deleteWebhookAt(ctx, telegramAPIBase, token)
 }
 
-// dispatchTextPreview caps message text in dispatch logs so chatty media
-// captions or long DM threads don't bloat CloudWatch / drive up cost.
-const dispatchTextPreview = 64
+// deleteWebhookAt is the testable core; base lets tests point at an httptest
+// server instead of the live API.
+func deleteWebhookAt(ctx context.Context, base, token string) error {
+	ctx, cancel := context.WithTimeout(ctx, webhookDeleteTimeout)
+	defer cancel()
 
-// truncateRunes returns the longest prefix of s whose UTF-8 byte length is
-// <= maxBytes AND that ends on a rune boundary. Byte-slicing alone would
-// split a multi-byte rune (Vietnamese, emoji, CJK), producing invalid UTF-8
-// in the log line that downstream JSON encoders replace with U+FFFD.
-func truncateRunes(s string, maxBytes int) string {
-	if len(s) <= maxBytes {
-		return s
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/bot"+token+"/deleteWebhook", nil)
+	if err != nil {
+		return err
 	}
-	cut := maxBytes
-	for cut > 0 && !utf8.RuneStart(s[cut]) {
-		cut--
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
 	}
-	return s[:cut]
-}
+	defer func() { _ = resp.Body.Close() }()
 
-// logDispatch emits a single structured line per inbound update so the
-// CloudWatch trail has chat type + command text without resorting to
-// the library's pointer-printing debug mode. Cheap (no allocation when
-// the message is short) and fires once per webhook hit.
-func logDispatch(u *models.Update) {
-	if u == nil || u.Message == nil {
-		return
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return err
 	}
-	text := u.Message.Text
-	if text == "" {
-		text = u.Message.Caption
+
+	var r struct {
+		OK          bool   `json:"ok"`
+		Description string `json:"description"`
 	}
-	if len(text) > dispatchTextPreview {
-		text = truncateRunes(text, dispatchTextPreview) + "…"
+	if err := json.Unmarshal(body, &r); err != nil {
+		// Body is safe to log (no secret); never include the URL (carries the token).
+		return fmt.Errorf("decode deleteWebhook response (status %d, body %q): %w", resp.StatusCode, string(body), err)
 	}
-	log.Info("dispatch",
-		"update_id", u.ID,
-		"chat_id", u.Message.Chat.ID,
-		"chat_type", string(u.Message.Chat.Type),
-		"text", text,
-	)
+	if !r.OK {
+		return fmt.Errorf("deleteWebhook rejected (status %d): %s", resp.StatusCode, r.Description)
+	}
+	return nil
 }

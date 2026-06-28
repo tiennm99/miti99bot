@@ -10,13 +10,13 @@ import (
 
 	"github.com/tiennm99/miti99bot/internal/keylock"
 	"github.com/tiennm99/miti99bot/internal/modules/util/chathelper"
-	"github.com/tiennm99/miti99bot/internal/storage"
 )
 
 // state captures everything a wordle command needs at handler-time. Built
 // once in New and shared across all four handlers via closure.
 type state struct {
-	kv    storage.KVStore
+	games GameStore
+	stats StatsStore
 	words []string
 	set   map[string]struct{}
 	locks keylock.Map // per-subject mutex; serialises Get→mutate→Put
@@ -35,7 +35,7 @@ func rejectMessage(reason rejectReason) string {
 }
 
 // startFresh writes a brand-new round and returns it. Errors propagate to
-// the caller (not swallowed — a KV failure means subsequent ops will lie).
+// the caller (not swallowed — a store failure means subsequent ops will lie).
 func (s *state) startFresh(ctx context.Context, subject string) (*GameState, error) {
 	target, err := pickRandom(s.words, nil)
 	if err != nil {
@@ -48,14 +48,14 @@ func (s *state) startFresh(ctx context.Context, subject string) (*GameState, err
 		Giveup:    false,
 		StartedAt: chathelper.NowMillis(),
 	}
-	if err := saveGame(ctx, s.kv, subject, g); err != nil {
+	if err := saveGame(ctx, s.games, subject, g); err != nil {
 		return nil, err
 	}
 	return g, nil
 }
 
 func (s *state) getOrInit(ctx context.Context, subject string) (*GameState, error) {
-	g, err := loadGame(ctx, s.kv, subject)
+	g, err := loadGame(ctx, s.games, subject)
 	if err != nil {
 		return nil, err
 	}
@@ -112,21 +112,21 @@ func (s *state) handleWordle(ctx context.Context, b *bot.Bot, update *models.Upd
 	if won {
 		g.Solved = true
 	}
-	if err := saveGame(ctx, s.kv, subject, g); err != nil {
+	if err := saveGame(ctx, s.games, subject, g); err != nil {
 		return err
 	}
 
 	rendered := renderGuess(v.Word, results)
 	switch {
 	case won:
-		stats, err := recordResult(ctx, s.kv, subject, true, chathelper.NowMillis())
+		st, err := recordResult(ctx, s.stats, subject, true, chathelper.NowMillis())
 		if err != nil {
 			return err
 		}
 		return chathelper.Reply(ctx, b, msg, fmt.Sprintf("%s\n\n🎉 Solved in %d/%d! Streak: %d. /wordle_new for another.",
-			rendered, len(g.Guesses), MaxGuesses, stats.Streak))
+			rendered, len(g.Guesses), MaxGuesses, st.Streak))
 	case len(g.Guesses) >= MaxGuesses:
-		if _, err := recordResult(ctx, s.kv, subject, false, chathelper.NowMillis()); err != nil {
+		if _, err := recordResult(ctx, s.stats, subject, false, chathelper.NowMillis()); err != nil {
 			return err
 		}
 		return chathelper.Reply(ctx, b, msg, fmt.Sprintf("%s\n\n❌ Out of guesses. Answer was %s. /wordle_new to retry.",
@@ -150,12 +150,12 @@ func (s *state) handleNew(ctx context.Context, b *bot.Bot, update *models.Update
 	defer s.locks.Acquire(subject)()
 
 	prelude := ""
-	prior, err := loadGame(ctx, s.kv, subject)
+	prior, err := loadGame(ctx, s.games, subject)
 	if err != nil {
 		return err
 	}
 	if prior != nil && !isFinished(prior) {
-		if _, err := recordResult(ctx, s.kv, subject, false, chathelper.NowMillis()); err != nil {
+		if _, err := recordResult(ctx, s.stats, subject, false, chathelper.NowMillis()); err != nil {
 			return err
 		}
 		prelude = fmt.Sprintf("🏳️ Previous round abandoned (auto-giveup). Answer was %s.\n\n",
@@ -191,10 +191,10 @@ func (s *state) handleGiveup(ctx context.Context, b *bot.Bot, update *models.Upd
 		return chathelper.Reply(ctx, b, msg, fmt.Sprintf("Already gave up — %s.", strings.ToUpper(g.Target)))
 	}
 	g.Giveup = true
-	if err := saveGame(ctx, s.kv, subject, g); err != nil {
+	if err := saveGame(ctx, s.games, subject, g); err != nil {
 		return err
 	}
-	if _, err := recordResult(ctx, s.kv, subject, false, chathelper.NowMillis()); err != nil {
+	if _, err := recordResult(ctx, s.stats, subject, false, chathelper.NowMillis()); err != nil {
 		return err
 	}
 	return chathelper.Reply(ctx, b, msg, fmt.Sprintf("🏳️ Answer was %s. /wordle_new for another.", strings.ToUpper(g.Target)))
@@ -210,7 +210,7 @@ func (s *state) handleStats(ctx context.Context, b *bot.Bot, update *models.Upda
 	if subject == "" {
 		return chathelper.Reply(ctx, b, msg, "Cannot identify chat.")
 	}
-	stats, err := loadStats(ctx, s.kv, subject)
+	st, err := loadStats(ctx, s.stats, subject)
 	if err != nil {
 		return err
 	}
@@ -220,6 +220,6 @@ func (s *state) handleStats(ctx context.Context, b *bot.Bot, update *models.Upda
 	}
 	return chathelper.Reply(ctx, b, msg, fmt.Sprintf(
 		"📊 Wordle %s stats\nPlayed: %d\nWins: %d (%d%%)\nCurrent streak: %d\nBest streak: %d",
-		scope, stats.Played, stats.Wins, chathelper.WinRate(stats.Wins, stats.Played), stats.Streak, stats.BestStreak,
+		scope, st.Played, st.Wins, chathelper.WinRate(st.Wins, st.Played), st.Streak, st.BestStreak,
 	))
 }

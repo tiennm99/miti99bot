@@ -1,0 +1,44 @@
+services:
+  bot:
+    build:
+      context: .
+    # Or pin a prebuilt image instead of building:
+    #   image: ghcr.io/tiennm99/miti99bot:latest
+    restart: unless-stopped
+    environment:
+      # --- Required ---
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      MONGO_URL: ${MONGO_URL}              # Atlas SRV string incl. credentials — SECRET
+      MONGO_DATABASE: ${MONGO_DATABASE}
+      # --- Operational ---
+      MODULES: ${MODULES}                  # CSV; empty = all modules
+      OWNER_ID: ${OWNER_ID}                # Telegram user id for owner-only commands
+      ADMIN_IDS: ${ADMIN_IDS}              # CSV of admin Telegram user ids
+      # --- Optional ---
+      GEMINI_API_KEY: ${GEMINI_API_KEY}    # only the twentyq module needs it
+      # SOURCE_COMMIT (commit SHA, read at startup for the deploynotify owner DM).
+      # For Docker Compose, Coolify passes predefined vars via --env-file for
+      # interpolation ONLY — the var reaches the container only if referenced
+      # here (per Coolify docs). The :- default keeps local `docker compose up`
+      # (where SOURCE_COMMIT is unset) quiet; on Coolify the real value wins, so
+      # deploynotify reports "unknown" only outside Coolify.
+      SOURCE_COMMIT: ${SOURCE_COMMIT:-}
+      # Storage auto-selects mongodb because MONGO_URL is set — no KV_PROVIDER.
+      # The in-process cron scheduler runs by default — no CRON_MODE.
+      # PORT defaults to 8080 (internal health server) — omit unless overriding.
+      # Long polling = no TELEGRAM_WEBHOOK_SECRET, no /webhook, no public domain.
+      # Cron is in-process only — there is no /cron HTTP route and no secret.
+      # Do NOT set any *_PARAMETER_NAME vars (those force an SSM/AWS lookup that
+      # fails with no AWS creds and bricks startup). See .env.example.
+      # No stock/coin/gold *_API_URL overrides — modules use their coded default
+      # providers (stock: SSI/VCI/KBS; coin: Binance→Coinbase→CoinGecko;
+      # gold: VNAppMob→spot). GOLD_VNAPP_API_KEY auto-fetches + caches to Mongo.
+    # Long polling is outbound-only: nothing inbound to route, so no published
+    # ports and no public domain. `expose` keeps :8080 reachable inside the
+    # Coolify network for the container health monitor against GET / only.
+    expose:
+      - "8080"
+    # No compose healthcheck: distroless has no shell/curl and cmd/server has no
+    # -healthcheck flag. Configure Coolify's HTTP monitor against GET / instead
+    # (returns text/plain "miti99bot ok"). Note: a plain / check does not verify
+    # Mongo connectivity — see docs/deploy-coolify-selfhosted.md.

@@ -12,7 +12,6 @@ import (
 
 	"github.com/tiennm99/miti99bot/internal/keylock"
 	"github.com/tiennm99/miti99bot/internal/modules/util/chathelper"
-	"github.com/tiennm99/miti99bot/internal/storage"
 )
 
 const newRoundHint = "🆕 Send <code>/loldle</code> or <code>/loldle &lt;champion&gt;</code> to start a new round."
@@ -20,7 +19,9 @@ const newRoundHint = "🆕 Send <code>/loldle</code> or <code>/loldle &lt;champi
 // state captures everything a loldle handler needs at runtime. Built once
 // per Factory call and shared across the four command closures.
 type state struct {
-	kv        storage.KVStore
+	games     GameStore
+	stats     StatsStore
+	cfg       ConfigStore
 	champions []Champion
 	locks     keylock.Map // serialises Get→mutate→Put per subject
 }
@@ -63,7 +64,7 @@ func (s *state) startFreshGame(ctx context.Context, subject string) (*gameState,
 		Guesses:   []string{},
 		StartedAt: nil,
 	}
-	if err := saveGame(ctx, s.kv, subject, g); err != nil {
+	if err := saveGame(ctx, s.games, subject, g); err != nil {
 		return nil, err
 	}
 	return g, nil
@@ -72,7 +73,7 @@ func (s *state) startFreshGame(ctx context.Context, subject string) (*gameState,
 // getOrInitGame loads the active round; if absent (or the saved round has
 // already exhausted its budget — defensive), starts a fresh one.
 func (s *state) getOrInitGame(ctx context.Context, subject string, maxGuesses int) (*gameState, error) {
-	existing, err := loadGame(ctx, s.kv, subject)
+	existing, err := loadGame(ctx, s.games, subject)
 	if err != nil {
 		return nil, err
 	}
@@ -113,7 +114,7 @@ func (s *state) handleLoldle(ctx context.Context, b *bot.Bot, update *models.Upd
 	defer s.locks.Acquire(subject)()
 	arg := chathelper.ArgAfterCommand(msg.Text)
 
-	maxGuesses, err := getMaxGuesses(ctx, s.kv, subject)
+	maxGuesses, err := getMaxGuesses(ctx, s.cfg, subject)
 	if err != nil {
 		return err
 	}
@@ -146,7 +147,7 @@ func (s *state) handleLoldle(ctx context.Context, b *bot.Bot, update *models.Upd
 	if target == nil {
 		// champions.json was refreshed and the target is gone. Drop the
 		// round so the next /loldle starts cleanly.
-		if err := clearGame(ctx, s.kv, subject); err != nil {
+		if err := clearGame(ctx, s.games, subject); err != nil {
 			return err
 		}
 		return chathelper.ReplyHTML(ctx, b, msg,
@@ -167,11 +168,11 @@ func (s *state) handleLoldle(ctx context.Context, b *bot.Bot, update *models.Upd
 
 	switch {
 	case won:
-		st, err := recordResult(ctx, s.kv, subject, true)
+		st, err := recordResult(ctx, s.stats, subject, true)
 		if err != nil {
 			return err
 		}
-		if err := clearGame(ctx, s.kv, subject); err != nil {
+		if err := clearGame(ctx, s.games, subject); err != nil {
 			return err
 		}
 		trySendSticker(ctx, b, msg, winStickers)
@@ -181,10 +182,10 @@ func (s *state) handleLoldle(ctx context.Context, b *bot.Bot, update *models.Upd
 			rendered, flavor, champ, elapsed, st.Streak, len(game.Guesses), maxGuesses, newRoundHint))
 
 	case len(game.Guesses) >= maxGuesses:
-		if _, err := recordResult(ctx, s.kv, subject, false); err != nil {
+		if _, err := recordResult(ctx, s.stats, subject, false); err != nil {
 			return err
 		}
-		if err := clearGame(ctx, s.kv, subject); err != nil {
+		if err := clearGame(ctx, s.games, subject); err != nil {
 			return err
 		}
 		trySendSticker(ctx, b, msg, loseStickers)
@@ -192,7 +193,7 @@ func (s *state) handleLoldle(ctx context.Context, b *bot.Bot, update *models.Upd
 			"%s\n\n❌ Out of guesses. Answer was %s.\n%s", rendered, champ, newRoundHint))
 
 	default:
-		if err := saveGame(ctx, s.kv, subject, game); err != nil {
+		if err := saveGame(ctx, s.games, subject, game); err != nil {
 			return err
 		}
 		return chathelper.ReplyHTML(ctx, b, msg, fmt.Sprintf(
@@ -212,18 +213,18 @@ func (s *state) handleGiveup(ctx context.Context, b *bot.Bot, update *models.Upd
 	}
 	defer s.locks.Acquire(subject)()
 
-	existing, err := loadGame(ctx, s.kv, subject)
+	existing, err := loadGame(ctx, s.games, subject)
 	if err != nil {
 		return err
 	}
 	if existing == nil {
 		return chathelper.ReplyHTML(ctx, b, msg, "No active round. "+newRoundHint)
 	}
-	if _, err := recordResult(ctx, s.kv, subject, false); err != nil {
+	if _, err := recordResult(ctx, s.stats, subject, false); err != nil {
 		return err
 	}
 	target := s.findByName(existing.Target)
-	if err := clearGame(ctx, s.kv, subject); err != nil {
+	if err := clearGame(ctx, s.games, subject); err != nil {
 		return err
 	}
 	trySendSticker(ctx, b, msg, giveupStickers)
@@ -245,7 +246,7 @@ func (s *state) handleStats(ctx context.Context, b *bot.Bot, update *models.Upda
 	if subject == "" {
 		return chathelper.Reply(ctx, b, msg, "Cannot identify chat.")
 	}
-	st, err := loadStats(ctx, s.kv, subject)
+	st, err := loadStats(ctx, s.stats, subject)
 	if err != nil {
 		return err
 	}
@@ -274,7 +275,7 @@ func (s *state) handleSetMax(ctx context.Context, b *bot.Bot, update *models.Upd
 	if err != nil || n < 1 || n > MaxGuessesCap {
 		return chathelper.Reply(ctx, b, msg, fmt.Sprintf("Usage: /loldle_setmax <1-%d>", MaxGuessesCap))
 	}
-	if err := setMaxGuesses(ctx, s.kv, subject, n); err != nil {
+	if err := setMaxGuesses(ctx, s.cfg, subject, n); err != nil {
 		return err
 	}
 	return chathelper.Reply(ctx, b, msg, fmt.Sprintf("✅ Loldle max guesses set to %d (applies to the next round).", n))

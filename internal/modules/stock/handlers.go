@@ -13,16 +13,14 @@ import (
 	"github.com/tiennm99/miti99bot/internal/keylock"
 	"github.com/tiennm99/miti99bot/internal/log"
 	"github.com/tiennm99/miti99bot/internal/modules/util/chathelper"
-	"github.com/tiennm99/miti99bot/internal/storage"
 )
 
-// state is the per-module runtime. KV is module-scoped (the framework
+// state is the per-module runtime. store is module-scoped (the framework
 // prefixes/partitions). PriceClient is reused across calls; nowFn allows
 // tests to inject a deterministic clock for portfolio CreatedAt.
 type state struct {
-	kv                storage.KVStore
+	store             Store
 	prices            *PriceClient
-	incomeEvents      *IncomeEventClient
 	locks             keylock.Map
 	nowFn             func() time.Time
 	comingSoonMessage string // exposed for tests / future i18n
@@ -36,11 +34,10 @@ func (s *state) now() time.Time {
 }
 
 // newState builds the default state used by the module factory.
-func newState(kv storage.KVStore) *state {
+func newState(store Store) *state {
 	return &state{
-		kv:                kv,
+		store:             store,
 		prices:            &PriceClient{},
-		incomeEvents:      NewIncomeEventClientFromEnv(),
 		comingSoonMessage: "Crypto, gold & currency exchange coming soon!",
 	}
 }
@@ -89,14 +86,14 @@ func (s *state) handleTopup(ctx context.Context, b *bot.Bot, update *models.Upda
 
 	defer s.locks.Acquire(strconv.FormatInt(userID, 10))()
 
-	p, err := LoadPortfolio(ctx, s.kv, userID, s.now().UnixMilli())
+	p, err := LoadPortfolio(ctx, s.store, userID, s.now().UnixMilli())
 	if err != nil {
 		log.Error("stock_load_portfolio", "user", userID, "err", err)
 		return chathelper.Reply(ctx, b, update.Message, "Could not load portfolio. Try again later.")
 	}
 	p.AddCurrency("VND", amount)
 	p.Meta.Invested += amount
-	if err := SavePortfolio(ctx, s.kv, userID, p); err != nil {
+	if err := SavePortfolio(ctx, s.store, userID, p); err != nil {
 		log.Error("stock_save_portfolio", "user", userID, "err", err)
 		return chathelper.Reply(ctx, b, update.Message, "Could not save portfolio. Try again later.")
 	}
@@ -140,7 +137,7 @@ func (s *state) handleBuy(ctx context.Context, b *bot.Bot, update *models.Update
 
 	defer s.locks.Acquire(strconv.FormatInt(userID, 10))()
 
-	p, err := LoadPortfolio(ctx, s.kv, userID, s.now().UnixMilli())
+	p, err := LoadPortfolio(ctx, s.store, userID, s.now().UnixMilli())
 	if err != nil {
 		log.Error("stock_load_portfolio", "user", userID, "err", err)
 		return chathelper.Reply(ctx, b, update.Message, "Could not load portfolio. Try again later.")
@@ -151,7 +148,7 @@ func (s *state) handleBuy(ctx context.Context, b *bot.Bot, update *models.Update
 			"Insufficient VND. Need "+FormatVND(cost)+", have "+FormatVND(balance)+".")
 	}
 	p.AddAsset(symbol, qty)
-	if err := SavePortfolio(ctx, s.kv, userID, p); err != nil {
+	if err := SavePortfolio(ctx, s.store, userID, p); err != nil {
 		log.Error("stock_save_portfolio", "user", userID, "err", err)
 		return chathelper.Reply(ctx, b, update.Message, "Could not save portfolio. Try again later.")
 	}
@@ -198,7 +195,7 @@ func (s *state) handleSell(ctx context.Context, b *bot.Bot, update *models.Updat
 
 	defer s.locks.Acquire(strconv.FormatInt(userID, 10))()
 
-	p, err := LoadPortfolio(ctx, s.kv, userID, s.now().UnixMilli())
+	p, err := LoadPortfolio(ctx, s.store, userID, s.now().UnixMilli())
 	if err != nil {
 		log.Error("stock_load_portfolio", "user", userID, "err", err)
 		return chathelper.Reply(ctx, b, update.Message, "Could not load portfolio. Try again later.")
@@ -210,7 +207,7 @@ func (s *state) handleSell(ctx context.Context, b *bot.Bot, update *models.Updat
 	}
 	revenue := float64(qty) * price
 	p.AddCurrency("VND", revenue)
-	if err := SavePortfolio(ctx, s.kv, userID, p); err != nil {
+	if err := SavePortfolio(ctx, s.store, userID, p); err != nil {
 		log.Error("stock_save_portfolio", "user", userID, "err", err)
 		return chathelper.Reply(ctx, b, update.Message, "Could not save portfolio. Try again later.")
 	}
@@ -247,7 +244,7 @@ func (s *state) handleIncomeStock(ctx context.Context, b *bot.Bot, update *model
 
 	defer s.locks.Acquire(strconv.FormatInt(userID, 10))()
 
-	p, err := LoadPortfolio(ctx, s.kv, userID, s.now().UnixMilli())
+	p, err := LoadPortfolio(ctx, s.store, userID, s.now().UnixMilli())
 	if err != nil {
 		log.Error("stock_load_portfolio", "user", userID, "err", err)
 		return chathelper.Reply(ctx, b, update.Message, "Could not load portfolio. Try again later.")
@@ -258,7 +255,7 @@ func (s *state) handleIncomeStock(ctx context.Context, b *bot.Bot, update *model
 			"You don't hold any "+symbol+" to receive a stock dividend.")
 	}
 	p.AddAsset(symbol, qty)
-	if err := SavePortfolio(ctx, s.kv, userID, p); err != nil {
+	if err := SavePortfolio(ctx, s.store, userID, p); err != nil {
 		log.Error("stock_save_portfolio", "user", userID, "err", err)
 		return chathelper.Reply(ctx, b, update.Message, "Could not save portfolio. Try again later.")
 	}
@@ -294,7 +291,7 @@ func (s *state) handleIncomeVND(ctx context.Context, b *bot.Bot, update *models.
 
 	defer s.locks.Acquire(strconv.FormatInt(userID, 10))()
 
-	p, err := LoadPortfolio(ctx, s.kv, userID, s.now().UnixMilli())
+	p, err := LoadPortfolio(ctx, s.store, userID, s.now().UnixMilli())
 	if err != nil {
 		log.Error("stock_load_portfolio", "user", userID, "err", err)
 		return chathelper.Reply(ctx, b, update.Message, "Could not load portfolio. Try again later.")
@@ -306,7 +303,7 @@ func (s *state) handleIncomeVND(ctx context.Context, b *bot.Bot, update *models.
 	}
 	total := amountPerShare * float64(held)
 	p.AddCurrency("VND", total)
-	if err := SavePortfolio(ctx, s.kv, userID, p); err != nil {
+	if err := SavePortfolio(ctx, s.store, userID, p); err != nil {
 		log.Error("stock_save_portfolio", "user", userID, "err", err)
 		return chathelper.Reply(ctx, b, update.Message, "Could not save portfolio. Try again later.")
 	}
@@ -332,7 +329,7 @@ func (s *state) handleStats(ctx context.Context, b *bot.Bot, update *models.Upda
 		return chathelper.Reply(ctx, b, update.Message,
 			"Cannot identify user — /stock_stats needs a sender.")
 	}
-	p, err := LoadPortfolio(ctx, s.kv, userID, s.now().UnixMilli())
+	p, err := LoadPortfolio(ctx, s.store, userID, s.now().UnixMilli())
 	if err != nil {
 		log.Error("stock_load_portfolio", "user", userID, "err", err)
 		return chathelper.Reply(ctx, b, update.Message, "Could not load portfolio. Try again later.")

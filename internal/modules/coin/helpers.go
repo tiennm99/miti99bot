@@ -14,7 +14,6 @@ import (
 	"github.com/tiennm99/miti99bot/internal/keylock"
 	"github.com/tiennm99/miti99bot/internal/log"
 	"github.com/tiennm99/miti99bot/internal/modules/util/chathelper"
-	"github.com/tiennm99/miti99bot/internal/storage"
 )
 
 type priceFetcher interface {
@@ -22,14 +21,14 @@ type priceFetcher interface {
 }
 
 type state struct {
-	kv     storage.KVStore
+	store  Store
 	prices priceFetcher
 	locks  keylock.Map
 	nowFn  func() time.Time
 }
 
-func newState(kv storage.KVStore) *state {
-	return &state{kv: kv, prices: NewPriceClientFromEnv()}
+func newState(store Store) *state {
+	return &state{store: store, prices: NewPriceClientFromEnv()}
 }
 
 func (s *state) now() time.Time {

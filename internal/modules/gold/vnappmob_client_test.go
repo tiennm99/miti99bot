@@ -16,11 +16,11 @@ import (
 	"github.com/tiennm99/miti99bot/internal/storage"
 )
 
-func newTestVNAppMobClient(srv *httptest.Server, kv storage.KVStore) *VNAppMobClient {
+func newTestVNAppMobClient(srv *httptest.Server, coll storage.Collection) *VNAppMobClient {
 	return &VNAppMobClient{
 		HTTP:    srv.Client(),
 		BaseURL: srv.URL,
-		KV:      kv,
+		cache:   storage.Typed[apiKeyCache](coll),
 		nowFn:   func() time.Time { return time.Unix(1000, 0) },
 	}
 }
@@ -31,6 +31,10 @@ func makeJWT(exp int64) string {
 	h := base64.RawURLEncoding.EncodeToString(header)
 	p := base64.RawURLEncoding.EncodeToString(payload)
 	return h + "." + p + ".dummy-signature"
+}
+
+func newTestColl() storage.Collection {
+	return storage.NewMemoryProvider().Collection("gold")
 }
 
 func TestJWTExp(t *testing.T) {
@@ -114,8 +118,7 @@ func TestRefreshKey(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	kv := storage.NewMemoryKVStore()
-	c := newTestVNAppMobClient(srv, kv)
+	c := newTestVNAppMobClient(srv, newTestColl())
 
 	key, err := c.getKey(context.Background())
 	if err != nil {
@@ -152,7 +155,7 @@ func TestRefreshKey_ObjectWrapper(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := newTestVNAppMobClient(srv, storage.NewMemoryKVStore())
+	c := newTestVNAppMobClient(srv, newTestColl())
 	key, err := c.getKey(context.Background())
 	if err != nil {
 		t.Fatalf("getKey: %v", err)
@@ -170,7 +173,7 @@ func TestRefreshKey_QuotedString(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := newTestVNAppMobClient(srv, storage.NewMemoryKVStore())
+	c := newTestVNAppMobClient(srv, newTestColl())
 	key, err := c.getKey(context.Background())
 	if err != nil {
 		t.Fatalf("getKey: %v", err)
@@ -198,8 +201,7 @@ func TestFetchSJCPrice(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	kv := storage.NewMemoryKVStore()
-	c := newTestVNAppMobClient(srv, kv)
+	c := newTestVNAppMobClient(srv, newTestColl())
 	buy, sell, err := c.FetchSJCPrice(context.Background())
 	if err != nil {
 		t.Fatalf("FetchSJCPrice: %v", err)
@@ -232,7 +234,7 @@ func TestFetchSJCPrice_401Or403Refreshes(t *testing.T) {
 			}))
 			defer srv.Close()
 
-			c := newTestVNAppMobClient(srv, storage.NewMemoryKVStore())
+			c := newTestVNAppMobClient(srv, newTestColl())
 			buy, sell, err := c.FetchSJCPrice(context.Background())
 			if err != nil {
 				t.Fatalf("FetchSJCPrice: %v", err)
@@ -265,8 +267,7 @@ func TestFetchSJCPrice_FallbackError(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	kv := storage.NewMemoryKVStore()
-	c := newTestVNAppMobClient(srv, kv)
+	c := newTestVNAppMobClient(srv, newTestColl())
 	_, _, err := c.FetchSJCPrice(context.Background())
 	if !errors.Is(err, ErrNoGoldPrice) {
 		t.Fatalf("got %v, want ErrNoGoldPrice", err)
@@ -294,7 +295,7 @@ func TestFetchSJCPrice_InvalidValues(t *testing.T) {
 				}
 			}))
 			defer srv.Close()
-			c := newTestVNAppMobClient(srv, storage.NewMemoryKVStore())
+			c := newTestVNAppMobClient(srv, newTestColl())
 			_, _, err := c.FetchSJCPrice(context.Background())
 			if err == nil {
 				t.Fatal("expected error for invalid values")

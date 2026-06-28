@@ -12,6 +12,7 @@ import (
 
 	"github.com/tiennm99/miti99bot/internal/log"
 	"github.com/tiennm99/miti99bot/internal/modules"
+	"github.com/tiennm99/miti99bot/internal/storage"
 )
 
 // terminalKind classifies a permanent send failure by blast radius.
@@ -76,14 +77,23 @@ func classifyTerminal(err error) terminalKind {
 	return terminalNone
 }
 
-// dailyPushCronName is the cron route segment + EventBridge schedule key.
+// dailyPushCronName is the cron route segment + in-process scheduler key.
 // Must match the regex in internal/server/router.go (^[a-z0-9_]{1,32}$).
 const dailyPushCronName = "lolschedule_daily_push"
 
-// dailyPushSchedule is documentation only — the real fire time lives in
-// EventBridge Scheduler. Cron expression is UTC;
-// 01:00 UTC == 08:00 ICT.
+// dailyPushSchedule drives the in-process scheduler (internal/cron) on
+// self-host; it was also the documented EventBridge time on AWS. Cron
+// expression is UTC; 01:00 UTC == 08:00 ICT.
 const dailyPushSchedule = "0 1 * * *"
+
+// lastPushDateKey records the UTC date (YYYY-MM-DD) of the most recent
+// completed daily push. The handler claims this key before fanning out and
+// no-ops if it is already today's date, making the push idempotent per UTC
+// date. This defends against every double-fire window — cutover overlap
+// (EventBridge still live while the container's scheduler runs), rolling
+// deploys that briefly run two containers, and operator misconfiguration —
+// none of which a single trigger source can prevent.
+const lastPushDateKey = "daily_push:last_date"
 
 // telegramRateLimitThreshold is the subscriber count above which we throttle
 // sends to stay under Telegram's global 30 msg/sec cap. Below it we send hot.
@@ -99,6 +109,15 @@ const telegramRateLimitDelay = 50 * time.Millisecond
 type messageSender interface {
 	SendMessage(ctx context.Context, params *bot.SendMessageParams) (*models.Message, error)
 }
+
+// lastPushDoc wraps the last-push date string so it can be stored as a named
+// root field in a Mongo document (a bare scalar cannot be a root doc).
+type lastPushDoc struct {
+	Date string `json:"date" bson:"date"`
+}
+
+// PushDateStore is the typed store for last-push date documents.
+type PushDateStore = storage.DocStore[lastPushDoc]
 
 // dailyPushCron returns the cron registration. Schedule is documentation only.
 func (s *state) dailyPushCron() modules.Cron {
@@ -119,6 +138,35 @@ func (s *state) dailyPushHandler(ctx context.Context, deps modules.Deps) error {
 	return runDailyPush(ctx, s, deps.Bot)
 }
 
+// claimDailyPush atomically records that today's UTC push is happening and
+// reports whether THIS caller won the claim. It is the idempotency primitive
+// for the daily push: a winner proceeds to fan out; a loser (another trigger
+// already claimed today) returns false and sends nothing.
+//
+// The claim uses version-based optimistic write (PutVersioned) on
+// lastPushDateKey so two simultaneous triggers cannot both win.
+func claimDailyPush(ctx context.Context, store PushDateStore, today string) (bool, error) {
+	current, version, err := store.Get(ctx, lastPushDateKey)
+	switch {
+	case err == nil:
+		if current.Date == today {
+			return false, nil // already pushed today
+		}
+	case errors.Is(err, storage.ErrNotFound):
+		version = 0 // never pushed
+	default:
+		return false, err
+	}
+
+	if err := store.PutVersioned(ctx, lastPushDateKey, version, lastPushDoc{Date: today}); err != nil {
+		if errors.Is(err, storage.ErrConflict) {
+			return false, nil // another trigger claimed today first
+		}
+		return false, err
+	}
+	return true, nil
+}
+
 // runDailyPush is the testable core: fetch subscribers, fetch today's matches,
 // fan out to every subscriber. Per-chat send failures are logged but do not
 // abort the batch — one bad chat does not deny the rest.
@@ -126,7 +174,7 @@ func (s *state) dailyPushHandler(ctx context.Context, deps modules.Deps) error {
 // MessageThreadID is forwarded on every send so subscribers in a forum-topic
 // receive the digest in that topic, not in General.
 func runDailyPush(ctx context.Context, s *state, sender messageSender) error {
-	subs, err := listSubscribers(ctx, s.kv)
+	subs, err := listSubscribers(ctx, s.subscribers)
 	if err != nil {
 		return fmt.Errorf("lolschedule daily push: list subscribers: %w", err)
 	}
@@ -137,12 +185,26 @@ func runDailyPush(ctx context.Context, s *state, sender messageSender) error {
 
 	from := ictDayStartOf(s.now())
 	to := addDays(from, 1)
-	events, err := s.client.GetEventsCached(ctx, s.kv, from, to)
+	events, err := s.client.GetEventsCached(ctx, s.cache, from, to)
 	if err != nil {
 		return fmt.Errorf("lolschedule daily push: fetch matches: %w", err)
 	}
 	filtered := FilterMajor(events)
 	text := RenderToday(filtered, from)
+
+	// Idempotency gate: claim today's push before sending. A lost claim means
+	// another trigger already pushed (or is pushing) for this UTC date, so we
+	// send nothing. Placed after the fetch so a transient fetch failure does
+	// not consume the day's claim.
+	today := s.now().UTC().Format("2006-01-02")
+	won, err := claimDailyPush(ctx, s.pushDate, today)
+	if err != nil {
+		return fmt.Errorf("lolschedule daily push: claim date: %w", err)
+	}
+	if !won {
+		log.Info("lolschedule daily push: already pushed today, skipping", "date", today)
+		return nil
+	}
 
 	throttle := len(subs) > telegramRateLimitThreshold
 	var sent, failed int
@@ -202,7 +264,7 @@ func pruneDeadSubscribers(ctx context.Context, s *state, chatWide map[int64]stru
 	defer s.subscribersMu.Unlock()
 	removed := 0
 	for chatID := range chatWide {
-		n, err := removeAllForChat(ctx, s.kv, chatID)
+		n, err := removeAllForChat(ctx, s.subscribers, chatID)
 		if err != nil {
 			log.Warn("lolschedule prune dead chat failed", "chat", chatID, "err", err)
 			continue
@@ -215,7 +277,7 @@ func pruneDeadSubscribers(ctx context.Context, s *state, chatWide map[int64]stru
 		if _, ok := chatWide[sub.ChatID]; ok {
 			continue
 		}
-		ok, err := removeSubscriber(ctx, s.kv, sub.ChatID, sub.ThreadID)
+		ok, err := removeSubscriber(ctx, s.subscribers, sub.ChatID, sub.ThreadID)
 		if err != nil {
 			log.Warn("lolschedule prune dead topic failed",
 				"chat", sub.ChatID, "thread", sub.ThreadID, "err", err)

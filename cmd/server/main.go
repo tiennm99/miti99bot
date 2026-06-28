@@ -16,6 +16,7 @@ import (
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	"github.com/tiennm99/miti99bot/internal/ai"
+	"github.com/tiennm99/miti99bot/internal/cron"
 	"github.com/tiennm99/miti99bot/internal/deploynotify"
 	"github.com/tiennm99/miti99bot/internal/log"
 	"github.com/tiennm99/miti99bot/internal/metrics"
@@ -35,10 +36,25 @@ import (
 	"github.com/tiennm99/miti99bot/internal/telegram"
 )
 
-// gitSHA is populated at build time via `-ldflags "-X main.gitSHA=<sha>"`
-// (see Makefile). Empty value means the binary was built without that flag —
-// deploynotify treats it as a signal to stay silent.
+// gitSHA is the local-build fallback, populated via `-ldflags "-X
+// main.gitSHA=<sha>"` (see Makefile). On Coolify the commit comes from the
+// SOURCE_COMMIT runtime env instead (resolveCommitSHA prefers it). Empty from
+// both sources means deploynotify stays silent.
 var gitSHA string
+
+// resolveCommitSHA returns the commit identifier for the deploy notification.
+// Coolify injects SOURCE_COMMIT into the container environment at runtime, so
+// prefer it; fall back to the ldflags-baked gitSHA for local builds; and when
+// neither is set, report "unknown" so the owner still gets the startup DM.
+func resolveCommitSHA(envSourceCommit string) string {
+	if s := strings.TrimSpace(envSourceCommit); s != "" {
+		return s
+	}
+	if gitSHA != "" {
+		return gitSHA
+	}
+	return "unknown"
+}
 
 // factories is the static module catalog. Adding a new module is a one-line
 // change here. Lives in main rather than the modules package to avoid an
@@ -58,14 +74,10 @@ func factories() map[string]modules.Factory {
 	}
 }
 
-// firestoreInitTimeout caps Firestore client construction at startup. Cloud
-// Run cold start budget is 500ms target; firestore.NewClient is normally fast
-// but network blips can make it hang. Fail fast and let Lambda restart us.
-const firestoreInitTimeout = 10 * time.Second
-
-// dynamodbInitTimeout caps DynamoDB client construction at startup. Lambda
-// has a 10s init phase; we want to leave headroom for module wiring.
-const dynamodbInitTimeout = 5 * time.Second
+// mongodbInitTimeout caps MongoDB connect+ping at startup (and Disconnect at
+// shutdown). Atlas SRV DNS + TLS handshake can take a couple seconds on a cold
+// container; 10s leaves headroom without hiding a wedged cluster.
+const mongodbInitTimeout = 10 * time.Second
 
 // ssmInitTimeout caps cold-start secret resolution. Secrets are fetched once
 // at startup from Parameter Store when *_PARAMETER_NAME env vars are set.
@@ -82,12 +94,6 @@ func main() {
 	if cfg.TelegramBotToken == "" {
 		log.Fatal("missing required env", "key", "TELEGRAM_BOT_TOKEN")
 	}
-	if cfg.WebhookSecret == "" {
-		log.Fatal("missing required env", "key", "TELEGRAM_WEBHOOK_SECRET",
-			"why", "non-empty secret is the only auth on /webhook")
-	}
-	exportOptionalEnv("STOCK_INCOME_EVENTS_API_URL", cfg.StockIncomeEventsAPIURL)
-	exportOptionalEnv("STOCK_INCOME_EVENTS_API_TOKEN", cfg.StockIncomeEventsAPIToken)
 	exportOptionalEnv("GOLD_PRICE_API_URL", cfg.GoldPriceAPIURL)
 	exportOptionalEnv("GOLD_FX_API_URL", cfg.GoldFXAPIURL)
 	exportOptionalEnv("GOLD_VNAPP_API_URL", cfg.GoldVNAppAPIURL)
@@ -138,38 +144,46 @@ func main() {
 		"commands", len(reg.AllCommands),
 		"crons", len(reg.Crons()))
 
-	if cfg.BotOwnerID == 0 {
-		log.Warn("BOT_OWNER_ID unset; all Private + Protected commands will be denied")
+	// In-process cron scheduler. Replaces EventBridge Scheduler off AWS; runs
+	// unconditionally so the long-lived container fires module crons (e.g. the
+	// lolschedule daily push) on their Schedule. Cutover safety comes from
+	// ordering + the per-date idempotency guard, not from a gate.
+	stopCron, err := cron.Run(rootCtx, reg)
+	if err != nil {
+		log.Fatal("cron scheduler init failed", "err", err)
 	}
-	if cfg.CronSecret == "" {
-		log.Warn("CRON_SHARED_SECRET unset; /cron/{name} disabled (404 to all)")
+	defer stopCron()
+
+	if cfg.BotOwnerID == 0 {
+		log.Warn("OWNER_ID unset; all Private + Protected commands will be denied")
+	}
+
+	// Clear any webhook left over from the AWS deployment at startup, before the
+	// owner DM and before polling. getUpdates (long polling, below) returns HTTP
+	// 409 while a webhook is set, so a stuck webhook silently breaks the bot.
+	// Best-effort, one shot: a real failure here is logged, not retried.
+	if err := telegram.DeleteWebhook(rootCtx, cfg.TelegramBotToken); err != nil {
+		log.Warn("deleteWebhook failed; getUpdates may 409 if a webhook is set", "err", err)
+	} else {
+		log.Info("webhook cleared")
 	}
 
 	deploynotify.Run(rootCtx, deploynotify.Config{
 		Bot:     b,
-		KV:      provider.For("deploynotify"),
 		OwnerID: cfg.BotOwnerID,
-		GitSHA:  gitSHA,
+		GitSHA:  resolveCommitSHA(cfg.SourceCommit),
 	})
 
-	handler := server.New(server.Config{
-		Bot:           b,
-		Registry:      reg,
-		WebhookSecret: cfg.WebhookSecret,
-		CronSecret:    cfg.CronSecret,
-	})
+	handler := server.New()
 
 	srv := &http.Server{
 		Addr:              ":" + cfg.Port,
 		Handler:           handler,
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       30 * time.Second,
-		// 75s = cron handler cap (60s, internal/server/timeouts.go) plus a
-		// 15s margin for response serialization. On Lambda the 30s function
-		// timeout supersedes this; the tighter ceiling matters only for
-		// local non-Lambda runs where a 6-minute slow-loris write was the
-		// previous (over-generous) bound.
-		WriteTimeout: 75 * time.Second,
+		// The only route is GET / (health). It responds instantly, so a tight
+		// write deadline is ample and bounds any slow-loris write.
+		WriteTimeout: 30 * time.Second,
 		IdleTimeout:  120 * time.Second,
 	}
 
@@ -178,6 +192,15 @@ func main() {
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Fatal("server crashed", "err", err)
 		}
+	}()
+
+	// Long polling is the sole Telegram transport (no webhook, no public
+	// ingress). Telegram permits exactly one getUpdates consumer per bot token,
+	// so deploy exactly one replica. The webhook was cleared at startup above.
+	go func() {
+		log.Info("telegram long polling started")
+		b.Start(rootCtx) // returns when rootCtx is cancelled
+		log.Info("telegram long polling stopped")
 	}()
 
 	<-rootCtx.Done()
@@ -190,20 +213,21 @@ func main() {
 }
 
 // buildProvider picks the storage backend. Selection order:
-//  1. Explicit KV_PROVIDER env (memory|firestore|dynamodb) wins.
-//  2. Auto-detect: AWS_LAMBDA_FUNCTION_NAME set → dynamodb; GOOGLE_CLOUD_PROJECT
-//     or FIRESTORE_EMULATOR_HOST set → firestore; otherwise memory.
+//  1. Explicit KV_PROVIDER env (memory|mongodb) wins.
+//  2. Auto-detect: MONGO_URL set → mongodb; otherwise memory.
+//
+// The self-host default is mongodb (just set MONGO_URL + MONGO_DATABASE — no
+// KV_PROVIDER needed). The memory backend is for tests and local no-database
+// runs (MODULES=). DynamoDB is no longer a runtime backend — it survives only
+// as the one-off migration source (cmd/migrate-dynamo-to-mongo).
 //
 // Returned closer is always non-nil and safe to call exactly once.
-func buildProvider(ctx context.Context, cfg config) (storage.KVProvider, func(), error) {
+func buildProvider(ctx context.Context, cfg config) (storage.Provider, func(), error) {
 	backend := strings.ToLower(strings.TrimSpace(cfg.KVProvider))
 	if backend == "" {
-		switch {
-		case os.Getenv("AWS_LAMBDA_FUNCTION_NAME") != "":
-			backend = "dynamodb"
-		case cfg.FirestoreProject != "" || cfg.FirestoreEmulatorHost != "":
-			backend = "firestore"
-		default:
+		if cfg.MongoURL != "" {
+			backend = "mongodb"
+		} else {
 			backend = "memory"
 		}
 	}
@@ -213,80 +237,61 @@ func buildProvider(ctx context.Context, cfg config) (storage.KVProvider, func(),
 		log.Warn("KV backend: in-memory (data lost on restart)")
 		return storage.NewMemoryProvider(), func() {}, nil
 
-	case "firestore":
-		// Emulator ignores the project ID but the SDK still requires *some*
-		// non-empty value; supply a placeholder so emulator-only local dev works.
-		projectID := cfg.FirestoreProject
-		if projectID == "" && cfg.FirestoreEmulatorHost != "" {
-			projectID = "miti99bot-emulator"
+	case "mongodb":
+		if cfg.MongoURL == "" || cfg.MongoDatabase == "" {
+			return nil, func() {}, errors.New("KV_PROVIDER=mongodb requires MONGO_URL and MONGO_DATABASE")
 		}
-		initCtx, cancel := context.WithTimeout(ctx, firestoreInitTimeout)
+		initCtx, cancel := context.WithTimeout(ctx, mongodbInitTimeout)
 		defer cancel()
-		client, err := storage.NewFirestoreClient(initCtx, projectID)
+		client, err := storage.NewMongoClient(initCtx, cfg.MongoURL)
 		if err != nil {
+			return nil, func() {}, err
+		}
+		db, err := storage.NewMongoDatabase(client, cfg.MongoDatabase)
+		if err != nil {
+			_ = client.Disconnect(context.Background())
 			return nil, func() {}, err
 		}
 		closer := func() {
-			if err := client.Close(); err != nil {
-				log.Error("firestore close failed", "err", err)
+			discCtx, cancel := context.WithTimeout(context.Background(), mongodbInitTimeout)
+			defer cancel()
+			if err := client.Disconnect(discCtx); err != nil {
+				log.Error("mongo disconnect failed", "err", err)
 			}
 		}
-		log.Info("storage backend",
-			"backend", "firestore",
-			"project", projectID,
-			"emulator", cfg.FirestoreEmulatorHost)
-		return storage.NewFirestoreProvider(client), closer, nil
-
-	case "dynamodb":
-		if cfg.DynamoDBTable == "" {
-			return nil, func() {}, errors.New("KV_PROVIDER=dynamodb requires DYNAMODB_TABLE")
-		}
-		initCtx, cancel := context.WithTimeout(ctx, dynamodbInitTimeout)
-		defer cancel()
-		client, err := storage.NewDynamoDBClient(initCtx, storage.DynamoDBEndpointFromEnv())
-		if err != nil {
-			return nil, func() {}, err
-		}
-		log.Info("storage backend",
-			"backend", "dynamodb",
-			"table", cfg.DynamoDBTable,
-			"endpoint_override", storage.DynamoDBEndpointFromEnv() != "")
-		// DynamoDB SDK v2 client has no Close; HTTP client uses the default pool.
-		return storage.NewDynamoDBProvider(client, cfg.DynamoDBTable), func() {}, nil
+		// NEVER log MONGO_URL — it is mongodb+srv://user:pass@host and is a
+		// credential. Log only the (non-secret) database name.
+		log.Info("storage backend", "backend", "mongodb", "database", cfg.MongoDatabase)
+		return storage.NewMongoProvider(db), closer, nil
 
 	default:
-		return nil, func() {}, fmt.Errorf("unknown KV_PROVIDER %q (want memory|firestore|dynamodb)", backend)
+		// DynamoDB is no longer a runtime backend — it survives only as the
+		// one-off migration source (cmd/migrate-dynamo-to-mongo).
+		return nil, func() {}, fmt.Errorf("unknown KV_PROVIDER %q (want memory|mongodb)", backend)
 	}
 }
 
 type config struct {
-	Port                           string
-	TelegramBotToken               string
-	WebhookSecret                  string
-	CronSecret                     string
-	FirestoreProject               string
-	FirestoreEmulatorHost          string
-	GeminiAPIKey                   string
-	StockIncomeEventsAPIURL        string
-	StockIncomeEventsAPIToken      string
-	GoldPriceAPIURL                string
-	GoldFXAPIURL                   string
-	GoldVNAppAPIURL                string
-	GoldVNAppAPIKey                string
-	CoinBinanceAPIURL              string
-	CoinCoinbaseAPIURL             string
-	CoinCoinGeckoAPIURL            string
-	Modules                        []string
-	BotOwnerID                     int64
-	AdminUserIDs                   map[int64]bool
-	KVProvider                     string // empty = auto-detect; or "memory"|"firestore"|"dynamodb"
-	DynamoDBTable                  string // required when KVProvider=dynamodb
-	TelegramBotTokenParam          string
-	WebhookSecretParam             string
-	CronSecretParam                string
-	GeminiAPIKeyParam              string
-	StockIncomeEventsAPITokenParam string
-	GoldVNAppAPIKeyParam           string
+	Port                  string
+	TelegramBotToken      string
+	SourceCommit          string // Coolify-injected commit SHA (runtime env) for deploynotify
+	GeminiAPIKey          string
+	GoldPriceAPIURL       string
+	GoldFXAPIURL          string
+	GoldVNAppAPIURL       string
+	GoldVNAppAPIKey       string
+	CoinBinanceAPIURL     string
+	CoinCoinbaseAPIURL    string
+	CoinCoinGeckoAPIURL   string
+	Modules               []string
+	BotOwnerID            int64
+	AdminUserIDs          map[int64]bool
+	KVProvider            string // empty = auto-detect; or "memory"|"mongodb"
+	MongoURL              string // required when KVProvider=mongodb (Atlas SRV connection string; SECRET — never log)
+	MongoDatabase         string // required when KVProvider=mongodb
+	TelegramBotTokenParam string
+	GeminiAPIKeyParam     string
+	GoldVNAppAPIKeyParam  string
 }
 
 func loadConfig() config {
@@ -307,33 +312,26 @@ func loadConfig() config {
 		log.Fatal("invalid PORT", "value", port)
 	}
 	return config{
-		Port:                           port,
-		TelegramBotToken:               envMap["TELEGRAM_BOT_TOKEN"],
-		WebhookSecret:                  envMap["TELEGRAM_WEBHOOK_SECRET"],
-		CronSecret:                     envMap["CRON_SHARED_SECRET"],
-		FirestoreProject:               envMap["GOOGLE_CLOUD_PROJECT"],
-		FirestoreEmulatorHost:          envMap["FIRESTORE_EMULATOR_HOST"],
-		GeminiAPIKey:                   envMap["GEMINI_API_KEY"],
-		StockIncomeEventsAPIURL:        envMap["STOCK_INCOME_EVENTS_API_URL"],
-		StockIncomeEventsAPIToken:      envMap["STOCK_INCOME_EVENTS_API_TOKEN"],
-		GoldPriceAPIURL:                envMap["GOLD_PRICE_API_URL"],
-		GoldFXAPIURL:                   envMap["GOLD_FX_API_URL"],
-		GoldVNAppAPIURL:                envMap["GOLD_VNAPP_API_URL"],
-		GoldVNAppAPIKey:                envMap["GOLD_VNAPP_API_KEY"],
-		CoinBinanceAPIURL:              envMap["COIN_BINANCE_API_URL"],
-		CoinCoinbaseAPIURL:             envMap["COIN_COINBASE_API_URL"],
-		CoinCoinGeckoAPIURL:            envMap["COIN_COINGECKO_API_URL"],
-		Modules:                        splitCSV(envMap["MODULES"]),
-		BotOwnerID:                     parseInt64(envMap["BOT_OWNER_ID"]),
-		AdminUserIDs:                   parseInt64Set(envMap["ADMIN_USER_IDS"]),
-		KVProvider:                     envMap["KV_PROVIDER"],
-		DynamoDBTable:                  envMap["DYNAMODB_TABLE"],
-		TelegramBotTokenParam:          strings.TrimSpace(envMap["TELEGRAM_BOT_TOKEN_PARAMETER_NAME"]),
-		WebhookSecretParam:             strings.TrimSpace(envMap["TELEGRAM_WEBHOOK_SECRET_PARAMETER_NAME"]),
-		CronSecretParam:                strings.TrimSpace(envMap["CRON_SHARED_SECRET_PARAMETER_NAME"]),
-		GeminiAPIKeyParam:              strings.TrimSpace(envMap["GEMINI_API_KEY_PARAMETER_NAME"]),
-		StockIncomeEventsAPITokenParam: strings.TrimSpace(envMap["STOCK_INCOME_EVENTS_API_TOKEN_PARAMETER_NAME"]),
-		GoldVNAppAPIKeyParam:           strings.TrimSpace(envMap["GOLD_VNAPP_API_KEY_PARAMETER_NAME"]),
+		Port:                  port,
+		TelegramBotToken:      envMap["TELEGRAM_BOT_TOKEN"],
+		SourceCommit:          envMap["SOURCE_COMMIT"],
+		GeminiAPIKey:          envMap["GEMINI_API_KEY"],
+		GoldPriceAPIURL:       envMap["GOLD_PRICE_API_URL"],
+		GoldFXAPIURL:          envMap["GOLD_FX_API_URL"],
+		GoldVNAppAPIURL:       envMap["GOLD_VNAPP_API_URL"],
+		GoldVNAppAPIKey:       envMap["GOLD_VNAPP_API_KEY"],
+		CoinBinanceAPIURL:     envMap["COIN_BINANCE_API_URL"],
+		CoinCoinbaseAPIURL:    envMap["COIN_COINBASE_API_URL"],
+		CoinCoinGeckoAPIURL:   envMap["COIN_COINGECKO_API_URL"],
+		Modules:               splitCSV(envMap["MODULES"]),
+		BotOwnerID:            parseInt64(envMap["OWNER_ID"]),
+		AdminUserIDs:          parseInt64Set(envMap["ADMIN_IDS"]),
+		KVProvider:            envMap["KV_PROVIDER"],
+		MongoURL:              envMap["MONGO_URL"],
+		MongoDatabase:         envMap["MONGO_DATABASE"],
+		TelegramBotTokenParam: strings.TrimSpace(envMap["TELEGRAM_BOT_TOKEN_PARAMETER_NAME"]),
+		GeminiAPIKeyParam:     strings.TrimSpace(envMap["GEMINI_API_KEY_PARAMETER_NAME"]),
+		GoldVNAppAPIKeyParam:  strings.TrimSpace(envMap["GOLD_VNAPP_API_KEY_PARAMETER_NAME"]),
 	}
 }
 
@@ -343,10 +341,7 @@ func resolveSSMSecrets(ctx context.Context, cfg *config) error {
 		target *string
 	}{
 		{name: cfg.TelegramBotTokenParam, target: &cfg.TelegramBotToken},
-		{name: cfg.WebhookSecretParam, target: &cfg.WebhookSecret},
-		{name: cfg.CronSecretParam, target: &cfg.CronSecret},
 		{name: cfg.GeminiAPIKeyParam, target: &cfg.GeminiAPIKey},
-		{name: cfg.StockIncomeEventsAPITokenParam, target: &cfg.StockIncomeEventsAPIToken},
 		{name: cfg.GoldVNAppAPIKeyParam, target: &cfg.GoldVNAppAPIKey},
 	}
 

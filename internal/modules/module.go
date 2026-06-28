@@ -28,9 +28,11 @@ const (
 // purely for logging/metrics, not flow control.
 type CommandHandler func(ctx context.Context, b *bot.Bot, update *models.Update) error
 
-// CronHandler runs when EventBridge Scheduler hits /cron/{name}. Crons receive the
-// per-module-prefixed Deps via the registry; handlers should not capture the
-// base Deps from the factory closure or KV writes will collide across modules.
+// CronHandler runs when a cron fires — driven by the in-process scheduler
+// (internal/cron) on self-host, or by a POST to /cron/{name} for manual
+// triggers. Crons receive the per-module-prefixed Deps via the registry;
+// handlers should not capture the base Deps from the factory closure or KV
+// writes will collide across modules.
 type CronHandler func(ctx context.Context, deps Deps) error
 
 // Command is a single Telegram bot command exposed by a module.
@@ -43,7 +45,7 @@ type Command struct {
 
 // Cron is a single scheduled job exposed by a module.
 type Cron struct {
-	Schedule string      // documentation only; real schedule lives in EventBridge Scheduler
+	Schedule string      // 5-field cron expr (UTC); the in-process scheduler fires the handler on it
 	Name     string      // unique within module
 	Handler  CronHandler // required
 }
@@ -69,10 +71,10 @@ type Module struct {
 // Modules that need to introspect commands (e.g. /help) capture this pointer
 // in their handler closures.
 type Deps struct {
-	KV       storage.KVStore // already prefixed with the module name when passed to a Factory
-	Registry *Registry       // populated by Build; safe to capture but read-only at module use
-	Chatter  ai.Chatter      // nil if GEMINI_API_KEY unset; twentyq must check
-	Bot      *bot.Bot        // nil-safe: only crons that fan-out (lolschedule daily push) need it
+	Store    storage.Collection // the module's own collection; build typed views with storage.Typed[T]
+	Registry *Registry          // populated by Build; safe to capture but read-only at module use
+	Chatter  ai.Chatter         // nil if GEMINI_API_KEY unset; twentyq must check
+	Bot      *bot.Bot           // nil-safe: only crons that fan-out (lolschedule daily push) need it
 }
 
 // Factory constructs a Module from its Deps. Deps are passed directly (instead

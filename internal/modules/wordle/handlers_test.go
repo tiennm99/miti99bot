@@ -11,15 +11,15 @@ import (
 )
 
 // installWordle wires the wordle module to a recording bot with an
-// in-memory KV. seedTarget pre-seeds a game with the supplied target
+// in-memory store. seedTarget pre-seeds a game with the supplied target
 // (skip dictionary randomness for deterministic tests). Empty seedTarget
-// leaves the KV blank so handlers spin up a fresh round on first call.
-func installWordle(t *testing.T, ownerID int64, seedSubject, seedTarget string) (*testutil.RecordingBot, storage.KVStore) {
+// leaves the store blank so handlers spin up a fresh round on first call.
+func installWordle(t *testing.T, ownerID int64, seedSubject, seedTarget string) (*testutil.RecordingBot, GameStore) {
 	t.Helper()
 	rb := testutil.NewRecordingBot(t)
-	provider := storage.NewMemoryProvider()
-	kv := provider.For("wordle")
-	mod := New(modules.Deps{KV: kv})
+	col := storage.NewMemoryProvider().Collection("wordle")
+	games := storage.Typed[GameState](col)
+	mod := New(modules.Deps{Store: col})
 	reg := &modules.Registry{
 		Modules:     []modules.Module{{Name: "wordle", Commands: mod.Commands}},
 		AllCommands: map[string]modules.Command{},
@@ -31,11 +31,11 @@ func installWordle(t *testing.T, ownerID int64, seedSubject, seedTarget string) 
 
 	if seedTarget != "" {
 		g := &GameState{Target: seedTarget, Guesses: []GuessRecord{}, StartedAt: 1}
-		if err := saveGame(context.Background(), kv, seedSubject, g); err != nil {
+		if err := saveGame(context.Background(), games, seedSubject, g); err != nil {
 			t.Fatalf("seed game: %v", err)
 		}
 	}
-	return rb, kv
+	return rb, games
 }
 
 func TestWordle_NoArgShowsBoard(t *testing.T) {
@@ -146,21 +146,24 @@ func TestWordleStats_AfterWin(t *testing.T) {
 // Group chats key by chat id, so two private users both writing /wordle
 // in the same group must mutate the same game.
 func TestWordle_GroupSubjectIsChatID(t *testing.T) {
-	rb, kv := installWordle(t, 0, "-100", "crane")
+	rb, games := installWordle(t, 0, "-100", "crane")
 	rb.Bot.ProcessUpdate(context.Background(), testutil.NewGroupMessage(-100, 7, "/wordle crate"))
 
 	// After one guess in chat -100, subject "-100" should have a guess
 	// recorded; subject "7" should have no game.
-	var gChat GameState
-	if err := kv.GetJSON(context.Background(), gameKey("-100"), &gChat); err != nil {
+	gChat, err := loadGame(context.Background(), games, "-100")
+	if err != nil {
 		t.Fatalf("expected game at subject=-100: %v", err)
 	}
-	if len(gChat.Guesses) != 1 {
-		t.Errorf("group game has %d guesses, want 1", len(gChat.Guesses))
+	if gChat == nil || len(gChat.Guesses) != 1 {
+		t.Errorf("group game guesses = %v, want 1", gChat)
 	}
-	var gUser GameState
-	err := kv.GetJSON(context.Background(), gameKey("7"), &gUser)
-	if err == nil {
+
+	gUser, err := loadGame(context.Background(), games, "7")
+	if err != nil {
+		t.Fatalf("loadGame for user subject: %v", err)
+	}
+	if gUser != nil {
 		t.Errorf("user-keyed game leaked despite group context: %+v", gUser)
 	}
 }

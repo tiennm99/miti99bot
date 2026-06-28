@@ -14,14 +14,15 @@ import (
 )
 
 // installMisc wires the misc module to a recording bot with a fresh
-// in-memory KV. Returns the bot, the kv (so tests can pre-seed or read),
-// and an Auth that permits Owner + Admin so /mstats /fortytwo dispatch.
-func installMisc(t *testing.T, ownerID int64) (*testutil.RecordingBot, storage.KVStore) {
+// in-memory store. Returns the bot and the typed store (so tests can pre-seed
+// or read), plus an Auth that permits Owner + Admin so /mstats /fortytwo dispatch.
+func installMisc(t *testing.T, ownerID int64) (*testutil.RecordingBot, storage.DocStore[lastPing]) {
 	t.Helper()
 	rb := testutil.NewRecordingBot(t)
 	provider := storage.NewMemoryProvider()
-	kv := provider.For("misc")
-	mod := New(modules.Deps{KV: kv})
+	coll := provider.Collection("misc")
+	mod := New(modules.Deps{Store: coll})
+	store := storage.Typed[lastPing](coll)
 
 	reg := &modules.Registry{
 		Modules:     []modules.Module{{Name: "misc", Commands: mod.Commands}},
@@ -32,19 +33,19 @@ func installMisc(t *testing.T, ownerID int64) (*testutil.RecordingBot, storage.K
 	}
 	auth := modules.Auth{BotOwnerID: ownerID}
 	modules.Install(rb.Bot, reg, auth)
-	return rb, kv
+	return rb, store
 }
 
-func TestPing_RepliesPongAndWritesKV(t *testing.T) {
-	rb, kv := installMisc(t, 999)
+func TestPing_RepliesPongAndWritesStore(t *testing.T) {
+	rb, store := installMisc(t, 999)
 	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(999, "/ping"))
 
 	if got := rb.LastSent().Text(); got != "pong" {
 		t.Errorf("ping reply = %q, want %q", got, "pong")
 	}
-	var stored lastPing
-	if err := kv.GetJSON(context.Background(), lastPingKey, &stored); err != nil {
-		t.Fatalf("expected lastPing in KV: %v", err)
+	stored, _, err := store.Get(context.Background(), lastPingKey)
+	if err != nil {
+		t.Fatalf("expected lastPing in store: %v", err)
 	}
 	if stored.At <= 0 {
 		t.Errorf("lastPing.At = %d, want positive", stored.At)
@@ -55,7 +56,7 @@ func TestPing_RepliesPongAndWritesKV(t *testing.T) {
 	}
 }
 
-func TestMstats_NeverWhenKVEmpty(t *testing.T) {
+func TestMstats_NeverWhenStoreEmpty(t *testing.T) {
 	rb, _ := installMisc(t, 999)
 	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(999, "/mstats"))
 

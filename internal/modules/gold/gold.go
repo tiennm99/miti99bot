@@ -1,11 +1,13 @@
 package gold
 
-import "github.com/tiennm99/miti99bot/internal/modules"
+import (
+	"github.com/tiennm99/miti99bot/internal/modules"
+)
 
 // New is the gold paper-trading module factory. It is opt-in through MODULES
 // and keeps its portfolio state separate from the stock module.
 func New(deps modules.Deps) modules.Module {
-	s := newState(deps.KV)
+	s := newState(deps.Store)
 	return modules.Module{
 		Commands: []modules.Command{
 			{

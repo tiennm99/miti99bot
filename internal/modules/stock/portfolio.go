@@ -9,19 +9,22 @@ import (
 	"github.com/tiennm99/miti99bot/internal/storage"
 )
 
+// Store is the stock module's typed portfolio store.
+type Store = storage.DocStore[Portfolio]
+
 // Portfolio is the per-user stock state. Currency is a map for forward-
 // compat with USD/EUR (currently VND-only). Assets is a flat ticker→qty map.
 type Portfolio struct {
-	Currency map[string]float64 `json:"currency"`
-	Assets   map[string]int64   `json:"assets"`
-	Meta     PortfolioMeta      `json:"meta"`
+	Currency map[string]float64 `json:"currency" bson:"currency"`
+	Assets   map[string]int64   `json:"assets" bson:"assets"`
+	Meta     PortfolioMeta      `json:"meta" bson:"meta"`
 }
 
 // PortfolioMeta tracks invested cost basis for P&L. CreatedAt is purely
 // informational (ms-epoch when the portfolio first existed).
 type PortfolioMeta struct {
-	Invested  float64 `json:"invested"`
-	CreatedAt int64   `json:"createdAt"`
+	Invested  float64 `json:"invested" bson:"invested"`
+	CreatedAt int64   `json:"createdAt" bson:"createdAt"`
 }
 
 // NewPortfolio returns an empty starting state. Currency map seeded with VND=0
@@ -39,11 +42,10 @@ func portfolioKey(userID int64) string {
 	return "user:" + strconv.FormatInt(userID, 10)
 }
 
-// LoadPortfolio reads from KV; returns an empty portfolio on first-time use.
+// LoadPortfolio reads from store; returns an empty portfolio on first-time use.
 // Defensively initialises nil maps so callers never need a nil check.
-func LoadPortfolio(ctx context.Context, kv storage.KVStore, userID int64, now int64) (Portfolio, error) {
-	var p Portfolio
-	err := kv.GetJSON(ctx, portfolioKey(userID), &p)
+func LoadPortfolio(ctx context.Context, store Store, userID int64, now int64) (Portfolio, error) {
+	p, _, err := store.Get(ctx, portfolioKey(userID))
 	switch {
 	case err == nil:
 		// Repair any nils from older / partial saves — defence in depth.
@@ -64,8 +66,8 @@ func LoadPortfolio(ctx context.Context, kv storage.KVStore, userID int64, now in
 }
 
 // SavePortfolio persists the portfolio.
-func SavePortfolio(ctx context.Context, kv storage.KVStore, userID int64, p Portfolio) error {
-	if err := kv.PutJSON(ctx, portfolioKey(userID), p); err != nil {
+func SavePortfolio(ctx context.Context, store Store, userID int64, p Portfolio) error {
+	if err := store.Put(ctx, portfolioKey(userID), p); err != nil {
 		return fmt.Errorf("stock: save portfolio %d: %w", userID, err)
 	}
 	return nil
