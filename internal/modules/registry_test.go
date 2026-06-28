@@ -47,6 +47,27 @@ func TestBuild_EmptyModulesBootsCleanly(t *testing.T) {
 	}
 }
 
+func TestBuild_EmptyModulesLoadsAllRegistered(t *testing.T) {
+	// Empty/unset MODULES is the documented "load every module" contract.
+	factories := map[string]Factory{
+		"alpha": factory("alpha", []Command{noopCmd("a1")}, nil),
+		"beta":  factory("beta", []Command{noopCmd("b1")}, []Cron{noopCron("daily")}),
+	}
+	reg, err := Build(nil, factories, newProvider(), BuildOptions{})
+	if err != nil {
+		t.Fatalf("Build nil enabled: %v", err)
+	}
+	if len(reg.Modules) != len(factories) {
+		t.Fatalf("expected all %d modules loaded, got %d", len(factories), len(reg.Modules))
+	}
+	if _, ok := reg.AllCommands["a1"]; !ok {
+		t.Error("missing command a1 from auto-loaded alpha")
+	}
+	if _, ok := reg.Cron("daily"); !ok {
+		t.Error("missing cron daily from auto-loaded beta")
+	}
+}
+
 func TestBuild_LoadsRequestedModules(t *testing.T) {
 	factories := map[string]Factory{
 		"alpha": factory("alpha", []Command{noopCmd("a1")}, nil),

@@ -146,12 +146,8 @@ func main() {
 
 	// Clear any webhook left over from the AWS deployment at startup, before the
 	// owner DM and before polling. getUpdates (long polling, below) returns HTTP
-	// 409 while a webhook is set. drop_pending_updates=false preserves Telegram's
-	// buffered queue so the poller drains updates that arrived during cutover
-	// (lossless cut).
-	if _, err := b.DeleteWebhook(rootCtx, &bot.DeleteWebhookParams{DropPendingUpdates: false}); err != nil {
-		log.Warn("deleteWebhook failed; getUpdates may 409 if a webhook is still set", "err", err)
-	}
+	// 409 while a webhook is set, so a stuck webhook silently breaks the bot.
+	clearWebhook(rootCtx, b)
 
 	deploynotify.Run(rootCtx, deploynotify.Config{
 		Bot:     b,
@@ -196,6 +192,41 @@ func main() {
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		log.Error("graceful shutdown failed", "err", err)
 	}
+}
+
+// webhookDeleteAttempts bounds the startup webhook-clear retries, and
+// webhookDeleteBackoff is the wait between them. Telegram's edge sometimes
+// returns an empty body on the first request after a cold container start
+// ("unexpected end of JSON input"); a short retry rides over that blip so long
+// polling is not left blocked by a stale webhook.
+const (
+	webhookDeleteAttempts = 5
+	webhookDeleteBackoff  = 1 * time.Second
+)
+
+// clearWebhook deletes any configured webhook so getUpdates (long polling) does
+// not 409. It is best-effort but retried: a transient empty-body decode error
+// on the first attempt must not leave the bot permanently unable to poll.
+// DropPendingUpdates=false preserves Telegram's buffered queue so the poller
+// drains updates that arrived during cutover (lossless cut).
+func clearWebhook(ctx context.Context, b *bot.Bot) {
+	for attempt := 1; attempt <= webhookDeleteAttempts; attempt++ {
+		_, err := b.DeleteWebhook(ctx, &bot.DeleteWebhookParams{DropPendingUpdates: false})
+		if err == nil {
+			log.Info("webhook cleared", "attempt", attempt)
+			return
+		}
+		log.Warn("deleteWebhook failed", "attempt", attempt, "err", err)
+		if attempt == webhookDeleteAttempts {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(webhookDeleteBackoff):
+		}
+	}
+	log.Warn("deleteWebhook still failing after retries; getUpdates may 409 if a webhook is set")
 }
 
 // buildProvider picks the storage backend. Selection order:
