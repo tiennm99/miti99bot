@@ -167,6 +167,33 @@ func TestRunDailyPush_ForwardsMessageThreadID(t *testing.T) {
 	}
 }
 
+// TestRunDailyPush_IdempotentPerDate locks in the double-fire guard: invoking
+// the handler twice on the same UTC date sends each subscriber exactly one
+// digest. Defends against cutover overlap, rolling-deploy overlap, and operator
+// misconfiguration (all double-fire windows the daily push must survive).
+func TestRunDailyPush_IdempotentPerDate(t *testing.T) {
+	s := newTestState(t)
+	seedFreshCache(t, s.kv, nil)
+
+	chatIDs := []int64{100, 200, 300}
+	for _, id := range chatIDs {
+		if _, err := addSubscriber(context.Background(), s.kv, id, 0); err != nil {
+			t.Fatalf("addSubscriber %d: %v", id, err)
+		}
+	}
+
+	sender := &fakeSender{}
+	for i := 0; i < 2; i++ {
+		if err := runDailyPush(context.Background(), s, sender); err != nil {
+			t.Fatalf("runDailyPush call %d: %v", i+1, err)
+		}
+	}
+	if len(sender.calls) != len(chatIDs) {
+		t.Errorf("two same-date pushes sent %d messages, want %d (one per subscriber)",
+			len(sender.calls), len(chatIDs))
+	}
+}
+
 func TestRunDailyPush_PartialFailureContinues(t *testing.T) {
 	s := newTestState(t)
 	seedFreshCache(t, s.kv, nil)
