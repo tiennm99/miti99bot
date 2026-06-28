@@ -93,10 +93,6 @@
       "description": "Record cash dividend per share"
     },
     {
-      "command": "stock_income_events",
-      "description": "Check recent income events"
-    },
-    {
       "command": "stock_convert",
       "description": "Currency exchange"
     },
