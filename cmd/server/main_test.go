@@ -22,10 +22,10 @@ func TestResolveCommitSHA(t *testing.T) {
 		t.Errorf("env empty: got %q, want baked fallback", got)
 	}
 
-	// Neither source set → empty (deploynotify stays silent).
+	// Neither source set → "unknown" so the owner still gets the startup DM.
 	gitSHA = ""
-	if got := resolveCommitSHA("   "); got != "" {
-		t.Errorf("both empty: got %q, want empty", got)
+	if got := resolveCommitSHA("   "); got != "unknown" {
+		t.Errorf("both empty: got %q, want unknown", got)
 	}
 }
 
