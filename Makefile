@@ -1,4 +1,4 @@
-.PHONY: help test test-emulator test-dynamodb firestore-emulator dynamodb-local dynamodb-local-stop vet build build-lambda run sam-validate sam-build sam-deploy telegram-setup telegram-webhook telegram-webhook-info telegram-commands telegram-commands-info logs clean
+.PHONY: help test test-emulator test-dynamodb test-mongo firestore-emulator dynamodb-local dynamodb-local-stop mongo-local mongo-local-stop vet build build-lambda run sam-validate sam-build sam-deploy telegram-setup telegram-webhook telegram-webhook-info telegram-commands telegram-commands-info telegram-commands-selfhost telegram-deletewebhook-selfhost telegram-webhook-info-selfhost migrate-dynamo-to-mongo migrate-verify logs clean
 
 # Lambda target architecture. Match Globals.Architectures in template.yaml.
 LAMBDA_GOOS   ?= linux
@@ -48,6 +48,13 @@ test-dynamodb: dynamodb-local ## Run DynamoDB tests against DynamoDB Local
 	DYNAMODB_LOCAL_URL=http://localhost:$(DDB_PORT) LOG_LEVEL=error \
 		go test -race -count=1 ./internal/storage/...
 
+# Run MongoDB integration tests against a local Mongo container.
+# Override MONGO_PORT if 27017 is taken on your host.
+MONGO_PORT ?= 27017
+test-mongo: mongo-local ## Run MongoDB tests against a local Mongo container
+	MONGODB_TEST_URL=mongodb://127.0.0.1:$(MONGO_PORT) LOG_LEVEL=error \
+		go test -race -count=1 ./internal/storage/...
+
 # ---- Lint / Vet -----------------------------------------------------------
 
 vet: ## go vet
@@ -86,6 +93,34 @@ dynamodb-local: ## Start DynamoDB Local container on :$(DDB_PORT) (idempotent)
 
 dynamodb-local-stop: ## Stop DynamoDB Local
 	-docker stop miti99bot-ddb
+
+# ---- MongoDB local for tests ----------------------------------------------
+
+mongo-local: ## Start MongoDB container on :$(MONGO_PORT) (idempotent)
+	@if ! docker ps --format '{{.Names}}' | grep -q '^miti99bot-mongo$$'; then \
+		docker run -d --rm --name miti99bot-mongo -p $(MONGO_PORT):27017 mongo:7; \
+		echo "MongoDB started on :$(MONGO_PORT)"; \
+		sleep 2; \
+	else \
+		echo "MongoDB already running"; \
+	fi
+
+mongo-local-stop: ## Stop local MongoDB
+	-docker stop miti99bot-mongo
+
+# ---- Data migration (DynamoDB → MongoDB Atlas) ----------------------------
+
+# Requires MONGO_URL + MONGO_DATABASE in the environment and AWS credentials
+# for a READ-ONLY profile with dynamodb:Scan on the table. Use DRY_RUN=1 first.
+#   make migrate-dynamo-to-mongo DRY_RUN=1 MONGO_URL=… MONGO_DATABASE=…
+#   make migrate-dynamo-to-mongo        MONGO_URL=… MONGO_DATABASE=…
+#   make migrate-verify                 MONGO_URL=… MONGO_DATABASE=…
+MIGRATE_TABLE ?= miti99bot-data
+migrate-dynamo-to-mongo: ## Copy DynamoDB → Mongo (DRY_RUN=1 for a dry run)
+	go run ./cmd/migrate-dynamo-to-mongo --dynamodb-table $(MIGRATE_TABLE) $(if $(DRY_RUN),--dry-run,)
+
+migrate-verify: ## Verify per-module counts DynamoDB vs Mongo (exit non-zero on mismatch)
+	go run ./cmd/migrate-dynamo-to-mongo --dynamodb-table $(MIGRATE_TABLE) --verify
 
 # ---- SAM (require AWS CLI + SAM CLI installed locally) -------------------
 
@@ -152,6 +187,30 @@ telegram-commands-info: ## Show Telegram getMyCommands using token from SSM
 		--name "/miti99bot/$(STACK_ENV)/telegram-bot-token" \
 		--with-decryption --query Parameter.Value --output text); \
 	curl -sS "https://api.telegram.org/bot$${TOKEN}/getMyCommands"; \
+	echo
+
+# ---- Telegram (self-host: token from TELEGRAM_BOT_TOKEN env, no AWS/SSM) ---
+
+telegram-commands-selfhost: ## Register command menu using TELEGRAM_BOT_TOKEN env
+	@set -eu; \
+	: "$${TELEGRAM_BOT_TOKEN:?set TELEGRAM_BOT_TOKEN}"; \
+	echo "Registering Telegram commands from $(TELEGRAM_COMMANDS_FILE)"; \
+	curl -sS -X POST "https://api.telegram.org/bot$${TELEGRAM_BOT_TOKEN}/setMyCommands" \
+		-H 'Content-Type: application/json' \
+		--data-binary "@$(TELEGRAM_COMMANDS_FILE)"; \
+	echo
+
+telegram-deletewebhook-selfhost: ## Cutover: delete the webhook so the poller can run (keeps buffered updates)
+	@set -eu; \
+	: "$${TELEGRAM_BOT_TOKEN:?set TELEGRAM_BOT_TOKEN}"; \
+	curl -sS -X POST "https://api.telegram.org/bot$${TELEGRAM_BOT_TOKEN}/deleteWebhook" \
+		-d 'drop_pending_updates=false'; \
+	echo
+
+telegram-webhook-info-selfhost: ## getWebhookInfo using TELEGRAM_BOT_TOKEN env (confirm url empty + pending draining)
+	@set -eu; \
+	: "$${TELEGRAM_BOT_TOKEN:?set TELEGRAM_BOT_TOKEN}"; \
+	curl -sS "https://api.telegram.org/bot$${TELEGRAM_BOT_TOKEN}/getWebhookInfo"; \
 	echo
 
 logs: ## Tail Lambda logs (last 5m). Override with SINCE=10m.
