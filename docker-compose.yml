@@ -3,9 +3,9 @@ services:
     build:
       context: .
       args:
-        # Coolify exposes the commit SHA; pass it so deploynotify DMs the owner
-        # on each new version. Optional — empty SHA just stays silent.
-        GIT_SHA: ${GIT_SHA:-}
+        # Coolify sets SOURCE_COMMIT automatically; passed so deploynotify DMs
+        # the owner on each new version. Optional — empty SHA just stays silent.
+        SOURCE_COMMIT: ${SOURCE_COMMIT:-}
     # Or pin a prebuilt image instead of building:
     #   image: ghcr.io/tiennm99/miti99bot:latest
     restart: unless-stopped
@@ -24,7 +24,7 @@ services:
       # The in-process cron scheduler runs by default — no CRON_MODE.
       # PORT defaults to 8080 (internal health server) — omit unless overriding.
       # Long polling = no TELEGRAM_WEBHOOK_SECRET, no /webhook, no public domain.
-      # Leave CRON_SHARED_SECRET unset → /cron route is 404 (scheduler is the trigger).
+      # Cron is in-process only — there is no /cron HTTP route and no secret.
       # Do NOT set any *_PARAMETER_NAME vars (those force an SSM/AWS lookup that
       # fails with no AWS creds and bricks startup). See .env.example.
       # No stock/coin/gold *_API_URL overrides — modules use their coded default

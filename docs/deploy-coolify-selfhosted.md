@@ -39,10 +39,13 @@ Copy [`.env.example`](../.env.example) → `.env` (gitignored) and fill in.
 | `ADMIN_IDS` | optional | CSV of admin ids (renamed from `ADMIN_USER_IDS`) |
 | `GEMINI_API_KEY` | optional | only the `twentyq` module needs it |
 
-**Leave UNSET on self-host:** all six `*_PARAMETER_NAME` vars (they force an
+**Leave UNSET on self-host:** all `*_PARAMETER_NAME` vars (they force an
 SSM/AWS lookup that fails with no AWS creds and bricks startup), `KV_PROVIDER`,
-`PORT`, `TELEGRAM_WEBHOOK_SECRET`, `CRON_SHARED_SECRET`, `GOLD_VNAPP_API_KEY`,
-and the `STOCK/COIN/GOLD *_API_URL` overrides (modules use coded defaults).
+`PORT`, `TELEGRAM_WEBHOOK_SECRET`, `GOLD_VNAPP_API_KEY`, and the
+`STOCK/COIN/GOLD *_API_URL` overrides (modules use coded defaults).
+
+> Cron runs in-process (`internal/cron`) — there is no `/cron` HTTP route and no
+> `CRON_SHARED_SECRET`. The scheduler is the sole trigger; nothing inbound.
 
 ## 1. MongoDB Atlas (M0)
 
@@ -85,9 +88,10 @@ and the `STOCK/COIN/GOLD *_API_URL` overrides (modules use coded defaults).
    bot token; a second poller gets HTTP 409, and a second in-process scheduler
    double-fires crons. Prefer **stop-first redeploys** so two containers never
    overlap near a cron time.
-5. **Build arg for deploynotify:** pass `GIT_SHA` (Coolify exposes the commit
-   SHA) so the owner gets the "new version" DM. Without it, `deploynotify`
-   stays silent (no crash) — but you lose that notification.
+5. **Build arg for deploynotify:** Coolify sets `SOURCE_COMMIT` automatically
+   and the compose build forwards it, so the owner gets the "new version" DM
+   with no manual wiring. Without it, `deploynotify` stays silent (no crash) —
+   but you lose that notification.
 6. **Health check:** use Coolify's HTTP monitor against `GET /` (returns
    `text/plain` `miti99bot ok`). Do **not** use a compose `healthcheck` — the
    distroless image has no shell/curl and `cmd/server` has no `-healthcheck`
