@@ -78,7 +78,7 @@ SSM/AWS lookup that fails with no AWS creds and bricks startup), `KV_PROVIDER`,
 ## 2. Coolify
 
 1. New resource → from this Git repo (Docker Compose), or a prebuilt image.
-   The committed [`docker-compose.yml`](../docker-compose.yml) defines the single
+   The committed [`compose.yml`](../compose.yml) defines the single
    `bot` service.
 2. Set the env vars above in Coolify.
 3. **No public domain / port** is needed — polling is outbound-only. Do not
@@ -91,7 +91,7 @@ SSM/AWS lookup that fails with no AWS creds and bricks startup), `KV_PROVIDER`,
 5. **deploynotify commit SHA:** `SOURCE_COMMIT` is a Coolify predefined
    variable. For Docker Compose, Coolify passes predefined vars via `--env-file`
    for interpolation only, so the value reaches the container **only because
-   `docker-compose.yml` references it** (`SOURCE_COMMIT: ${SOURCE_COMMIT:-}`).
+   `compose.yml` references it** (`SOURCE_COMMIT: ${SOURCE_COMMIT:-}`).
    The bot reads it at startup and DMs the owner on every boot; outside Coolify
    (local `docker compose up`) it is unset and the DM shows `unknown`. The
    "Include Source Commit in Build" Coolify setting affects build args only and
