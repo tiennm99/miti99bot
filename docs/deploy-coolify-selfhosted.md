@@ -97,9 +97,10 @@ Copy [`.env.example`](../.env.example) → `.env` (gitignored) and fill in.
    auto-reconnects on the next op); a DB outage will not auto-restart the
    container — accepted trade-off.
 
-## 3. Register the command menu
+## 3. Command menu
 
-Long polling needs no webhook registration — only the command menu:
+The bot registers its Telegram command menu from loaded public modules on
+startup. The manual target remains useful for repairs or local experiments:
 
 ```sh
 TELEGRAM_BOT_TOKEN=… make telegram-commands
