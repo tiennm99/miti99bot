@@ -94,7 +94,7 @@ func skipReason(cfg Config) string {
 	case cfg.GitSHA == "":
 		return "empty gitSHA (build without -ldflags)"
 	case cfg.OwnerID == 0:
-		return "no BOT_OWNER_ID configured"
+		return "no OWNER_ID configured"
 	case cfg.KV == nil:
 		return "no KV configured"
 	case cfg.Bot == nil && cfg.Sender == nil:
