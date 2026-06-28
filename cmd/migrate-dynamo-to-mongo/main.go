@@ -12,15 +12,16 @@
 // exactly `dynamodb:Scan` on the table ARN (nothing else, no write actions).
 // For local testing, set DYNAMODB_LOCAL_URL to point at DynamoDB Local.
 //
-//   - default: scan + write every item through MongoKVStore.Put (byte-identical
-//     value encoding to the app), then report per-module counts.
+//   - default: scan + write every item through MongoKVStore.Put (same value
+//     encoding as the live app — JSON objects stored as native BSON), then
+//     report per-module counts.
 //   - --dry-run: scan + report counts, write nothing.
 //   - --verify: tally DynamoDB per pk via Scan vs Mongo CountDocuments per
 //     collection; print a table and exit non-zero on any mismatch.
 //
-// Note: writing through Put restamps updatedAt to migration time. Values are
-// byte-identical; nothing in the app reads updatedAt (write-only today), and
-// --verify compares counts, so this is intentional and harmless.
+// Note: writing through Put gives each doc the app's native-BSON value encoding
+// and a fresh updatedAt/version; nothing in the app reads updatedAt (write-only
+// today), and --verify compares counts, so this is intentional and harmless.
 package main
 
 import (
@@ -141,10 +142,10 @@ func sortedKeys(m map[string]int) []string {
 }
 
 // runMigrate scans the table, then (unless dry-run) writes every item through
-// MongoKVStore.Put so the value encoding is byte-identical to what the live app
-// writes — guaranteeing idempotent re-runs and correct future CAS. Put also
-// runs validateKey on each sk and ReplaceOne-upserts by _id, so a re-run
-// produces no duplicates and an invalid key fails loud rather than writing data
+// MongoKVStore.Put so the value uses the same native-BSON encoding the live app
+// writes — guaranteeing idempotent re-runs and correct version-based CAS. Put
+// also runs validateKey on each sk and upserts by _id, so a re-run produces no
+// duplicates and an invalid key fails loud rather than writing data
 // the app's read path cannot load.
 func runMigrate(ctx context.Context, ddb *dynamodb.Client, mdb *mongo.Database, table string, dryRun bool) error {
 	items, err := scanTable(ctx, ddb, table)
