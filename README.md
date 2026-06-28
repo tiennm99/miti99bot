@@ -30,7 +30,7 @@ internal/cron/               in-process cron scheduler (replaces EventBridge)
 internal/modules/            Module framework, registry, dispatchers, modules
 internal/storage/            typed DocStore[T] (Provider + Typed); mongodb runtime + memory (tests). Values persist as flattened native BSON root documents
 internal/ai/                 Gemini client (used by twentyq)
-docker-compose.yml           Coolify self-host stack (single bot service)
+compose.yml                  Coolify self-host stack (single bot service)
 docs/deploy-coolify-selfhosted.md    Self-host onboarding + cutover runbook
 docs/aws-decommission-runbook.md     AWS teardown (post-cutover)
 template.yaml, aws/          Retired AWS SAM IaC + setup (kept for history)

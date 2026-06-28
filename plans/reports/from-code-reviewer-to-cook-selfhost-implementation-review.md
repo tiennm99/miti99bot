@@ -4,7 +4,7 @@ Reviewer: code-reviewer | Date: 2026-06-28 | Branch: `feature/selfhosted`
 Plan: `plans/260627-1849-selfhost-coolify-mongodb/`
 
 ## Scope
-- New: `internal/storage/mongodb_{client,kv,provider}.go` (+tests), `internal/cron/scheduler.go` (+test), `cmd/migrate-dynamo-to-mongo/` (+test), `docker-compose.yml`, `.env.example`, 2 docs.
+- New: `internal/storage/mongodb_{client,kv,provider}.go` (+tests), `internal/cron/scheduler.go` (+test), `cmd/migrate-dynamo-to-mongo/` (+test), `compose.yml`, `.env.example`, 2 docs.
 - Modified: `cmd/server/main.go`, `internal/server/router.go`, `internal/telegram/client.go`, `internal/modules/lolschedule/cron.go`, `internal/modules/module.go`, `internal/modules/stock/{stock,handlers}.go`, `Dockerfile`, `Makefile`, `go.mod/go.sum`, `aws/telegram-commands.json`.
 - Deleted: `internal/telegram/webhook.go`(+test), `internal/modules/stock/income_events.go`(+test).
 - Build/vet: `go vet ./...` clean (re-run). Author reports full `go test ./...` + integration suites pass.

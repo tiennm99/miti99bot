@@ -105,7 +105,7 @@ func Build(enabled []string, factories map[string]Factory, provider storage.Prov
 	}
 
 	// Empty/unset MODULES means "load every registered module" — the documented
-	// contract (.env.example, docker-compose.yml, deploy docs). Expand to the
+	// contract (.env.example, compose.yml, deploy docs). Expand to the
 	// full catalog in sorted order so the load order (and thus CommandHook
 	// registration order) is deterministic across restarts.
 	if len(enabled) == 0 {
