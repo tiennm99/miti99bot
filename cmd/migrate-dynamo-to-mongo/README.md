@@ -7,20 +7,25 @@ app writes, then verifies per-module parity. Idempotent and re-runnable.
 ## What it does
 
 - Full-table `Scan` of DynamoDB (the table is a small KV) → group by `pk`.
-- Writes each item through `storage.MongoKVStore.Put`, so the `value` encoding
-  is **byte-identical** to what the running bot writes (BSON binary). This is
-  what keeps re-runs idempotent and future CompareAndSwap correct — a raw
-  `UpdateOne` that stored `value` as a BSON string would silently break both.
-- `Put` runs `validateKey` on each sort key and upserts by `_id`, so a re-run
-  produces no duplicates and an invalid key fails loud (no key the app's read
-  path can't load is ever written).
+- Writes each item through the typed Mongo store (`storage.Typed[bson.M]`) as a
+  **flattened native document** — the value's JSON fields are hoisted to the
+  document root alongside `_id`/`version`/`updatedAt`, with no `value` envelope.
+  This is the exact shape the running bot writes, so the app reads migrated docs
+  directly. Integers keep int64 fidelity (decoded with `UseNumber`).
+- The two non-object values are wrapped into named root fields to match the
+  module's typed shape: lolschedule `subscribers` (a JSON array) → `{subscribers: [...]}`
+  and `daily_push:last_date` (a bare date string) → `{date: "..."}`. Any other
+  non-object value fails loud so a missing wrap rule is obvious (see `encode.go`).
+- Writing through the store validates the module/collection name and key and
+  upserts by `_id`, so a re-run produces no duplicates and bad input fails loud.
 
 | DynamoDB | MongoDB |
 |---|---|
 | `pk` (module name) | collection name |
 | `sk` (user key) | document `_id` |
-| `value` (JSON string) | `value` field (BSON binary, same bytes) |
-| `updatedAt` | restamped to migration time (write-only field; nothing reads it) |
+| `value` (JSON object) | payload fields hoisted to the document root (no `value` field) |
+| `value` (array/scalar, lolschedule) | wrapped in a named root field (`subscribers` / `date`) |
+| — | `version` = 1, `updatedAt` = migration time (write-only; nothing reads it) |
 
 ## Usage
 

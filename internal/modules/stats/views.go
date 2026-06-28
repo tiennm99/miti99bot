@@ -89,9 +89,9 @@ func parseSubargs(update *models.Update) string {
 }
 
 func viewTopCommands(ctx context.Context, c *counter) string {
-	keys, err := c.kv.List(ctx, countPrefix)
+	keys, err := c.counts.List(ctx, countPrefix)
 	if err != nil {
-		log.Error("stats: kv list failed", "err", err)
+		log.Error("stats: store list failed", "err", err)
 		return "Could not load stats. Try again later."
 	}
 	if len(keys) == 0 {
@@ -145,9 +145,9 @@ func viewUserCommands(ctx context.Context, c *counter, username string) string {
 		return fmt.Sprintf("User @%s not found.", username)
 	}
 
-	keys, err := c.kv.List(ctx, pairPrefix)
+	keys, err := c.counts.List(ctx, pairPrefix)
 	if err != nil {
-		log.Error("stats: kv list failed", "err", err)
+		log.Error("stats: store list failed", "err", err)
 		return "Could not load stats. Try again later."
 	}
 	// Leading colon disambiguates: ":2" does not match a key ending in "12"
@@ -181,9 +181,9 @@ func viewUserCommands(ctx context.Context, c *counter, username string) string {
 
 func viewCmdUsers(ctx context.Context, c *counter, cmd string) string {
 	prefix := pairPrefix + cmd + ":"
-	keys, err := c.kv.List(ctx, prefix)
+	keys, err := c.counts.List(ctx, prefix)
 	if err != nil {
-		log.Error("stats: kv list failed", "err", err)
+		log.Error("stats: store list failed", "err", err)
 		return "Could not load stats. Try again later."
 	}
 	if len(keys) == 0 {
@@ -200,9 +200,9 @@ func viewCmdUsers(ctx context.Context, c *counter, cmd string) string {
 		wg.Add(1)
 		go func(i int, k string) {
 			defer wg.Done()
-			var ce countEntry
-			if err := c.kv.GetJSON(ctx, k, &ce); err != nil {
-				log.Error("stats: kv get failed", "key", k, "err", err)
+			ce, _, err := c.counts.Get(ctx, k)
+			if err != nil {
+				log.Error("stats: store get failed", "key", k, "err", err)
 				return
 			}
 			idStr := strings.TrimPrefix(k, prefix)
@@ -210,8 +210,8 @@ func viewCmdUsers(ctx context.Context, c *counter, cmd string) string {
 			if err != nil {
 				return
 			}
-			var ue userEntry
-			if err := c.kv.GetJSON(ctx, userKey(id), &ue); err != nil || ue.Username == "" {
+			ue, _, err := c.users.Get(ctx, userKey(id))
+			if err != nil || ue.Username == "" {
 				return
 			}
 			results[i] = result{r: row{display: "@" + ue.Username, n: ce.N}, ok: true}
@@ -232,7 +232,7 @@ func viewCmdUsers(ctx context.Context, c *counter, cmd string) string {
 	return renderTopN(fmt.Sprintf("Users of /%s:", cmd), rows, topK)
 }
 
-// fanOutCountRows runs GetJSON on each key in parallel. displayFor maps the
+// fanOutCountRows runs Get on each key in parallel. displayFor maps the
 // raw sort key to the human-readable label that gets rendered. Missing /
 // errored keys are skipped (logged at error level).
 func fanOutCountRows(ctx context.Context, c *counter, keys []string, displayFor func(k string) string) []row {
@@ -246,9 +246,9 @@ func fanOutCountRows(ctx context.Context, c *counter, keys []string, displayFor 
 		wg.Add(1)
 		go func(i int, k string) {
 			defer wg.Done()
-			var entry countEntry
-			if err := c.kv.GetJSON(ctx, k, &entry); err != nil {
-				log.Error("stats: kv get failed during render", "key", k, "err", err)
+			entry, _, err := c.counts.Get(ctx, k)
+			if err != nil {
+				log.Error("stats: store get failed during render", "key", k, "err", err)
 				return
 			}
 			results[i] = result{r: row{display: displayFor(k), n: entry.N}, ok: true}
@@ -268,9 +268,9 @@ func fanOutCountRows(ctx context.Context, c *counter, keys []string, displayFor 
 // loadUserRowsWithID returns userID → userEntry for every user:* row. Used by
 // viewTopUsers (renders) and viewUserCommands (resolves a username to its ID).
 func loadUserRowsWithID(ctx context.Context, c *counter) map[int64]userEntry {
-	keys, err := c.kv.List(ctx, userPrefix)
+	keys, err := c.users.List(ctx, userPrefix)
 	if err != nil {
-		log.Error("stats: kv list failed", "err", err)
+		log.Error("stats: store list failed", "err", err)
 		return nil
 	}
 	type pair struct {
@@ -289,9 +289,9 @@ func loadUserRowsWithID(ctx context.Context, c *counter) map[int64]userEntry {
 			if err != nil {
 				return
 			}
-			var entry userEntry
-			if err := c.kv.GetJSON(ctx, k, &entry); err != nil {
-				log.Error("stats: kv get failed", "key", k, "err", err)
+			entry, _, err := c.users.Get(ctx, k)
+			if err != nil {
+				log.Error("stats: store get failed", "key", k, "err", err)
 				return
 			}
 			results[i] = pair{id: id, entry: entry, ok: true}

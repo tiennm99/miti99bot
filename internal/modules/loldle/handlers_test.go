@@ -13,12 +13,13 @@ import (
 // installLoldle wires the loldle module + auth (owner gates /loldle_setmax,
 // which is private). seedTarget pre-seeds a game so guess outcomes are
 // deterministic without hooking math/rand.
-func installLoldle(t *testing.T, ownerID int64, seedSubject, seedTarget string) (*testutil.RecordingBot, storage.KVStore) {
+func installLoldle(t *testing.T, ownerID int64, seedSubject, seedTarget string) (*testutil.RecordingBot, GameStore, ConfigStore) {
 	t.Helper()
 	rb := testutil.NewRecordingBot(t)
-	provider := storage.NewMemoryProvider()
-	kv := provider.For("loldle")
-	mod := New(modules.Deps{KV: kv})
+	col := storage.NewMemoryProvider().Collection("loldle")
+	games := storage.Typed[gameState](col)
+	cfg := storage.Typed[roundConfig](col)
+	mod := New(modules.Deps{Store: col})
 	reg := &modules.Registry{
 		Modules:     []modules.Module{{Name: "loldle", Commands: mod.Commands}},
 		AllCommands: map[string]modules.Command{},
@@ -30,15 +31,15 @@ func installLoldle(t *testing.T, ownerID int64, seedSubject, seedTarget string) 
 
 	if seedTarget != "" {
 		g := &gameState{Target: seedTarget, Guesses: []string{}}
-		if err := saveGame(context.Background(), kv, seedSubject, g); err != nil {
+		if err := saveGame(context.Background(), games, seedSubject, g); err != nil {
 			t.Fatalf("seed game: %v", err)
 		}
 	}
-	return rb, kv
+	return rb, games, cfg
 }
 
 func TestLoldle_NoArgShowsBoard(t *testing.T) {
-	rb, _ := installLoldle(t, 0, "1", "Aatrox")
+	rb, _, _ := installLoldle(t, 0, "1", "Aatrox")
 	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(1, "/loldle"))
 
 	got := rb.LastSent().Text()
@@ -48,7 +49,7 @@ func TestLoldle_NoArgShowsBoard(t *testing.T) {
 }
 
 func TestLoldle_Win(t *testing.T) {
-	rb, _ := installLoldle(t, 0, "1", "Aatrox")
+	rb, _, _ := installLoldle(t, 0, "1", "Aatrox")
 	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(1, "/loldle aatrox"))
 
 	got := rb.LastSent().Text()
@@ -61,7 +62,7 @@ func TestLoldle_Win(t *testing.T) {
 }
 
 func TestLoldle_UnknownChampion(t *testing.T) {
-	rb, _ := installLoldle(t, 0, "1", "Aatrox")
+	rb, _, _ := installLoldle(t, 0, "1", "Aatrox")
 	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(1, "/loldle ZilbeanZ"))
 
 	got := rb.LastSent().Text()
@@ -71,7 +72,7 @@ func TestLoldle_UnknownChampion(t *testing.T) {
 }
 
 func TestLoldle_DuplicateGuessRejected(t *testing.T) {
-	rb, _ := installLoldle(t, 0, "1", "Aatrox")
+	rb, _, _ := installLoldle(t, 0, "1", "Aatrox")
 	// First guess: Ahri (not the target — round continues).
 	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(1, "/loldle ahri"))
 	rb.Reset()
@@ -85,7 +86,7 @@ func TestLoldle_DuplicateGuessRejected(t *testing.T) {
 }
 
 func TestLoldleGiveup_RevealsAnswer(t *testing.T) {
-	rb, _ := installLoldle(t, 0, "1", "Aatrox")
+	rb, _, _ := installLoldle(t, 0, "1", "Aatrox")
 	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(1, "/loldle_giveup"))
 
 	got := rb.LastSent().Text()
@@ -95,7 +96,7 @@ func TestLoldleGiveup_RevealsAnswer(t *testing.T) {
 }
 
 func TestLoldleGiveup_NoActiveRound(t *testing.T) {
-	rb, _ := installLoldle(t, 0, "", "")
+	rb, _, _ := installLoldle(t, 0, "", "")
 	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(1, "/loldle_giveup"))
 
 	got := rb.LastSent().Text()
@@ -105,7 +106,7 @@ func TestLoldleGiveup_NoActiveRound(t *testing.T) {
 }
 
 func TestLoldleStats_Empty(t *testing.T) {
-	rb, _ := installLoldle(t, 0, "", "")
+	rb, _, _ := installLoldle(t, 0, "", "")
 	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(1, "/loldle_stats"))
 
 	got := rb.LastSent().Text()
@@ -117,24 +118,24 @@ func TestLoldleStats_Empty(t *testing.T) {
 }
 
 func TestLoldleSetMax_OwnerSucceeds(t *testing.T) {
-	rb, kv := installLoldle(t, 999, "", "")
+	rb, _, cfg := installLoldle(t, 999, "", "")
 	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(999, "/loldle_setmax 5"))
 
 	got := rb.LastSent().Text()
 	if !strings.Contains(got, "max guesses set to 5") {
 		t.Errorf("/loldle_setmax reply: %q", got)
 	}
-	var cfg roundConfig
-	if err := kv.GetJSON(context.Background(), configKey("999"), &cfg); err != nil {
+	c, _, err := cfg.Get(context.Background(), configKey("999"))
+	if err != nil {
 		t.Fatalf("expected config persisted: %v", err)
 	}
-	if cfg.MaxGuesses != 5 {
-		t.Errorf("MaxGuesses persisted = %d, want 5", cfg.MaxGuesses)
+	if c.MaxGuesses != 5 {
+		t.Errorf("MaxGuesses persisted = %d, want 5", c.MaxGuesses)
 	}
 }
 
 func TestLoldleSetMax_DeniedToNonOwner(t *testing.T) {
-	rb, _ := installLoldle(t, 999, "", "")
+	rb, _, _ := installLoldle(t, 999, "", "")
 	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(7, "/loldle_setmax 5"))
 
 	if calls := rb.Sent(); len(calls) != 0 {
@@ -143,7 +144,7 @@ func TestLoldleSetMax_DeniedToNonOwner(t *testing.T) {
 }
 
 func TestLoldleSetMax_RejectsOutOfRange(t *testing.T) {
-	rb, _ := installLoldle(t, 999, "", "")
+	rb, _, _ := installLoldle(t, 999, "", "")
 	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(999, "/loldle_setmax 99"))
 
 	got := rb.LastSent().Text()

@@ -11,7 +11,7 @@ import (
 // MaxGuesses is the standard wordle round length.
 const MaxGuesses = 6
 
-// Note: the KV store has no native per-document TTL — saved games linger
+// Note: the store has no native per-document TTL — saved games linger
 // until manually cleaned. Out of scope today; could be added via a sweep
 // cron if storage cost ever matters.
 
@@ -19,43 +19,47 @@ const MaxGuesses = 6
 //
 //	{ "word": "crane", "results": [{"letter":"c","result":"correct"}, ...] }
 type GuessRecord struct {
-	Word    string        `json:"word"`
-	Results []LetterScore `json:"results"`
+	Word    string        `json:"word" bson:"word"`
+	Results []LetterScore `json:"results" bson:"results"`
 }
 
-// GameState is the per-subject KV record for an in-progress (or finished)
-// round.
+// GameState is the per-subject record for an in-progress (or finished) round.
 //
 // `giveup` is always emitted (initialized to false on /wordle_new). Do NOT
 // add omitempty — the field is part of the stored document's shape, so
 // emitting it unconditionally keeps already-saved games self-describing
-// when inspected via raw KV dumps.
+// when inspected via raw dumps.
 type GameState struct {
-	Target    string        `json:"target"`
-	Guesses   []GuessRecord `json:"guesses"`
-	Solved    bool          `json:"solved"`
-	Giveup    bool          `json:"giveup"`
-	StartedAt int64         `json:"startedAt"` // ms-since-epoch (Date.now())
+	Target    string        `json:"target" bson:"target"`
+	Guesses   []GuessRecord `json:"guesses" bson:"guesses"`
+	Solved    bool          `json:"solved" bson:"solved"`
+	Giveup    bool          `json:"giveup" bson:"giveup"`
+	StartedAt int64         `json:"startedAt" bson:"startedAt"` // ms-since-epoch (Date.now())
 }
 
 // Stats is the lifetime score record. lastResultAt is *int64 so an unplayed
 // account marshals as `"lastResultAt": null` — distinguishes "never played"
 // from "played at epoch zero".
 type Stats struct {
-	Played       int    `json:"played"`
-	Wins         int    `json:"wins"`
-	Streak       int    `json:"streak"`
-	BestStreak   int    `json:"bestStreak"`
-	LastResultAt *int64 `json:"lastResultAt"` // ms-since-epoch | null
+	Played       int    `json:"played" bson:"played"`
+	Wins         int    `json:"wins" bson:"wins"`
+	Streak       int    `json:"streak" bson:"streak"`
+	BestStreak   int    `json:"bestStreak" bson:"bestStreak"`
+	LastResultAt *int64 `json:"lastResultAt" bson:"lastResultAt"` // ms-since-epoch | null
 }
+
+// GameStore is the wordle module's typed game store.
+type GameStore = storage.DocStore[GameState]
+
+// StatsStore is the wordle module's typed stats store.
+type StatsStore = storage.DocStore[Stats]
 
 func gameKey(subject string) string  { return "game:" + subject }
 func statsKey(subject string) string { return "stats:" + subject }
 
 // loadGame returns the active round, or (nil, nil) if none exists.
-func loadGame(ctx context.Context, kv storage.KVStore, subject string) (*GameState, error) {
-	var g GameState
-	err := kv.GetJSON(ctx, gameKey(subject), &g)
+func loadGame(ctx context.Context, games GameStore, subject string) (*GameState, error) {
+	g, _, err := games.Get(ctx, gameKey(subject))
 	switch {
 	case err == nil:
 		return &g, nil
@@ -67,8 +71,8 @@ func loadGame(ctx context.Context, kv storage.KVStore, subject string) (*GameSta
 }
 
 // saveGame writes the round.
-func saveGame(ctx context.Context, kv storage.KVStore, subject string, g *GameState) error {
-	if err := kv.PutJSON(ctx, gameKey(subject), g); err != nil {
+func saveGame(ctx context.Context, games GameStore, subject string, g *GameState) error {
+	if err := games.Put(ctx, gameKey(subject), *g); err != nil {
 		return fmt.Errorf("wordle saveGame: %w", err)
 	}
 	return nil
@@ -76,9 +80,8 @@ func saveGame(ctx context.Context, kv storage.KVStore, subject string, g *GameSt
 
 // loadStats returns lifetime stats; missing → fresh-zero record (with
 // LastResultAt=nil) so callers never need a nil check.
-func loadStats(ctx context.Context, kv storage.KVStore, subject string) (*Stats, error) {
-	var s Stats
-	err := kv.GetJSON(ctx, statsKey(subject), &s)
+func loadStats(ctx context.Context, stats StatsStore, subject string) (*Stats, error) {
+	s, _, err := stats.Get(ctx, statsKey(subject))
 	switch {
 	case err == nil:
 		return &s, nil
@@ -92,8 +95,8 @@ func loadStats(ctx context.Context, kv storage.KVStore, subject string) (*Stats,
 // recordResult bumps stats with the round outcome (won true → win + streak,
 // false → reset streak). Returns the updated stats so callers can show the
 // new streak in the win message.
-func recordResult(ctx context.Context, kv storage.KVStore, subject string, won bool, nowMillis int64) (*Stats, error) {
-	s, err := loadStats(ctx, kv, subject)
+func recordResult(ctx context.Context, stats StatsStore, subject string, won bool, nowMillis int64) (*Stats, error) {
+	s, err := loadStats(ctx, stats, subject)
 	if err != nil {
 		return nil, err
 	}
@@ -109,7 +112,7 @@ func recordResult(ctx context.Context, kv storage.KVStore, subject string, won b
 	}
 	now := nowMillis
 	s.LastResultAt = &now
-	if err := kv.PutJSON(ctx, statsKey(subject), s); err != nil {
+	if err := stats.Put(ctx, statsKey(subject), *s); err != nil {
 		return nil, fmt.Errorf("wordle recordResult: %w", err)
 	}
 	return s, nil

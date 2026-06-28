@@ -3,18 +3,22 @@ package misc
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/tiennm99/miti99bot/internal/modules"
 	"github.com/tiennm99/miti99bot/internal/storage"
 )
 
-// We test the per-command KV behaviour directly — the bot/Telegram side is
+// We test the per-command store behaviour directly — the bot/Telegram side is
 // thin (single SendMessage) and exercising it would require a fake bot HTTP
-// server. The KV interaction is the part with logic worth locking down.
+// server. The store interaction is the part with logic worth locking down.
+
+// newMiscStore returns a fresh in-memory typed lastPing store for tests.
+func newMiscStore() storage.DocStore[lastPing] {
+	return storage.Typed[lastPing](storage.NewMemoryProvider().Collection("misc"))
+}
 
 func TestNew_RegistersExpectedCommands(t *testing.T) {
-	deps := modules.Deps{KV: storage.NewMemoryKVStore()}
+	deps := modules.Deps{Store: storage.NewMemoryProvider().Collection("misc")}
 	mod := New(deps)
 
 	want := map[string]modules.Visibility{
@@ -41,43 +45,31 @@ func TestNew_RegistersExpectedCommands(t *testing.T) {
 	}
 }
 
-func TestPing_WritesLastPingKV(t *testing.T) {
+func TestPing_WritesLastPingStore(t *testing.T) {
 	ctx := context.Background()
-	kv := storage.NewMemoryKVStore()
+	store := newMiscStore()
 
-	// Drive the KV side directly: lock the wire format as a ms-epoch number
-	// (not an RFC3339 string), matching every other timestamp in the bot's KV.
-	if err := kv.PutJSON(ctx, lastPingKey, lastPing{At: time.Now().UTC().UnixMilli()}); err != nil {
-		t.Fatalf("PutJSON: %v", err)
-	}
-
-	var got lastPing
-	if err := kv.GetJSON(ctx, lastPingKey, &got); err != nil {
-		t.Fatalf("GetJSON: %v", err)
-	}
-	if got.At <= 0 {
-		t.Errorf("read-back lastPing.At = %d, want positive ms-epoch", got.At)
+	// Drive the store side directly: lock the wire format as a ms-epoch number
+	// (not an RFC3339 string), matching every other timestamp in the bot's store.
+	if err := store.Put(ctx, lastPingKey, lastPing{At: 1700000000000}); err != nil {
+		t.Fatalf("Put: %v", err)
 	}
 
-	// Verify a hand-written {"at": <ms-epoch>} document decodes correctly.
-	if err := kv.Put(ctx, lastPingKey, []byte(`{"at":1700000000000}`)); err != nil {
-		t.Fatal(err)
-	}
-	got = lastPing{}
-	if err := kv.GetJSON(ctx, lastPingKey, &got); err != nil {
-		t.Fatalf("GetJSON ms-epoch shape: %v", err)
+	got, _, err := store.Get(ctx, lastPingKey)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
 	}
 	if got.At != 1700000000000 {
 		t.Errorf("ms-epoch round-trip: At = %d, want 1700000000000", got.At)
 	}
 }
 
-func TestMstats_MissingKVReturnsErrNotFound(t *testing.T) {
+func TestMstats_MissingKeyReturnsErrNotFound(t *testing.T) {
 	ctx := context.Background()
-	kv := storage.NewMemoryKVStore()
+	store := newMiscStore()
 
-	var dst lastPing
-	if err := kv.GetJSON(ctx, lastPingKey, &dst); err != storage.ErrNotFound {
-		t.Errorf("GetJSON missing = %v, want ErrNotFound", err)
+	_, _, err := store.Get(ctx, lastPingKey)
+	if err != storage.ErrNotFound {
+		t.Errorf("Get missing = %v, want ErrNotFound", err)
 	}
 }

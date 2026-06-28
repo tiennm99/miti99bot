@@ -28,7 +28,7 @@ internal/server/             HTTP routes (/ health, /cron/{name} manual trigger)
 internal/telegram/           Telegram long-polling bot wrapper
 internal/cron/               in-process cron scheduler (replaces EventBridge)
 internal/modules/            Module framework, registry, dispatchers, modules
-internal/storage/            KVProvider interface; memory + dynamodb + mongodb (values stored as native BSON documents)
+internal/storage/            typed DocStore[T] (Provider + Typed); mongodb runtime + memory (tests). Values persist as flattened native BSON root documents
 internal/ai/                 Gemini client (used by twentyq)
 docker-compose.yml           Coolify self-host stack (single bot service)
 docs/deploy-coolify-selfhosted.md    Self-host onboarding + cutover runbook
@@ -58,12 +58,11 @@ MONGO_DATABASE=miti99bot_dev \
 go run ./cmd/server
 ```
 
-For storage integration tests (each skips when its emulator env var is unset):
+For integration tests (each skips when its emulator env var is unset):
 ```sh
-make dynamodb-local      # docker run amazon/dynamodb-local on :8001
-make test-dynamodb       # internal/storage tests against DynamoDB Local
 make mongo-local         # docker run mongo:7 on :27017
-make test-mongo          # internal/storage tests against local MongoDB
+make test-mongo          # internal/storage typed-store tests against local MongoDB
+make test-dynamodb       # DynamoDB→Mongo migrator e2e against DynamoDB Local + local Mongo
 ```
 
 ## Test
@@ -71,7 +70,8 @@ make test-mongo          # internal/storage tests against local MongoDB
 ```sh
 make vet              # go vet
 make test             # full unit suite (no emulator)
-make test-dynamodb    # storage tests against DynamoDB Local (requires Docker)
+make test-mongo       # typed-store integration tests against local Mongo (requires Docker)
+make test-dynamodb    # migrator e2e against DynamoDB Local + Mongo (requires Docker)
 ```
 
 ## Deploy

@@ -6,7 +6,7 @@ priority: P2
 branch: "feature/selfhosted"
 tags: [selfhost, coolify, mongodb, migration]
 blockedBy: []
-blocks: [260628-1113-mongo-native-value-documents]
+blocks: [260628-1113-mongo-native-value-documents, 260628-1310-flatten-mongo-value-documents]
 created: "2026-06-27T12:01:53.894Z"
 createdBy: "ck:plan"
 source: skill

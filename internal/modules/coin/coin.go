@@ -1,11 +1,14 @@
 package coin
 
-import "github.com/tiennm99/miti99bot/internal/modules"
+import (
+	"github.com/tiennm99/miti99bot/internal/modules"
+	"github.com/tiennm99/miti99bot/internal/storage"
+)
 
 // New is the coin paper-trading module factory. It is opt-in through MODULES
 // and keeps its portfolio state separate from stock and gold modules.
 func New(deps modules.Deps) modules.Module {
-	s := newState(deps.KV)
+	s := newState(storage.Typed[Portfolio](deps.Store))
 	return modules.Module{
 		Commands: []modules.Command{
 			{

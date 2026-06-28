@@ -60,10 +60,6 @@ func factories() map[string]modules.Factory {
 	}
 }
 
-// dynamodbInitTimeout caps DynamoDB client construction at startup. Lambda
-// has a 10s init phase; we want to leave headroom for module wiring.
-const dynamodbInitTimeout = 5 * time.Second
-
 // mongodbInitTimeout caps MongoDB connect+ping at startup (and Disconnect at
 // shutdown). Atlas SRV DNS + TLS handshake can take a couple seconds on a cold
 // container; 10s leaves headroom without hiding a wedged cluster.
@@ -153,7 +149,7 @@ func main() {
 
 	deploynotify.Run(rootCtx, deploynotify.Config{
 		Bot:     b,
-		KV:      provider.For("deploynotify"),
+		Store:   deploynotify.NewStore(provider.Collection("deploynotify")),
 		OwnerID: cfg.BotOwnerID,
 		GitSHA:  gitSHA,
 	})
@@ -210,16 +206,16 @@ func main() {
 }
 
 // buildProvider picks the storage backend. Selection order:
-//  1. Explicit KV_PROVIDER env (memory|dynamodb|mongodb) wins.
+//  1. Explicit KV_PROVIDER env (memory|mongodb) wins.
 //  2. Auto-detect: MONGO_URL set → mongodb; otherwise memory.
 //
 // The self-host default is mongodb (just set MONGO_URL + MONGO_DATABASE — no
-// KV_PROVIDER needed). dynamodb remains reachable only via an explicit
-// KV_PROVIDER, kept for the data migrator and integration tests. The legacy
-// firestore backend and the AWS_LAMBDA_FUNCTION_NAME auto-detect are removed.
+// KV_PROVIDER needed). The memory backend is for tests and local no-database
+// runs (MODULES=). DynamoDB is no longer a runtime backend — it survives only
+// as the one-off migration source (cmd/migrate-dynamo-to-mongo).
 //
 // Returned closer is always non-nil and safe to call exactly once.
-func buildProvider(ctx context.Context, cfg config) (storage.KVProvider, func(), error) {
+func buildProvider(ctx context.Context, cfg config) (storage.Provider, func(), error) {
 	backend := strings.ToLower(strings.TrimSpace(cfg.KVProvider))
 	if backend == "" {
 		if cfg.MongoURL != "" {
@@ -261,25 +257,10 @@ func buildProvider(ctx context.Context, cfg config) (storage.KVProvider, func(),
 		log.Info("storage backend", "backend", "mongodb", "database", cfg.MongoDatabase)
 		return storage.NewMongoProvider(db), closer, nil
 
-	case "dynamodb":
-		if cfg.DynamoDBTable == "" {
-			return nil, func() {}, errors.New("KV_PROVIDER=dynamodb requires DYNAMODB_TABLE")
-		}
-		initCtx, cancel := context.WithTimeout(ctx, dynamodbInitTimeout)
-		defer cancel()
-		client, err := storage.NewDynamoDBClient(initCtx, storage.DynamoDBEndpointFromEnv())
-		if err != nil {
-			return nil, func() {}, err
-		}
-		log.Info("storage backend",
-			"backend", "dynamodb",
-			"table", cfg.DynamoDBTable,
-			"endpoint_override", storage.DynamoDBEndpointFromEnv() != "")
-		// DynamoDB SDK v2 client has no Close; HTTP client uses the default pool.
-		return storage.NewDynamoDBProvider(client, cfg.DynamoDBTable), func() {}, nil
-
 	default:
-		return nil, func() {}, fmt.Errorf("unknown KV_PROVIDER %q (want memory|dynamodb|mongodb)", backend)
+		// DynamoDB is no longer a runtime backend — it survives only as the
+		// one-off migration source (cmd/migrate-dynamo-to-mongo).
+		return nil, func() {}, fmt.Errorf("unknown KV_PROVIDER %q (want memory|mongodb)", backend)
 	}
 }
 
@@ -298,8 +279,7 @@ type config struct {
 	Modules               []string
 	BotOwnerID            int64
 	AdminUserIDs          map[int64]bool
-	KVProvider            string // empty = auto-detect; or "memory"|"dynamodb"|"mongodb"
-	DynamoDBTable         string // required when KVProvider=dynamodb
+	KVProvider            string // empty = auto-detect; or "memory"|"mongodb"
 	MongoURL              string // required when KVProvider=mongodb (Atlas SRV connection string; SECRET — never log)
 	MongoDatabase         string // required when KVProvider=mongodb
 	TelegramBotTokenParam string
@@ -341,7 +321,6 @@ func loadConfig() config {
 		BotOwnerID:            parseInt64(envMap["OWNER_ID"]),
 		AdminUserIDs:          parseInt64Set(envMap["ADMIN_IDS"]),
 		KVProvider:            envMap["KV_PROVIDER"],
-		DynamoDBTable:         envMap["DYNAMODB_TABLE"],
 		MongoURL:              envMap["MONGO_URL"],
 		MongoDatabase:         envMap["MONGO_DATABASE"],
 		TelegramBotTokenParam: strings.TrimSpace(envMap["TELEGRAM_BOT_TOKEN_PARAMETER_NAME"]),

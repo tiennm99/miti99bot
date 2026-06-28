@@ -2,13 +2,16 @@ package loldle
 
 import (
 	"github.com/tiennm99/miti99bot/internal/modules"
+	"github.com/tiennm99/miti99bot/internal/storage"
 )
 
 // New is the loldle module Factory. Loads champions.json once at construction
 // and shares the parsed slice + per-subject lock map across all handlers.
 func New(deps modules.Deps) modules.Module {
 	s := &state{
-		kv:        deps.KV,
+		games:     storage.Typed[gameState](deps.Store),
+		stats:     storage.Typed[stats](deps.Store),
+		cfg:       storage.Typed[roundConfig](deps.Store),
 		champions: loadChampions(),
 	}
 	return modules.Module{
