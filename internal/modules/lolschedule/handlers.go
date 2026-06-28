@@ -93,7 +93,7 @@ func (s *state) replyForRange(ctx context.Context, b *bot.Bot, msg *models.Messa
 }
 
 // handleSubscribe is /lolschedule_subscribe — opt the chat into the daily
-// digest delivered by the EventBridge Scheduler cron handler.
+// digest delivered by the in-process cron handler.
 func (s *state) handleSubscribe(ctx context.Context, b *bot.Bot, update *models.Update) error {
 	msg := update.Message
 	if msg == nil {

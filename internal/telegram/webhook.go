@@ -23,7 +23,7 @@ const webhookDeleteTimeout = 10 * time.Second
 // response body — decoded as "unexpected end of JSON input" — so the webhook is
 // never actually removed and getUpdates keeps returning 409. A GET with no body
 // sidesteps that request shape. Pending updates are intentionally kept (the API
-// default) so the long poller drains the buffered queue for a lossless cutover.
+// default) so the long poller drains any buffered queue.
 func DeleteWebhook(ctx context.Context, token string) error {
 	return deleteWebhookAt(ctx, telegramAPIBase, token)
 }

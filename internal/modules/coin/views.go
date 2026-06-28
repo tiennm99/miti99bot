@@ -27,8 +27,7 @@ func (s *state) handleStats(ctx context.Context, b *bot.Bot, update *models.Upda
 
 	// Fetch sequentially (not concurrently) so the price client's keep-alive
 	// connection pool is reused across coins rather than opening N simultaneous
-	// TLS handshakes — the latter thrashes the CPU-constrained Lambda and times
-	// out. The reply-reserved sub-context bounds the whole loop so the final
+	// TLS handshakes. The reply-reserved sub-context bounds the whole loop so the final
 	// Reply keeps its budget; a slow/failed provider degrades to "(price
 	// unavailable)" instead of failing the summary.
 	fetchCtx, cancel := chathelper.FetchContext(ctx)

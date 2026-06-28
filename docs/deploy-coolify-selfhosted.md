@@ -1,8 +1,7 @@
 # Deploy: Self-host (Coolify + MongoDB Atlas)
 
 Run `miti99bot` as a long-lived container on [Coolify](https://coolify.io) with
-[MongoDB Atlas](https://www.mongodb.com/atlas) (free M0) for storage. This
-replaces the AWS Lambda + DynamoDB + EventBridge path.
+[MongoDB Atlas](https://www.mongodb.com/atlas) (free M0) for storage.
 
 ## Architecture
 
@@ -14,12 +13,9 @@ replaces the AWS Lambda + DynamoDB + EventBridge path.
    NO public ingress (polling = outbound only; no domain, no /webhook, no TLS in)
 ```
 
-Same Go binary (`cmd/server`) and module framework as AWS. Three things differ,
-all selected automatically from env:
-
 - **Storage** — `mongodb` auto-selected when `MONGO_URL` is set (no `KV_PROVIDER`).
 - **Cron** — an in-process scheduler (`internal/cron`) runs unconditionally and
-  fires each module cron on its `Schedule` (UTC). No EventBridge.
+  fires each module cron on its `Schedule` (UTC).
 - **Transport** — long polling (`b.Start`) is the **only** transport. The bot
   opens an outbound connection to Telegram and pulls updates, so there is no
   public domain, no `/webhook`, and no webhook secret. The container clears any
@@ -39,10 +35,9 @@ Copy [`.env.example`](../.env.example) → `.env` (gitignored) and fill in.
 | `ADMIN_IDS` | optional | CSV of admin ids (renamed from `ADMIN_USER_IDS`) |
 | `GEMINI_API_KEY` | optional | only the `twentyq` module needs it |
 
-**Leave UNSET on self-host:** all `*_PARAMETER_NAME` vars (they force an
-SSM/AWS lookup that fails with no AWS creds and bricks startup), `KV_PROVIDER`,
-`PORT`, `TELEGRAM_WEBHOOK_SECRET`, `GOLD_VNAPP_API_KEY`, and the
-`STOCK/COIN/GOLD *_API_URL` overrides (modules use coded defaults).
+**Leave UNSET on self-host:** `KV_PROVIDER`, `PORT`,
+`TELEGRAM_WEBHOOK_SECRET`, `GOLD_VNAPP_API_KEY`, and the `STOCK/COIN/GOLD
+*_API_URL` overrides (modules use coded defaults).
 
 > Cron runs in-process (`internal/cron`) — there is no `/cron` HTTP route and no
 > `CRON_SHARED_SECRET`. The scheduler is the sole trigger; nothing inbound.
@@ -57,11 +52,10 @@ SSM/AWS lookup that fails with no AWS creds and bricks startup), `KV_PROVIDER`,
 
    > **Accepted trade-off (validated decision).** The Coolify host has no stable
    > egress IP, so the Atlas IP allow-list is open to the internet. This widens
-   > the surface beyond DynamoDB's IAM-gated posture (where the DB was never
-   > internet-reachable). It is knowingly accepted for self-host. The mandatory
-   > compensating controls are: (1) strong unique password, (2) least-privilege
-   > `readWrite`-on-one-db user, (3) the connection string is a secret and is
-   > never logged (the bot logs only the database name on startup).
+   > the database surface. The mandatory compensating controls are: (1) strong
+   > unique password, (2) least-privilege `readWrite`-on-one-db user, (3) the
+   > connection string is a secret and is never logged (the bot logs only the
+   > database name on startup).
 
 4. Copy the `mongodb+srv://…` connection string into `MONGO_URL` and put the
    db name in `MONGO_DATABASE`.
@@ -72,8 +66,7 @@ SSM/AWS lookup that fails with no AWS creds and bricks startup), `KV_PROVIDER`,
 > expand and are queryable in Compass. The two non-object values are wrapped in a
 > named field: lolschedule subscribers under `subscribers` (array) and the daily
 > push date under `date`. Concurrency uses the `version` field (optimistic lock);
-> `updatedAt` is a BSON Date. The DynamoDB→Mongo migrator writes this shape
-> directly, and is idempotent.
+> `updatedAt` is a BSON Date.
 
 ## 2. Coolify
 
@@ -108,57 +101,23 @@ SSM/AWS lookup that fails with no AWS creds and bricks startup), `KV_PROVIDER`,
 Long polling needs no webhook registration — only the command menu:
 
 ```sh
-TELEGRAM_BOT_TOKEN=… make telegram-commands-selfhost
+TELEGRAM_BOT_TOKEN=… make telegram-commands
 ```
 
-## Cutover runbook
+## Operations
 
-Zero-loss switch from the live AWS Lambda to the Coolify poller. Coordinate
-users to pause activity during the brief window.
+The live deployment is the Coolify container and MongoDB is the sole system of
+record. Keep exactly one replica running. To confirm Telegram is in polling mode:
 
-1. **Deploy the Coolify container but keep it stopped/scaled-to-0.** A running
-   poller would 409 against the live Lambda webhook and its scheduler would
-   overlap EventBridge. Use a fresh, empty Atlas DB.
-2. **Disable/delete the EventBridge schedule** `miti99bot-lolschedule-daily-push`
-   (it invokes the Lambda directly, independent of transport). The in-process
-   scheduler's per-UTC-date idempotency guard is the backup.
-3. **`deleteWebhook` (mandatory):**
-   ```sh
-   TELEGRAM_BOT_TOKEN=… make telegram-deletewebhook-selfhost
-   ```
-   This buffers incoming updates (Telegram retains ~24h) so nothing is lost, and
-   releases the webhook so the poller won't 409. After this the Lambda stops
-   receiving updates.
-4. **Migrate + verify** (read-only on DynamoDB — see
-   [`cmd/migrate-dynamo-to-mongo`](../cmd/migrate-dynamo-to-mongo/README.md)):
-   ```sh
-   export MONGO_URL=… MONGO_DATABASE=… AWS_PROFILE=miti99bot-migrate
-   make migrate-dynamo-to-mongo DRY_RUN=1   # review counts
-   make migrate-dynamo-to-mongo             # real run
-   make migrate-verify                      # counts must match, exit 0
-   ```
-   Keep this window short (target minutes).
-5. **Start the Coolify container** (1 replica). Its scheduler runs by default
-   (safe now that EventBridge is off). On startup it `deleteWebhook`s again
-   (idempotent) and begins polling, draining Telegram's buffered queue.
-6. **Confirm:**
-   ```sh
-   TELEGRAM_BOT_TOKEN=… make telegram-webhook-info-selfhost
-   ```
-   `url` should be empty and `pending_update_count` should drain toward 0.
-   Smoke `/ping`, `/stats`, and a coin/stock balance command — migrated state
-   should be visible from Atlas.
-7. **Tear down AWS** once verified — see
-   [`aws-decommission-runbook.md`](./aws-decommission-runbook.md).
+```sh
+TELEGRAM_BOT_TOKEN=… make telegram-webhook-info
+```
 
-### Rollback
+`url` should be empty. If needed, clear the webhook explicitly:
 
-The only clean revert is **before `sam delete`**: stop the poller, then
-re-`setWebhook` to the Lambda Function URL (the still-deployed Lambda runs its
-own webhook code until teardown). Lossless **only until the first post-cutover
-Mongo write** — after that, MongoDB/Coolify is the sole system of record. This
-short-window RPO was an explicitly accepted decision; no reverse migrator
-exists.
+```sh
+TELEGRAM_BOT_TOKEN=… make telegram-deletewebhook
+```
 
 ## Local smoke test
 

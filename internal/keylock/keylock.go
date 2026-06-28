@@ -8,9 +8,8 @@
 // race and drop one write.
 //
 // Trade-off: the underlying sync.Map grows unboundedly with distinct keys
-// (~32 B each). At 1M keys that's ~32 MB — acceptable for the lifetime of
-// a Lambda instance, which restarts well before reaching that scale.
-// Eviction is intentionally deferred — restart frequency keeps the working set bounded.
+// (~32 B each). At the current bot scale, that is acceptable; add eviction if
+// production cardinality starts growing materially.
 package keylock
 
 import "sync"
