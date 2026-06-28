@@ -38,7 +38,7 @@ Long polling is the key self-host simplification: the bot opens an OUTBOUND conn
 ### Container + Coolify
 The existing `Dockerfile` (golang:1.25-alpine builder → distroless static nonroot, `ENTRYPOINT ["/server"]`, `EXPOSE 8080`) builds with `-ldflags="-s -w"` only — it does **not** inject `gitSHA`. Only the Makefile injects it (`Makefile:13`). `deploynotify` runs unconditionally at startup (`main.go:148`) and stays silent when `gitSHA` is empty (`main.go:40-41`), so as-is the "new version" owner DM is **silently dead on self-host** — a behavior regression from Lambda. Required (not optional): add `ARG GIT_SHA` + `-ldflags "-s -w -X main.gitSHA=$GIT_SHA"` to the Dockerfile and pass `--build-arg GIT_SHA=$(git rev-parse --short HEAD)` (Coolify exposes the commit SHA as a build var). If deploynotify parity is explicitly unwanted, instead document in acceptance criteria that the feature is disabled on self-host — do not leave it as undocumented breakage.
 
-`docker-compose.yml` (committed; Coolify consumes it):
+`compose.yml` (committed; Coolify consumes it):
 ```yaml
 services:
   bot:
@@ -77,7 +77,7 @@ Secrets: because `*_PARAMETER_NAME` env vars are NOT set, `cmd/server` reads `TE
 - Delete: `internal/telegram/webhook.go` + `internal/telegram/webhook_test.go`.
 - Modify: `internal/server/router.go` — remove the `/webhook` route; keep `/` health (and `/cron`, unused/unexposed).
 - Modify: `internal/telegram/client.go` — update the "configured for webhook mode" doc to polling; keep `WithSkipGetMe`, re-evaluate `WithNotAsyncHandlers`.
-- Create: `docker-compose.yml` — bot service as above.
+- Create: `compose.yml` — bot service as above.
 - Create: `.env.example` — every env var with placeholder values + comments; real `.env` gitignored.
 - Modify: `.gitignore` — ensure `.env` ignored (verify; add if missing).
 - Modify (optional): `Dockerfile` — `ARG GIT_SHA` + `-ldflags "-X main.gitSHA=$GIT_SHA"` for deploynotify parity.
@@ -90,7 +90,7 @@ Secrets: because `*_PARAMETER_NAME` env vars are NOT set, `cmd/server` reads `TE
 
 ## Implementation Steps
 
-1. Write `docker-compose.yml` + `.env.example`; verify `.env` gitignored.
+1. Write `compose.yml` + `.env.example`; verify `.env` gitignored.
 2. Decide healthcheck approach (Coolify HTTP monitor preferred); implement `-healthcheck` flag only if needed.
 1b. Switch `cmd/server/main.go` to `b.Start(rootCtx)`; delete the webhook handler, `/webhook` route, and `WebhookSecret` config + fatal.
 3. Local validation: `MONGO_URL=… MONGO_DATABASE=… docker compose up --build`; confirm boot logs show `storage backend backend=mongodb database=…` (NO connection string), `internal cron scheduler started`, and the polling loop started (getUpdates); `curl localhost:8080/` returns `miti99bot ok`. (Requires the bot's webhook to be unset — see Phase 4 / `deleteWebhook`, else getUpdates 409s.)
