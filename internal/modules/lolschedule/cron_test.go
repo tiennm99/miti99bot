@@ -181,7 +181,7 @@ func TestRunDailyPush_ForwardsMessageThreadID(t *testing.T) {
 
 // TestRunDailyPush_IdempotentPerDate locks in the double-fire guard: invoking
 // the handler twice on the same UTC date sends each subscriber exactly one
-// digest. Defends against cutover overlap, rolling-deploy overlap, and operator
+// digest. Defends against rolling-deploy overlap and operator
 // misconfiguration (all double-fire windows the daily push must survive).
 func TestRunDailyPush_IdempotentPerDate(t *testing.T) {
 	s := newTestState(t)

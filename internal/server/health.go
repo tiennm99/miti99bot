@@ -2,9 +2,9 @@ package server
 
 import "net/http"
 
-// HealthHandler answers GET / with a stable string so Lambda's HTTP probe
-// and any uptime monitor can distinguish "process up" from "process listening
-// but routing broken".
+// HealthHandler answers GET / with a stable string so the container health
+// monitor can distinguish "process up" from "process listening but routing
+// broken".
 func HealthHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {

@@ -47,9 +47,8 @@ jobs:
           go install golang.org/x/vuln/cmd/govulncheck@latest
           govulncheck ./...
 
-      # No DB emulator step: storage integration tests (mongodb, dynamodb) skip
-      # gracefully when MONGODB_TEST_URL / DYNAMODB_LOCAL_URL are unset. Run them
-      # locally via `make test-mongo` / `make test-dynamodb`.
+      # No DB emulator step: MongoDB integration tests skip gracefully when
+      # MONGODB_TEST_URL is unset. Run them locally via `make test-mongo`.
       - name: go test
         env:
           # Quiet test logs so real failures stand out.
@@ -64,14 +63,3 @@ jobs:
 
       - name: docker build
         run: docker build -t miti99bot .
-
-  iac:
-    name: SAM template validate
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      - uses: aws-actions/setup-sam@v3
-        with:
-          use-installer: true
-      - name: sam validate (offline)
-        run: sam validate --lint --region ap-southeast-1

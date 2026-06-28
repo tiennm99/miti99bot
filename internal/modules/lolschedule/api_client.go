@@ -39,15 +39,14 @@ const (
 	// upstream call fails outright.
 	staleMaxAge = 60 * 60 * time.Second
 	// httpTimeout: keep upstream calls bounded so a hung lolesports edge
-	// can't hold a Lambda instance.
+	// can't hold a worker goroutine indefinitely.
 	httpTimeout = 8 * time.Second
 )
 
 // Team is one side of a match. JSON shape matches the lolesports response.
 // bson tags mirror the json names exactly: this tree is persisted inside
-// cacheRecord, and the DynamoDB→Mongo migrator preserves the original (camelCase)
-// JSON keys, so the store must read those keys back verbatim — not the driver's
-// lowercased default.
+// cacheRecord, so the store must read those keys back verbatim — not the
+// driver's lowercased default.
 type Team struct {
 	Name   string      `json:"name,omitempty" bson:"name,omitempty"`
 	Code   string      `json:"code,omitempty" bson:"code,omitempty"`

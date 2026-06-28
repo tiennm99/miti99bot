@@ -12,9 +12,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
-	awsconfig "github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	"github.com/tiennm99/miti99bot/internal/ai"
 	"github.com/tiennm99/miti99bot/internal/cron"
 	"github.com/tiennm99/miti99bot/internal/deploynotify"
@@ -79,18 +76,11 @@ func factories() map[string]modules.Factory {
 // container; 10s leaves headroom without hiding a wedged cluster.
 const mongodbInitTimeout = 10 * time.Second
 
-// ssmInitTimeout caps cold-start secret resolution. Secrets are fetched once
-// at startup from Parameter Store when *_PARAMETER_NAME env vars are set.
-const ssmInitTimeout = 5 * time.Second
-
 func main() {
 	rootCtx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
 	cfg := loadConfig()
-	if err := resolveSSMSecrets(rootCtx, &cfg); err != nil {
-		log.Fatal("ssm secret resolution failed", "err", err)
-	}
 	if cfg.TelegramBotToken == "" {
 		log.Fatal("missing required env", "key", "TELEGRAM_BOT_TOKEN")
 	}
@@ -144,10 +134,8 @@ func main() {
 		"commands", len(reg.AllCommands),
 		"crons", len(reg.Crons()))
 
-	// In-process cron scheduler. Replaces EventBridge Scheduler off AWS; runs
-	// unconditionally so the long-lived container fires module crons (e.g. the
-	// lolschedule daily push) on their Schedule. Cutover safety comes from
-	// ordering + the per-date idempotency guard, not from a gate.
+	// In-process cron scheduler runs unconditionally so the long-lived container
+	// fires module crons (e.g. the lolschedule daily push) on their Schedule.
 	stopCron, err := cron.Run(rootCtx, reg)
 	if err != nil {
 		log.Fatal("cron scheduler init failed", "err", err)
@@ -158,10 +146,10 @@ func main() {
 		log.Warn("OWNER_ID unset; all Private + Protected commands will be denied")
 	}
 
-	// Clear any webhook left over from the AWS deployment at startup, before the
-	// owner DM and before polling. getUpdates (long polling, below) returns HTTP
-	// 409 while a webhook is set, so a stuck webhook silently breaks the bot.
-	// Best-effort, one shot: a real failure here is logged, not retried.
+	// Clear any existing webhook at startup before the owner DM and before
+	// polling. getUpdates returns HTTP 409 while a webhook is set, so a stuck
+	// webhook silently breaks the bot. Best-effort, one shot: a real failure
+	// here is logged, not retried.
 	if err := telegram.DeleteWebhook(rootCtx, cfg.TelegramBotToken); err != nil {
 		log.Warn("deleteWebhook failed; getUpdates may 409 if a webhook is set", "err", err)
 	} else {
@@ -218,8 +206,7 @@ func main() {
 //
 // The self-host default is mongodb (just set MONGO_URL + MONGO_DATABASE — no
 // KV_PROVIDER needed). The memory backend is for tests and local no-database
-// runs (MODULES=). DynamoDB is no longer a runtime backend — it survives only
-// as the one-off migration source (cmd/migrate-dynamo-to-mongo).
+// runs (MODULES=).
 //
 // Returned closer is always non-nil and safe to call exactly once.
 func buildProvider(ctx context.Context, cfg config) (storage.Provider, func(), error) {
@@ -265,33 +252,28 @@ func buildProvider(ctx context.Context, cfg config) (storage.Provider, func(), e
 		return storage.NewMongoProvider(db), closer, nil
 
 	default:
-		// DynamoDB is no longer a runtime backend — it survives only as the
-		// one-off migration source (cmd/migrate-dynamo-to-mongo).
 		return nil, func() {}, fmt.Errorf("unknown KV_PROVIDER %q (want memory|mongodb)", backend)
 	}
 }
 
 type config struct {
-	Port                  string
-	TelegramBotToken      string
-	SourceCommit          string // Coolify-injected commit SHA (runtime env) for deploynotify
-	GeminiAPIKey          string
-	GoldPriceAPIURL       string
-	GoldFXAPIURL          string
-	GoldVNAppAPIURL       string
-	GoldVNAppAPIKey       string
-	CoinBinanceAPIURL     string
-	CoinCoinbaseAPIURL    string
-	CoinCoinGeckoAPIURL   string
-	Modules               []string
-	BotOwnerID            int64
-	AdminUserIDs          map[int64]bool
-	KVProvider            string // empty = auto-detect; or "memory"|"mongodb"
-	MongoURL              string // required when KVProvider=mongodb (Atlas SRV connection string; SECRET — never log)
-	MongoDatabase         string // required when KVProvider=mongodb
-	TelegramBotTokenParam string
-	GeminiAPIKeyParam     string
-	GoldVNAppAPIKeyParam  string
+	Port                string
+	TelegramBotToken    string
+	SourceCommit        string // Coolify-injected commit SHA (runtime env) for deploynotify
+	GeminiAPIKey        string
+	GoldPriceAPIURL     string
+	GoldFXAPIURL        string
+	GoldVNAppAPIURL     string
+	GoldVNAppAPIKey     string
+	CoinBinanceAPIURL   string
+	CoinCoinbaseAPIURL  string
+	CoinCoinGeckoAPIURL string
+	Modules             []string
+	BotOwnerID          int64
+	AdminUserIDs        map[int64]bool
+	KVProvider          string // empty = auto-detect; or "memory"|"mongodb"
+	MongoURL            string // required when KVProvider=mongodb (Atlas SRV connection string; SECRET — never log)
+	MongoDatabase       string // required when KVProvider=mongodb
 }
 
 func loadConfig() config {
@@ -312,83 +294,24 @@ func loadConfig() config {
 		log.Fatal("invalid PORT", "value", port)
 	}
 	return config{
-		Port:                  port,
-		TelegramBotToken:      envMap["TELEGRAM_BOT_TOKEN"],
-		SourceCommit:          envMap["SOURCE_COMMIT"],
-		GeminiAPIKey:          envMap["GEMINI_API_KEY"],
-		GoldPriceAPIURL:       envMap["GOLD_PRICE_API_URL"],
-		GoldFXAPIURL:          envMap["GOLD_FX_API_URL"],
-		GoldVNAppAPIURL:       envMap["GOLD_VNAPP_API_URL"],
-		GoldVNAppAPIKey:       envMap["GOLD_VNAPP_API_KEY"],
-		CoinBinanceAPIURL:     envMap["COIN_BINANCE_API_URL"],
-		CoinCoinbaseAPIURL:    envMap["COIN_COINBASE_API_URL"],
-		CoinCoinGeckoAPIURL:   envMap["COIN_COINGECKO_API_URL"],
-		Modules:               splitCSV(envMap["MODULES"]),
-		BotOwnerID:            parseInt64(envMap["OWNER_ID"]),
-		AdminUserIDs:          parseInt64Set(envMap["ADMIN_IDS"]),
-		KVProvider:            envMap["KV_PROVIDER"],
-		MongoURL:              envMap["MONGO_URL"],
-		MongoDatabase:         envMap["MONGO_DATABASE"],
-		TelegramBotTokenParam: strings.TrimSpace(envMap["TELEGRAM_BOT_TOKEN_PARAMETER_NAME"]),
-		GeminiAPIKeyParam:     strings.TrimSpace(envMap["GEMINI_API_KEY_PARAMETER_NAME"]),
-		GoldVNAppAPIKeyParam:  strings.TrimSpace(envMap["GOLD_VNAPP_API_KEY_PARAMETER_NAME"]),
+		Port:                port,
+		TelegramBotToken:    envMap["TELEGRAM_BOT_TOKEN"],
+		SourceCommit:        envMap["SOURCE_COMMIT"],
+		GeminiAPIKey:        envMap["GEMINI_API_KEY"],
+		GoldPriceAPIURL:     envMap["GOLD_PRICE_API_URL"],
+		GoldFXAPIURL:        envMap["GOLD_FX_API_URL"],
+		GoldVNAppAPIURL:     envMap["GOLD_VNAPP_API_URL"],
+		GoldVNAppAPIKey:     envMap["GOLD_VNAPP_API_KEY"],
+		CoinBinanceAPIURL:   envMap["COIN_BINANCE_API_URL"],
+		CoinCoinbaseAPIURL:  envMap["COIN_COINBASE_API_URL"],
+		CoinCoinGeckoAPIURL: envMap["COIN_COINGECKO_API_URL"],
+		Modules:             splitCSV(envMap["MODULES"]),
+		BotOwnerID:          parseInt64(envMap["OWNER_ID"]),
+		AdminUserIDs:        parseInt64Set(envMap["ADMIN_IDS"]),
+		KVProvider:          envMap["KV_PROVIDER"],
+		MongoURL:            envMap["MONGO_URL"],
+		MongoDatabase:       envMap["MONGO_DATABASE"],
 	}
-}
-
-func resolveSSMSecrets(ctx context.Context, cfg *config) error {
-	bindings := []struct {
-		name   string
-		target *string
-	}{
-		{name: cfg.TelegramBotTokenParam, target: &cfg.TelegramBotToken},
-		{name: cfg.GeminiAPIKeyParam, target: &cfg.GeminiAPIKey},
-		{name: cfg.GoldVNAppAPIKeyParam, target: &cfg.GoldVNAppAPIKey},
-	}
-
-	targetsByName := map[string][]*string{}
-	names := make([]string, 0, len(bindings))
-	for _, b := range bindings {
-		if b.name == "" || *b.target != "" {
-			continue
-		}
-		if _, ok := targetsByName[b.name]; !ok {
-			names = append(names, b.name)
-		}
-		targetsByName[b.name] = append(targetsByName[b.name], b.target)
-	}
-	if len(names) == 0 {
-		return nil
-	}
-
-	initCtx, cancel := context.WithTimeout(ctx, ssmInitTimeout)
-	defer cancel()
-
-	awsCfg, err := awsconfig.LoadDefaultConfig(initCtx, awsconfig.WithHTTPClient(&http.Client{
-		Timeout: ssmInitTimeout,
-	}))
-	if err != nil {
-		return fmt.Errorf("load AWS config: %w", err)
-	}
-	client := ssm.NewFromConfig(awsCfg)
-	out, err := client.GetParameters(initCtx, &ssm.GetParametersInput{
-		Names:          names,
-		WithDecryption: aws.Bool(true),
-	})
-	if err != nil {
-		return fmt.Errorf("get parameters: %w", err)
-	}
-	if len(out.InvalidParameters) > 0 {
-		return fmt.Errorf("missing SSM parameters: %s", strings.Join(out.InvalidParameters, ","))
-	}
-	for _, p := range out.Parameters {
-		name := aws.ToString(p.Name)
-		value := aws.ToString(p.Value)
-		for _, target := range targetsByName[name] {
-			*target = value
-		}
-	}
-	log.Info("loaded secrets from ssm", "count", len(out.Parameters))
-	return nil
 }
 
 func exportOptionalEnv(key, value string) {

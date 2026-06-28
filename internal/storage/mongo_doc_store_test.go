@@ -15,7 +15,7 @@ import (
 
 // mongoLocalSetup connects to a local MongoDB and returns a fresh, uniquely
 // named database plus cleanup. Tests skip if MONGODB_TEST_URL is unset so CI
-// without a Mongo container still builds (mirrors the DynamoDB Local gating).
+// without a Mongo container still builds.
 func mongoLocalSetup(t *testing.T) (*mongo.Database, func()) {
 	t.Helper()
 	uri := os.Getenv("MONGODB_TEST_URL")

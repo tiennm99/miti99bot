@@ -16,13 +16,6 @@ func newWordleStats() StatsStore {
 	return storage.Typed[Stats](storage.NewMemoryProvider().Collection("wordle"))
 }
 
-// newWordleStores returns a games + stats store backed by the same collection
-// (disjoint key prefixes: "game:" vs "stats:").
-func newWordleStores() (GameStore, StatsStore) {
-	c := storage.NewMemoryProvider().Collection("wordle")
-	return storage.Typed[GameState](c), storage.Typed[Stats](c)
-}
-
 func TestStats_DefaultLastResultAtIsNull(t *testing.T) {
 	// Go's *int64 must marshal as null when nil, so unplayed accounts emit
 	// `"lastResultAt": null` and the field stays distinguishable from
