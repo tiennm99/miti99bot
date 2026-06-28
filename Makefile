@@ -1,4 +1,4 @@
-.PHONY: help test test-emulator test-dynamodb test-mongo firestore-emulator dynamodb-local dynamodb-local-stop mongo-local mongo-local-stop vet build build-lambda run sam-validate sam-build sam-deploy telegram-setup telegram-webhook telegram-webhook-info telegram-commands telegram-commands-info telegram-commands-selfhost telegram-deletewebhook-selfhost telegram-webhook-info-selfhost migrate-dynamo-to-mongo migrate-verify logs clean
+.PHONY: help test test-dynamodb test-mongo dynamodb-local dynamodb-local-stop mongo-local mongo-local-stop vet build build-lambda run sam-validate sam-build sam-deploy telegram-setup telegram-webhook telegram-webhook-info telegram-commands telegram-commands-info telegram-commands-selfhost telegram-deletewebhook-selfhost telegram-webhook-info-selfhost migrate-dynamo-to-mongo migrate-verify logs clean
 
 # Lambda target architecture. Match Globals.Architectures in template.yaml.
 LAMBDA_GOOS   ?= linux
@@ -26,19 +26,6 @@ help: ## Show this help
 
 # Default: run unit tests that don't require any emulator.
 test: ## Unit tests (no emulator required)
-	go test -race -count=1 ./...
-
-# Start a local Firestore emulator (separate terminal). Requires gcloud SDK
-# with the cloud-firestore-emulator component installed:
-#   gcloud components install cloud-firestore-emulator
-firestore-emulator: ## Start Firestore emulator on :8085 (foreground)
-	gcloud emulators firestore start --host-port=localhost:8085
-
-# Run all tests including Firestore-emulator-gated ones. Expects the emulator
-# to already be running (use `make firestore-emulator` in another shell).
-test-emulator: ## Run tests with Firestore emulator (must be running)
-	FIRESTORE_EMULATOR_HOST=localhost:8085 \
-	GOOGLE_CLOUD_PROJECT=miti99bot-test \
 	go test -race -count=1 ./...
 
 # Run DynamoDB integration tests against DynamoDB Local.
@@ -75,7 +62,7 @@ build-lambda: ## Cross-compile bootstrap for Lambda (linux/arm64)
 
 # ---- Run ------------------------------------------------------------------
 
-# Local dev run with an in-memory KV (no Firestore / DynamoDB needed).
+# Local dev run with an in-memory KV (no database needed).
 run: ## Run locally (in-memory KV)
 	go run ./cmd/server
 
