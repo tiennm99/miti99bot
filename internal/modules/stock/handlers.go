@@ -22,7 +22,6 @@ import (
 type state struct {
 	kv                storage.KVStore
 	prices            *PriceClient
-	incomeEvents      *IncomeEventClient
 	locks             keylock.Map
 	nowFn             func() time.Time
 	comingSoonMessage string // exposed for tests / future i18n
@@ -40,7 +39,6 @@ func newState(kv storage.KVStore) *state {
 	return &state{
 		kv:                kv,
 		prices:            &PriceClient{},
-		incomeEvents:      NewIncomeEventClientFromEnv(),
 		comingSoonMessage: "Crypto, gold & currency exchange coming soon!",
 	}
 }

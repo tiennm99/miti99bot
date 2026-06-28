@@ -42,12 +42,6 @@ func New(deps modules.Deps) modules.Module {
 				Handler:     s.handleIncomeVND,
 			},
 			{
-				Name:        "stock_income_events",
-				Visibility:  modules.VisibilityPublic,
-				Description: "Check recent income events from FireAnt",
-				Handler:     s.handleIncomeEvents,
-			},
-			{
 				Name:        "stock_convert",
 				Visibility:  modules.VisibilityPublic,
 				Description: "Currency exchange (coming soon)",
