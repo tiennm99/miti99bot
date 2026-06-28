@@ -16,11 +16,13 @@ services:
       ADMIN_IDS: ${ADMIN_IDS}              # CSV of admin Telegram user ids
       # --- Optional ---
       GEMINI_API_KEY: ${GEMINI_API_KEY}    # only the twentyq module needs it
-      # SOURCE_COMMIT (commit SHA, read at startup for the deploynotify owner DM)
-      # is auto-injected into the container by Coolify — do NOT declare it here.
-      # A `SOURCE_COMMIT: ${SOURCE_COMMIT:-}` entry resolves to "" at compose-parse
-      # time and would clobber Coolify's runtime value. Local `docker compose up`
-      # has no SOURCE_COMMIT, so deploynotify just stays silent there.
+      # SOURCE_COMMIT (commit SHA, read at startup for the deploynotify owner DM).
+      # For Docker Compose, Coolify passes predefined vars via --env-file for
+      # interpolation ONLY — the var reaches the container only if referenced
+      # here (per Coolify docs). The :- default keeps local `docker compose up`
+      # (where SOURCE_COMMIT is unset) quiet; on Coolify the real value wins, so
+      # deploynotify reports "unknown" only outside Coolify.
+      SOURCE_COMMIT: ${SOURCE_COMMIT:-}
       # Storage auto-selects mongodb because MONGO_URL is set — no KV_PROVIDER.
       # The in-process cron scheduler runs by default — no CRON_MODE.
       # PORT defaults to 8080 (internal health server) — omit unless overriding.
