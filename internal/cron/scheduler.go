@@ -16,17 +16,15 @@ import (
 	"github.com/tiennm99/miti99bot/internal/modules"
 )
 
-// cronTimeout caps a single in-process cron fire. Defined locally (rather than
-// imported from internal/server) to avoid a server→cron layering inversion;
-// it intentionally matches internal/server's defaultCronTimeout so the
-// in-process path and the HTTP /cron path share the same 60s budget.
+// cronTimeout caps a single in-process cron fire so a slow handler cannot
+// wedge the scheduler. 60s is the budget; long crons must offload and return
+// fast.
 const cronTimeout = 60 * time.Second
 
 // Run starts an in-process scheduler that fires every registered cron with a
 // non-empty Schedule. Each fire is wrapped with a timeout, panic recovery, and
 // structured logging — modules.DispatchScheduled provides none of these (it is
-// only a registry lookup + handler call), so the wrapping lives here, mirroring
-// the server-package cronHandler.
+// only a registry lookup + handler call), so the wrapping lives here.
 //
 // A malformed schedule string is fatal (returned as an error) so a config typo
 // fails fast at startup rather than silently never firing. The returned stop

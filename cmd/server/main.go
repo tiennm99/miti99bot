@@ -143,9 +143,6 @@ func main() {
 	if cfg.BotOwnerID == 0 {
 		log.Warn("OWNER_ID unset; all Private + Protected commands will be denied")
 	}
-	if cfg.CronSecret == "" {
-		log.Warn("CRON_SHARED_SECRET unset; /cron/{name} disabled (404 to all)")
-	}
 
 	deploynotify.Run(rootCtx, deploynotify.Config{
 		Bot:     b,
@@ -154,23 +151,16 @@ func main() {
 		GitSHA:  gitSHA,
 	})
 
-	handler := server.New(server.Config{
-		Bot:        b,
-		Registry:   reg,
-		CronSecret: cfg.CronSecret,
-	})
+	handler := server.New()
 
 	srv := &http.Server{
 		Addr:              ":" + cfg.Port,
 		Handler:           handler,
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       30 * time.Second,
-		// 75s = cron handler cap (60s, internal/server/timeouts.go) plus a
-		// 15s margin for response serialization. On Lambda the 30s function
-		// timeout supersedes this; the tighter ceiling matters only for
-		// local non-Lambda runs where a 6-minute slow-loris write was the
-		// previous (over-generous) bound.
-		WriteTimeout: 75 * time.Second,
+		// The only route is GET / (health). It responds instantly, so a tight
+		// write deadline is ample and bounds any slow-loris write.
+		WriteTimeout: 30 * time.Second,
 		IdleTimeout:  120 * time.Second,
 	}
 
@@ -267,7 +257,6 @@ func buildProvider(ctx context.Context, cfg config) (storage.Provider, func(), e
 type config struct {
 	Port                  string
 	TelegramBotToken      string
-	CronSecret            string
 	GeminiAPIKey          string
 	GoldPriceAPIURL       string
 	GoldFXAPIURL          string
@@ -283,7 +272,6 @@ type config struct {
 	MongoURL              string // required when KVProvider=mongodb (Atlas SRV connection string; SECRET — never log)
 	MongoDatabase         string // required when KVProvider=mongodb
 	TelegramBotTokenParam string
-	CronSecretParam       string
 	GeminiAPIKeyParam     string
 	GoldVNAppAPIKeyParam  string
 }
@@ -308,7 +296,6 @@ func loadConfig() config {
 	return config{
 		Port:                  port,
 		TelegramBotToken:      envMap["TELEGRAM_BOT_TOKEN"],
-		CronSecret:            envMap["CRON_SHARED_SECRET"],
 		GeminiAPIKey:          envMap["GEMINI_API_KEY"],
 		GoldPriceAPIURL:       envMap["GOLD_PRICE_API_URL"],
 		GoldFXAPIURL:          envMap["GOLD_FX_API_URL"],
@@ -324,7 +311,6 @@ func loadConfig() config {
 		MongoURL:              envMap["MONGO_URL"],
 		MongoDatabase:         envMap["MONGO_DATABASE"],
 		TelegramBotTokenParam: strings.TrimSpace(envMap["TELEGRAM_BOT_TOKEN_PARAMETER_NAME"]),
-		CronSecretParam:       strings.TrimSpace(envMap["CRON_SHARED_SECRET_PARAMETER_NAME"]),
 		GeminiAPIKeyParam:     strings.TrimSpace(envMap["GEMINI_API_KEY_PARAMETER_NAME"]),
 		GoldVNAppAPIKeyParam:  strings.TrimSpace(envMap["GOLD_VNAPP_API_KEY_PARAMETER_NAME"]),
 	}
@@ -336,7 +322,6 @@ func resolveSSMSecrets(ctx context.Context, cfg *config) error {
 		target *string
 	}{
 		{name: cfg.TelegramBotTokenParam, target: &cfg.TelegramBotToken},
-		{name: cfg.CronSecretParam, target: &cfg.CronSecret},
 		{name: cfg.GeminiAPIKeyParam, target: &cfg.GeminiAPIKey},
 		{name: cfg.GoldVNAppAPIKeyParam, target: &cfg.GoldVNAppAPIKey},
 	}
