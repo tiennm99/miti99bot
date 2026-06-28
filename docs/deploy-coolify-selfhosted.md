@@ -88,11 +88,12 @@ SSM/AWS lookup that fails with no AWS creds and bricks startup), `KV_PROVIDER`,
    bot token; a second poller gets HTTP 409, and a second in-process scheduler
    double-fires crons. Prefer **stop-first redeploys** so two containers never
    overlap near a cron time.
-5. **deploynotify commit SHA:** Coolify injects `SOURCE_COMMIT` (a predefined
-   runtime env var) into the container, and the compose `environment` forwards
-   it, so the bot reads it at startup and DMs the owner the "new version"
-   notice — no manual wiring. Without it, `deploynotify` stays silent (no
-   crash) — but you lose that notification.
+5. **deploynotify commit SHA:** Coolify auto-injects `SOURCE_COMMIT` (a
+   predefined runtime env var) into the container, and the bot reads it at
+   startup to DM the owner the "new version" notice — no manual wiring, and do
+   **not** declare `SOURCE_COMMIT` in compose/env (a `${SOURCE_COMMIT:-}` entry
+   resolves to `""` at parse time and clobbers Coolify's value). Without it,
+   `deploynotify` stays silent (no crash) — but you lose that notification.
 6. **Health check:** use Coolify's HTTP monitor against `GET /` (returns
    `text/plain` `miti99bot ok`). Do **not** use a compose `healthcheck` — the
    distroless image has no shell/curl and `cmd/server` has no `-healthcheck`
