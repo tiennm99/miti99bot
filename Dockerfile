@@ -6,14 +6,15 @@ RUN go mod download
 
 COPY . .
 
-# GIT_SHA is baked into the binary so internal/deploynotify can DM the owner
-# once per new version (parity with the Makefile build). Coolify exposes the
-# commit SHA as a build arg — pass it with
-#   --build-arg GIT_SHA=$(git rev-parse --short HEAD)
+# SOURCE_COMMIT is baked into the binary so internal/deploynotify can DM the
+# owner once per new version (parity with the Makefile build). Coolify exposes
+# the commit SHA as the SOURCE_COMMIT build arg automatically — no manual
+# wiring needed. For a manual build, pass it with
+#   --build-arg SOURCE_COMMIT=$(git rev-parse --short HEAD)
 # When unset, deploynotify treats the empty SHA as "stay silent".
-ARG GIT_SHA=""
+ARG SOURCE_COMMIT=""
 RUN CGO_ENABLED=0 GOOS=linux go build \
-    -ldflags="-s -w -X main.gitSHA=${GIT_SHA}" \
+    -ldflags="-s -w -X main.gitSHA=${SOURCE_COMMIT}" \
     -o /out/server \
     ./cmd/server
 
