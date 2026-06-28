@@ -44,50 +44,61 @@ const (
 )
 
 // Team is one side of a match. JSON shape matches the lolesports response.
+// bson tags mirror the json names exactly: this tree is persisted inside
+// cacheRecord, and the DynamoDB→Mongo migrator preserves the original (camelCase)
+// JSON keys, so the store must read those keys back verbatim — not the driver's
+// lowercased default.
 type Team struct {
-	Name   string `json:"name,omitempty"`
-	Code   string `json:"code,omitempty"`
-	Image  string `json:"image,omitempty"`
-	Result *struct {
-		Outcome  string `json:"outcome,omitempty"` // "win" or "loss"
-		GameWins int    `json:"gameWins,omitempty"`
-	} `json:"result,omitempty"`
-	Record *struct {
-		Wins   int `json:"wins,omitempty"`
-		Losses int `json:"losses,omitempty"`
-	} `json:"record,omitempty"`
+	Name   string      `json:"name,omitempty" bson:"name,omitempty"`
+	Code   string      `json:"code,omitempty" bson:"code,omitempty"`
+	Image  string      `json:"image,omitempty" bson:"image,omitempty"`
+	Result *TeamResult `json:"result,omitempty" bson:"result,omitempty"`
+	Record *TeamRecord `json:"record,omitempty" bson:"record,omitempty"`
+}
+
+// TeamResult is a team's per-match outcome (named so tests and the bson decoder
+// share one type).
+type TeamResult struct {
+	Outcome  string `json:"outcome,omitempty" bson:"outcome,omitempty"` // "win" or "loss"
+	GameWins int    `json:"gameWins,omitempty" bson:"gameWins,omitempty"`
+}
+
+// TeamRecord is a team's running series record.
+type TeamRecord struct {
+	Wins   int `json:"wins,omitempty" bson:"wins,omitempty"`
+	Losses int `json:"losses,omitempty" bson:"losses,omitempty"`
 }
 
 // League holds the league-section-header info on each event.
 type League struct {
-	Name  string `json:"name,omitempty"`
-	Slug  string `json:"slug,omitempty"`
-	Image string `json:"image,omitempty"`
+	Name  string `json:"name,omitempty" bson:"name,omitempty"`
+	Slug  string `json:"slug,omitempty" bson:"slug,omitempty"`
+	Image string `json:"image,omitempty" bson:"image,omitempty"`
 }
 
 // Strategy is the bestOf descriptor (Bo1, Bo3, Bo5).
 type Strategy struct {
-	Type  string `json:"type,omitempty"`
-	Count int    `json:"count,omitempty"`
+	Type  string `json:"type,omitempty" bson:"type,omitempty"`
+	Count int    `json:"count,omitempty" bson:"count,omitempty"`
 }
 
 // Match is the inner match metadata.
 type Match struct {
-	ID       string   `json:"id,omitempty"`
-	Teams    []Team   `json:"teams,omitempty"`
-	Strategy Strategy `json:"strategy,omitempty"`
+	ID       string   `json:"id,omitempty" bson:"id,omitempty"`
+	Teams    []Team   `json:"teams,omitempty" bson:"teams,omitempty"`
+	Strategy Strategy `json:"strategy,omitempty" bson:"strategy,omitempty"`
 }
 
 // ScheduleEvent is one upcoming or past match. State is "unstarted",
 // "inProgress", or "completed". Type is set to "show" for pre/post-show
 // segments which we filter out.
 type ScheduleEvent struct {
-	StartTime string `json:"startTime"`
-	State     string `json:"state,omitempty"`
-	Type      string `json:"type,omitempty"`
-	BlockName string `json:"blockName,omitempty"`
-	League    League `json:"league,omitempty"`
-	Match     Match  `json:"match,omitempty"`
+	StartTime string `json:"startTime" bson:"startTime"`
+	State     string `json:"state,omitempty" bson:"state,omitempty"`
+	Type      string `json:"type,omitempty" bson:"type,omitempty"`
+	BlockName string `json:"blockName,omitempty" bson:"blockName,omitempty"`
+	League    League `json:"league,omitempty" bson:"league,omitempty"`
+	Match     Match  `json:"match,omitempty" bson:"match,omitempty"`
 }
 
 // schedulePage is the inner shape of an upstream response.
@@ -103,11 +114,14 @@ type schedulePage struct {
 	} `json:"data"`
 }
 
-// cacheRecord is the KV value: fetch timestamp (ms-epoch) + events.
+// cacheRecord is the store value: fetch timestamp (ms-epoch) + events.
 type cacheRecord struct {
-	Ts     int64           `json:"ts"` // ms-since-epoch when fetched
-	Events []ScheduleEvent `json:"events"`
+	Ts     int64           `json:"ts" bson:"ts"` // ms-since-epoch when fetched
+	Events []ScheduleEvent `json:"events" bson:"events"`
 }
+
+// CacheStore is the typed store for schedule cache records.
+type CacheStore = storage.DocStore[cacheRecord]
 
 // Client is the lolesports API client. Default zero-value uses
 // http.DefaultClient + http.DefaultTransport; tests inject a custom HTTP
@@ -274,12 +288,11 @@ func cacheKey(from, to time.Time) string {
 // GetEventsCached is the cache-first lookup. Returns fresh cache within
 // cacheTTL, else fetches upstream and writes back, else falls back to
 // stale cache (within staleMaxAge), else propagates the error.
-func (c *Client) GetEventsCached(ctx context.Context, kv storage.KVStore, from, to time.Time) ([]ScheduleEvent, error) {
+func (c *Client) GetEventsCached(ctx context.Context, cache CacheStore, from, to time.Time) ([]ScheduleEvent, error) {
 	key := cacheKey(from, to)
 	now := time.Now().UTC().UnixMilli()
 
-	var cached cacheRecord
-	cacheErr := kv.GetJSON(ctx, key, &cached)
+	cached, _, cacheErr := cache.Get(ctx, key)
 	hasCached := cacheErr == nil
 	if hasCached && now-cached.Ts < cacheTTL.Milliseconds() {
 		return cached.Events, nil
@@ -288,7 +301,7 @@ func (c *Client) GetEventsCached(ctx context.Context, kv storage.KVStore, from, 
 	events, fetchErr := c.fetchEventsInRange(ctx, from, to, 3)
 	if fetchErr == nil {
 		rec := cacheRecord{Ts: now, Events: events}
-		if err := kv.PutJSON(ctx, key, rec); err != nil {
+		if err := cache.Put(ctx, key, rec); err != nil {
 			log.Warn("lolschedule_kv_put_fail", "err", err)
 		}
 		return events, nil

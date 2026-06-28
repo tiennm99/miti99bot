@@ -37,14 +37,8 @@ func TestFormatEventLine_Unstarted(t *testing.T) {
 }
 
 func TestFormatEventLine_Completed_BoldsWinner(t *testing.T) {
-	winResult := &struct {
-		Outcome  string `json:"outcome,omitempty"`
-		GameWins int    `json:"gameWins,omitempty"`
-	}{Outcome: "win", GameWins: 3}
-	loseResult := &struct {
-		Outcome  string `json:"outcome,omitempty"`
-		GameWins int    `json:"gameWins,omitempty"`
-	}{Outcome: "loss", GameWins: 1}
+	winResult := &TeamResult{Outcome: "win", GameWins: 3}
+	loseResult := &TeamResult{Outcome: "loss", GameWins: 1}
 	e := ScheduleEvent{
 		StartTime: "2026-05-09T05:00:00Z",
 		State:     "completed",
@@ -73,10 +67,7 @@ func TestFormatEventLine_Completed_BoldsWinner(t *testing.T) {
 }
 
 func TestFormatEventLine_InProgress(t *testing.T) {
-	w := &struct {
-		Outcome  string `json:"outcome,omitempty"`
-		GameWins int    `json:"gameWins,omitempty"`
-	}{GameWins: 1}
+	w := &TeamResult{GameWins: 1}
 	e := ScheduleEvent{
 		StartTime: "2026-05-09T05:00:00Z",
 		State:     "inProgress",

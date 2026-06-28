@@ -12,9 +12,13 @@ import (
 	"github.com/tiennm99/miti99bot/internal/storage"
 )
 
+// newGoldStore returns a fresh in-memory typed portfolio store for tests.
+func newGoldStore() PortfolioStore {
+	return storage.Typed[Portfolio](storage.NewMemoryProvider().Collection("gold"))
+}
+
 func TestLoadPortfolio_FirstTimeUser(t *testing.T) {
-	kv := storage.NewMemoryKVStore()
-	p, err := LoadPortfolio(context.Background(), kv, 42, 123)
+	p, err := LoadPortfolio(context.Background(), newGoldStore(), 42, 123)
 	if err != nil {
 		t.Fatalf("LoadPortfolio: %v", err)
 	}
@@ -24,15 +28,15 @@ func TestLoadPortfolio_FirstTimeUser(t *testing.T) {
 }
 
 func TestSaveAndLoadRoundTrip(t *testing.T) {
-	kv := storage.NewMemoryKVStore()
+	store := newGoldStore()
 	p := NewPortfolio(1)
 	p.AddVND(5_000_000)
 	p.AddLuong(1.25)
 	p.Meta.Invested = 5_000_000
-	if err := SavePortfolio(context.Background(), kv, 42, p); err != nil {
+	if err := SavePortfolio(context.Background(), store, 42, p); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
-	got, err := LoadPortfolio(context.Background(), kv, 42, 999)
+	got, err := LoadPortfolio(context.Background(), store, 42, 999)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -71,32 +75,31 @@ func TestNormalizeAmountSpecialValues(t *testing.T) {
 	}
 }
 
+// conflictOnceStore wraps a real typed store and forces exactly one write
+// conflict (after committing a competing value) before delegating, to exercise
+// UpdatePortfolio's optimistic-lock retry.
 type conflictOnceStore struct {
-	storage.KVStore
+	PortfolioStore
 	conflicted bool
 }
 
-func (s *conflictOnceStore) GetVersioned(ctx context.Context, key string) ([]byte, int64, error) {
-	return s.KVStore.(storage.VersionedStore).GetVersioned(ctx, key)
-}
-
-func (s *conflictOnceStore) PutVersioned(ctx context.Context, key string, expectedVersion int64, val []byte) error {
+func (s *conflictOnceStore) PutVersioned(ctx context.Context, key string, expectedVersion int64, val Portfolio) error {
 	if !s.conflicted {
 		s.conflicted = true
 		competing := NewPortfolio(1)
 		competing.AddVND(10)
-		if err := s.PutJSON(ctx, key, competing); err != nil {
+		if err := s.PortfolioStore.Put(ctx, key, competing); err != nil {
 			return err
 		}
 		return storage.ErrConflict
 	}
-	return s.KVStore.(storage.VersionedStore).PutVersioned(ctx, key, expectedVersion, val)
+	return s.PortfolioStore.PutVersioned(ctx, key, expectedVersion, val)
 }
 
 func TestUpdatePortfolioRetriesAfterWriteConflict(t *testing.T) {
 	ctx := context.Background()
-	kv := &conflictOnceStore{KVStore: storage.NewMemoryKVStore()}
-	got, err := UpdatePortfolio(ctx, kv, 7, 1, func(p *Portfolio) error {
+	store := &conflictOnceStore{PortfolioStore: newGoldStore()}
+	got, err := UpdatePortfolio(ctx, store, 7, 1, func(p *Portfolio) error {
 		p.AddVND(5)
 		return nil
 	})
@@ -106,7 +109,7 @@ func TestUpdatePortfolioRetriesAfterWriteConflict(t *testing.T) {
 	if got.VND != 15 {
 		t.Fatalf("updated portfolio VND = %v, want 15", got.VND)
 	}
-	loaded, err := LoadPortfolio(ctx, kv, 7, 1)
+	loaded, err := LoadPortfolio(ctx, store, 7, 1)
 	if err != nil {
 		t.Fatalf("LoadPortfolio: %v", err)
 	}
@@ -115,53 +118,51 @@ func TestUpdatePortfolioRetriesAfterWriteConflict(t *testing.T) {
 	}
 }
 
+// alwaysConflictStore always returns ErrConflict on PutVersioned to exhaust retries.
 type alwaysConflictStore struct {
-	storage.KVStore
+	PortfolioStore
 	attempts int
 }
 
-func (s *alwaysConflictStore) GetVersioned(ctx context.Context, key string) ([]byte, int64, error) {
-	return s.KVStore.(storage.VersionedStore).GetVersioned(ctx, key)
-}
-
-func (s *alwaysConflictStore) PutVersioned(context.Context, string, int64, []byte) error {
+func (s *alwaysConflictStore) PutVersioned(_ context.Context, _ string, _ int64, _ Portfolio) error {
 	s.attempts++
 	return storage.ErrConflict
 }
 
 func TestUpdatePortfolioReturnsConflictAfterExhaustingRetries(t *testing.T) {
 	ctx := context.Background()
-	kv := &alwaysConflictStore{KVStore: storage.NewMemoryKVStore()}
-	_, err := UpdatePortfolio(ctx, kv, 7, 1, func(p *Portfolio) error {
+	store := &alwaysConflictStore{PortfolioStore: newGoldStore()}
+	_, err := UpdatePortfolio(ctx, store, 7, 1, func(p *Portfolio) error {
 		p.AddVND(5)
 		return nil
 	})
 	if !errors.Is(err, storage.ErrConflict) {
 		t.Fatalf("UpdatePortfolio: got %v, want wrapped ErrConflict", err)
 	}
-	if kv.attempts != portfolioUpdateAttempts {
-		t.Errorf("CAS attempts = %d, want %d", kv.attempts, portfolioUpdateAttempts)
+	if store.attempts != portfolioUpdateAttempts {
+		t.Errorf("CAS attempts = %d, want %d", store.attempts, portfolioUpdateAttempts)
 	}
-	if _, err := kv.Get(ctx, "user:7"); !errors.Is(err, storage.ErrNotFound) {
+	if _, _, err := store.Get(ctx, "user:7"); !errors.Is(err, storage.ErrNotFound) {
 		t.Errorf("exhausted update must not persist anything, Get = %v", err)
 	}
 }
 
+// countingCASStore counts PutVersioned calls and delegates to the underlying store.
 type countingCASStore struct {
-	*storage.MemoryKVStore
+	PortfolioStore
 	casCalls int
 }
 
-func (s *countingCASStore) PutVersioned(ctx context.Context, key string, expectedVersion int64, val []byte) error {
+func (s *countingCASStore) PutVersioned(ctx context.Context, key string, expectedVersion int64, val Portfolio) error {
 	s.casCalls++
-	return s.MemoryKVStore.PutVersioned(ctx, key, expectedVersion, val)
+	return s.PortfolioStore.PutVersioned(ctx, key, expectedVersion, val)
 }
 
 func TestUpdatePortfolioMutateErrorDoesNotRetryOrPersist(t *testing.T) {
 	ctx := context.Background()
-	kv := &countingCASStore{MemoryKVStore: storage.NewMemoryKVStore()}
+	store := &countingCASStore{PortfolioStore: newGoldStore()}
 	mutateCalls := 0
-	_, err := UpdatePortfolio(ctx, kv, 7, 1, func(p *Portfolio) error {
+	_, err := UpdatePortfolio(ctx, store, 7, 1, func(p *Portfolio) error {
 		mutateCalls++
 		return errInsufficientVND
 	})
@@ -171,17 +172,17 @@ func TestUpdatePortfolioMutateErrorDoesNotRetryOrPersist(t *testing.T) {
 	if mutateCalls != 1 {
 		t.Errorf("mutate calls = %d, want 1 (business errors must not retry)", mutateCalls)
 	}
-	if kv.casCalls != 0 {
-		t.Errorf("CAS calls = %d, want 0 (failed mutate must not write)", kv.casCalls)
+	if store.casCalls != 0 {
+		t.Errorf("CAS calls = %d, want 0 (failed mutate must not write)", store.casCalls)
 	}
-	if _, err := kv.Get(ctx, "user:7"); !errors.Is(err, storage.ErrNotFound) {
+	if _, _, err := store.Get(ctx, "user:7"); !errors.Is(err, storage.ErrNotFound) {
 		t.Errorf("failed mutate must not persist anything, Get = %v", err)
 	}
 }
 
 func TestUpdatePortfolioConcurrentIncrementsLoseNoUpdates(t *testing.T) {
 	ctx := context.Background()
-	kv := storage.NewMemoryKVStore()
+	store := newGoldStore()
 	const goroutines = 16
 	var successes atomic.Int64
 	var wg sync.WaitGroup
@@ -190,7 +191,7 @@ func TestUpdatePortfolioConcurrentIncrementsLoseNoUpdates(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_, err := UpdatePortfolio(ctx, kv, 7, 1, func(p *Portfolio) error {
+			_, err := UpdatePortfolio(ctx, store, 7, 1, func(p *Portfolio) error {
 				p.AddVND(1000)
 				return nil
 			})
@@ -211,7 +212,7 @@ func TestUpdatePortfolioConcurrentIncrementsLoseNoUpdates(t *testing.T) {
 	if successes.Load() == 0 {
 		t.Fatal("no update succeeded")
 	}
-	loaded, err := LoadPortfolio(ctx, kv, 7, 1)
+	loaded, err := LoadPortfolio(ctx, store, 7, 1)
 	if err != nil {
 		t.Fatalf("LoadPortfolio: %v", err)
 	}
@@ -220,61 +221,38 @@ func TestUpdatePortfolioConcurrentIncrementsLoseNoUpdates(t *testing.T) {
 	}
 }
 
-// plainKVStore hides the embedded store's versioned methods to model a backend
-// without optimistic-locking support.
-type plainKVStore struct {
-	storage.KVStore
-}
-
-func TestUpdatePortfolioFailsFastWhenCASUnsupported(t *testing.T) {
-	ctx := context.Background()
-	mutate := func(p *Portfolio) error {
-		p.AddVND(5)
-		return nil
-	}
-
-	// A bare non-CAS store is rejected by the capability check.
-	if _, err := UpdatePortfolio(ctx, &plainKVStore{KVStore: storage.NewMemoryKVStore()}, 7, 1, mutate); err == nil {
-		t.Error("UpdatePortfolio on non-CAS store: want error, got nil")
-	}
-
-	// A prefixed wrapper around a non-CAS store must fail fast as unsupported,
-	// not burn retries on a fake conflict.
-	_, err := UpdatePortfolio(ctx, storage.Prefixed(&plainKVStore{KVStore: storage.NewMemoryKVStore()}, "gold"), 7, 1, mutate)
-	if !errors.Is(err, errors.ErrUnsupported) {
-		t.Errorf("got %v, want errors.ErrUnsupported", err)
-	}
-	if errors.Is(err, storage.ErrConflict) {
-		t.Error("missing CAS capability must not be reported as a write conflict")
-	}
-}
-
 func TestStockAndGoldPortfolioKeysDoNotCollide(t *testing.T) {
 	ctx := context.Background()
 	provider := storage.NewMemoryProvider()
+
+	goldStore := storage.Typed[Portfolio](provider.Collection("gold"))
 	goldPortfolio := NewPortfolio(1)
 	goldPortfolio.AddLuong(2)
-	if err := SavePortfolio(ctx, provider.For("gold"), 7, goldPortfolio); err != nil {
+	if err := SavePortfolio(ctx, goldStore, 7, goldPortfolio); err != nil {
 		t.Fatalf("save gold: %v", err)
 	}
+
+	stockStore := storage.Typed[stockmod.Portfolio](provider.Collection("stock"))
 	stockPortfolio := stockmod.NewPortfolio(1)
 	stockPortfolio.AddAsset("TCB", 100)
-	if err := stockmod.SavePortfolio(ctx, provider.For("stock"), 7, stockPortfolio); err != nil {
+	if err := stockmod.SavePortfolio(ctx, stockStore, 7, stockPortfolio); err != nil {
 		t.Fatalf("save stock: %v", err)
 	}
-	keys, err := provider.Base().List(ctx, "")
+
+	// Both stores share the same provider but different collections (module
+	// isolation); verify each module's key is visible only in its own collection.
+	goldKeys, err := goldStore.List(ctx, "")
 	if err != nil {
-		t.Fatalf("list: %v", err)
+		t.Fatalf("list gold: %v", err)
 	}
-	want := map[string]bool{"gold:user:7": false, "stock:user:7": false}
-	for _, key := range keys {
-		if _, ok := want[key]; ok {
-			want[key] = true
-		}
+	stockKeys, err := stockStore.List(ctx, "")
+	if err != nil {
+		t.Fatalf("list stock: %v", err)
 	}
-	for key, seen := range want {
-		if !seen {
-			t.Fatalf("missing raw key %q in %v", key, keys)
-		}
+	if len(goldKeys) != 1 || goldKeys[0] != "user:7" {
+		t.Fatalf("gold keys: got %v, want [user:7]", goldKeys)
+	}
+	if len(stockKeys) != 1 || stockKeys[0] != "user:7" {
+		t.Fatalf("stock keys: got %v, want [user:7]", stockKeys)
 	}
 }

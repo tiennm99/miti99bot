@@ -31,9 +31,14 @@ func (f fakePriceFetcher) FetchUSD(_ context.Context, coin CoinSymbol) (CoinPric
 	return price, nil
 }
 
+// newCoinStore returns a fresh in-memory typed portfolio store for tests.
+func newCoinStore() Store {
+	return storage.Typed[Portfolio](storage.NewMemoryProvider().Collection("coin"))
+}
+
 func newTestState(prices map[string]CoinPrice, err error) *state {
 	return &state{
-		kv:     storage.NewMemoryKVStore(),
+		store:  newCoinStore(),
 		prices: fakePriceFetcher{prices: prices, err: err},
 		nowFn:  func() time.Time { return time.UnixMilli(123) },
 	}
@@ -100,7 +105,7 @@ func TestHandleTopup(t *testing.T) {
 		t.Fatalf("handleTopup: %v", err)
 	}
 	rb.AssertSentText(t, "Topped up $1,000.00")
-	p, err := LoadPortfolio(ctx, s.kv, 7, 999)
+	p, err := LoadPortfolio(ctx, s.store, 7, 999)
 	if err != nil {
 		t.Fatalf("LoadPortfolio: %v", err)
 	}
@@ -119,7 +124,7 @@ func TestHandleBuyAndSell(t *testing.T) {
 		t.Fatalf("handleBuy: %v", err)
 	}
 	rb.AssertSentText(t, "Bought 0.01 BTC")
-	p, _ := LoadPortfolio(ctx, s.kv, 7, 999)
+	p, _ := LoadPortfolio(ctx, s.store, 7, 999)
 	if p.USD != 500 || p.Assets["BTC"] != 0.01 {
 		t.Fatalf("after buy = %+v", p)
 	}
@@ -128,7 +133,7 @@ func TestHandleBuyAndSell(t *testing.T) {
 		t.Fatalf("handleSell: %v", err)
 	}
 	rb.AssertSentText(t, "Sold 0.01 BTC")
-	p, _ = LoadPortfolio(ctx, s.kv, 7, 999)
+	p, _ = LoadPortfolio(ctx, s.store, 7, 999)
 	if p.USD != 1000 || len(p.Assets) != 0 {
 		t.Fatalf("after sell = %+v", p)
 	}
@@ -205,7 +210,7 @@ func TestHandleSellInsufficientCoinWithHoldings(t *testing.T) {
 		t.Fatalf("insufficient sell message used ambiguous have wording: %q", text)
 	}
 
-	p, _ := LoadPortfolio(ctx, s.kv, 7, 999)
+	p, _ := LoadPortfolio(ctx, s.store, 7, 999)
 	if p.USD != 500 || p.Assets["BTC"] != 0.01 {
 		t.Fatalf("portfolio mutated on failed sell = %+v", p)
 	}
@@ -224,7 +229,7 @@ func TestHandleSellRejectsDustQuantity(t *testing.T) {
 	}
 	rb.AssertSentText(t, "too small")
 
-	p, _ := LoadPortfolio(ctx, s.kv, 7, 999)
+	p, _ := LoadPortfolio(ctx, s.store, 7, 999)
 	if p.USD != 999 || len(p.Assets) != 1 {
 		t.Fatalf("portfolio mutated on dust sell = %+v", p)
 	}
@@ -242,7 +247,7 @@ func TestHandleBuyRejectsDustQuantity(t *testing.T) {
 	}
 	rb.AssertSentText(t, "too small")
 
-	p, _ := LoadPortfolio(ctx, s.kv, 7, 999)
+	p, _ := LoadPortfolio(ctx, s.store, 7, 999)
 	if p.USD != 1000 || len(p.Assets) != 0 {
 		t.Fatalf("portfolio mutated on dust buy = %+v", p)
 	}
@@ -276,7 +281,7 @@ func TestPriceErrorDoesNotMutatePortfolio(t *testing.T) {
 		t.Fatalf("handleBuy: %v", err)
 	}
 	rb.AssertSentText(t, "Could not fetch coin price")
-	p, err := LoadPortfolio(ctx, s.kv, 7, 999)
+	p, err := LoadPortfolio(ctx, s.store, 7, 999)
 	if err != nil {
 		t.Fatalf("LoadPortfolio: %v", err)
 	}
@@ -310,5 +315,5 @@ func TestStatsWithAndWithoutPrice(t *testing.T) {
 }
 
 func modDepsForTest() modules.Deps {
-	return modules.Deps{KV: storage.NewMemoryKVStore()}
+	return modules.Deps{Store: storage.NewMemoryProvider().Collection("coin")}
 }

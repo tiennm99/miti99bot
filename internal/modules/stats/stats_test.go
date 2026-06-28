@@ -2,6 +2,7 @@ package stats
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -13,8 +14,17 @@ import (
 	"github.com/tiennm99/miti99bot/internal/testutil"
 )
 
+// newStatsCounter returns a fresh counter backed by an in-memory collection.
+func newStatsCounter() *counter {
+	col := storage.NewMemoryProvider().Collection("stats")
+	return &counter{
+		counts: storage.Typed[countEntry](col),
+		users:  storage.Typed[userEntry](col),
+	}
+}
+
 func TestNew_RegistersExpectedCommands(t *testing.T) {
-	deps := modules.Deps{KV: storage.NewMemoryKVStore()}
+	deps := modules.Deps{Store: storage.NewMemoryProvider().Collection("stats")}
 	mod := New(deps)
 
 	if len(mod.Commands) != 1 {
@@ -45,58 +55,56 @@ func updateFrom(id int64, username string) *models.Update {
 	}
 }
 
-func TestInc_PersistsCountInKV(t *testing.T) {
+func TestInc_PersistsCountInStore(t *testing.T) {
 	ctx := context.Background()
-	kv := storage.NewMemoryKVStore()
-	c := &counter{kv: kv}
+	c := newStatsCounter()
 
 	c.Inc(ctx, "ping", nil)
 	c.Inc(ctx, "ping", nil)
 	c.Inc(ctx, "wordle", nil)
 
-	var entry countEntry
-	if err := kv.GetJSON(ctx, countKey("ping"), &entry); err != nil {
-		t.Fatalf("GetJSON ping: %v", err)
+	entry, _, err := c.counts.Get(ctx, countKey("ping"))
+	if err != nil {
+		t.Fatalf("Get ping: %v", err)
 	}
 	if entry.N != 2 {
 		t.Errorf("ping count = %d, want 2", entry.N)
 	}
 
-	entry = countEntry{}
-	if err := kv.GetJSON(ctx, countKey("wordle"), &entry); err != nil {
-		t.Fatalf("GetJSON wordle: %v", err)
+	entry2, _, err := c.counts.Get(ctx, countKey("wordle"))
+	if err != nil {
+		t.Fatalf("Get wordle: %v", err)
 	}
-	if entry.N != 1 {
-		t.Errorf("wordle count = %d, want 1", entry.N)
+	if entry2.N != 1 {
+		t.Errorf("wordle count = %d, want 1", entry2.N)
 	}
 }
 
 func TestInc_WithUsernameWritesAllThreeKeys(t *testing.T) {
 	ctx := context.Background()
-	kv := storage.NewMemoryKVStore()
-	c := &counter{kv: kv}
+	c := newStatsCounter()
 
 	c.Inc(ctx, "ping", updateFrom(42, "alice"))
 	c.Inc(ctx, "ping", updateFrom(42, "alice"))
 
-	var ce countEntry
-	if err := kv.GetJSON(ctx, countKey("ping"), &ce); err != nil {
+	ce, _, err := c.counts.Get(ctx, countKey("ping"))
+	if err != nil {
 		t.Fatalf("count:ping: %v", err)
 	}
 	if ce.N != 2 {
 		t.Errorf("count:ping N = %d, want 2", ce.N)
 	}
 
-	var ue userEntry
-	if err := kv.GetJSON(ctx, userKey(42), &ue); err != nil {
+	ue, _, err := c.users.Get(ctx, userKey(42))
+	if err != nil {
 		t.Fatalf("user:42: %v", err)
 	}
 	if ue.N != 2 || ue.Username != "alice" {
 		t.Errorf("user:42 = {%q, %d}, want {alice, 2}", ue.Username, ue.N)
 	}
 
-	var pe countEntry
-	if err := kv.GetJSON(ctx, pairKey("ping", 42), &pe); err != nil {
+	pe, _, err := c.counts.Get(ctx, pairKey("ping", 42))
+	if err != nil {
 		t.Fatalf("pair:ping:42: %v", err)
 	}
 	if pe.N != 2 {
@@ -106,37 +114,35 @@ func TestInc_WithUsernameWritesAllThreeKeys(t *testing.T) {
 
 func TestInc_EmptyUsernameSkipsUserAndPair(t *testing.T) {
 	ctx := context.Background()
-	kv := storage.NewMemoryKVStore()
-	c := &counter{kv: kv}
+	c := newStatsCounter()
 
 	c.Inc(ctx, "ping", updateFrom(42, ""))
 
-	var ce countEntry
-	if err := kv.GetJSON(ctx, countKey("ping"), &ce); err != nil {
+	ce, _, err := c.counts.Get(ctx, countKey("ping"))
+	if err != nil {
 		t.Fatalf("count:ping: %v", err)
 	}
 	if ce.N != 1 {
 		t.Errorf("count:ping N = %d, want 1", ce.N)
 	}
 
-	if _, err := kv.Get(ctx, userKey(42)); err != storage.ErrNotFound {
+	if _, _, err := c.users.Get(ctx, userKey(42)); !errors.Is(err, storage.ErrNotFound) {
 		t.Errorf("user:42 should be absent, got err=%v", err)
 	}
-	if _, err := kv.Get(ctx, pairKey("ping", 42)); err != storage.ErrNotFound {
+	if _, _, err := c.counts.Get(ctx, pairKey("ping", 42)); !errors.Is(err, storage.ErrNotFound) {
 		t.Errorf("pair:ping:42 should be absent, got err=%v", err)
 	}
 }
 
 func TestInc_RefreshesUsernameOnRename(t *testing.T) {
 	ctx := context.Background()
-	kv := storage.NewMemoryKVStore()
-	c := &counter{kv: kv}
+	c := newStatsCounter()
 
 	c.Inc(ctx, "ping", updateFrom(42, "alice"))
 	c.Inc(ctx, "ping", updateFrom(42, "alice2"))
 
-	var ue userEntry
-	if err := kv.GetJSON(ctx, userKey(42), &ue); err != nil {
+	ue, _, err := c.users.Get(ctx, userKey(42))
+	if err != nil {
 		t.Fatalf("user:42: %v", err)
 	}
 	if ue.Username != "alice2" {
@@ -150,8 +156,7 @@ func TestInc_RefreshesUsernameOnRename(t *testing.T) {
 func installStats(t *testing.T) (*testutil.RecordingBot, *counter) {
 	t.Helper()
 	rb := testutil.NewRecordingBot(t)
-	kv := storage.NewMemoryKVStore()
-	c := &counter{kv: kv}
+	c := newStatsCounter()
 	mod := modules.Module{
 		Commands: []modules.Command{statsCommand(c)},
 	}
@@ -226,10 +231,11 @@ func TestCommandHook_FiredThroughModulesBuild(t *testing.T) {
 
 	reg.RunCommandHooks(ctx, "ping", nil)
 
-	statsKV := provider.For("stats")
-	var entry countEntry
-	if err := statsKV.GetJSON(ctx, countKey("ping"), &entry); err != nil {
-		t.Fatalf("expected count:ping in KV after hook: %v", err)
+	// Verify by reading back via typed store (the same collection Build gave to stats).
+	statsStore := storage.Typed[countEntry](provider.Collection("stats"))
+	entry, _, err := statsStore.Get(ctx, countKey("ping"))
+	if err != nil {
+		t.Fatalf("expected count:ping in store after hook: %v", err)
 	}
 	if entry.N != 1 {
 		t.Errorf("count:ping = %d, want 1", entry.N)
@@ -256,7 +262,7 @@ func seedFixture(t *testing.T, c *counter) {
 }
 
 func TestRenderStats_TopCommands(t *testing.T) {
-	c := &counter{kv: storage.NewMemoryKVStore()}
+	c := newStatsCounter()
 	seedFixture(t, c)
 
 	got := renderStats(context.Background(), c, "")
@@ -275,7 +281,7 @@ func TestRenderStats_TopCommands(t *testing.T) {
 }
 
 func TestRenderStats_Users(t *testing.T) {
-	c := &counter{kv: storage.NewMemoryKVStore()}
+	c := newStatsCounter()
 	seedFixture(t, c)
 
 	got := renderStats(context.Background(), c, "users")
@@ -295,7 +301,7 @@ func TestRenderStats_Users(t *testing.T) {
 }
 
 func TestRenderStats_UserCommands(t *testing.T) {
-	c := &counter{kv: storage.NewMemoryKVStore()}
+	c := newStatsCounter()
 	seedFixture(t, c)
 
 	got := renderStats(context.Background(), c, "user @alice")
@@ -320,7 +326,7 @@ func TestRenderStats_UserCommands(t *testing.T) {
 // flagged this as a potential bug; this test proves the absence of the bug.
 func TestRenderStats_UserCommands_IDSuffixDoesNotFalseMatch(t *testing.T) {
 	ctx := context.Background()
-	c := &counter{kv: storage.NewMemoryKVStore()}
+	c := newStatsCounter()
 	// user 2 ("two") calls /ping; user 12 ("twelve") calls /wordle.
 	c.Inc(ctx, "ping", updateFrom(2, "two"))
 	c.Inc(ctx, "wordle", updateFrom(12, "twelve"))
@@ -338,7 +344,7 @@ func TestRenderStats_UserCommands_IDSuffixDoesNotFalseMatch(t *testing.T) {
 }
 
 func TestRenderStats_UserCommands_BareNameAlsoWorks(t *testing.T) {
-	c := &counter{kv: storage.NewMemoryKVStore()}
+	c := newStatsCounter()
 	seedFixture(t, c)
 
 	got := renderStats(context.Background(), c, "user alice")
@@ -348,7 +354,7 @@ func TestRenderStats_UserCommands_BareNameAlsoWorks(t *testing.T) {
 }
 
 func TestRenderStats_UserNotFound(t *testing.T) {
-	c := &counter{kv: storage.NewMemoryKVStore()}
+	c := newStatsCounter()
 	seedFixture(t, c)
 
 	got := renderStats(context.Background(), c, "user @ghost")
@@ -358,7 +364,7 @@ func TestRenderStats_UserNotFound(t *testing.T) {
 }
 
 func TestRenderStats_CmdUsers(t *testing.T) {
-	c := &counter{kv: storage.NewMemoryKVStore()}
+	c := newStatsCounter()
 	seedFixture(t, c)
 
 	got := renderStats(context.Background(), c, "cmd wordle")
@@ -380,7 +386,7 @@ func TestRenderStats_CmdUsers(t *testing.T) {
 }
 
 func TestRenderStats_CmdNotFound(t *testing.T) {
-	c := &counter{kv: storage.NewMemoryKVStore()}
+	c := newStatsCounter()
 	seedFixture(t, c)
 
 	got := renderStats(context.Background(), c, "cmd nonexistent")
@@ -390,7 +396,7 @@ func TestRenderStats_CmdNotFound(t *testing.T) {
 }
 
 func TestRenderStats_UnknownSubcommand(t *testing.T) {
-	c := &counter{kv: storage.NewMemoryKVStore()}
+	c := newStatsCounter()
 	got := renderStats(context.Background(), c, "bogus")
 	if !strings.HasPrefix(got, "Usage:") {
 		t.Errorf("expected usage string, got %q", got)
@@ -398,7 +404,7 @@ func TestRenderStats_UnknownSubcommand(t *testing.T) {
 }
 
 func TestRenderStats_MissingRequiredArg(t *testing.T) {
-	c := &counter{kv: storage.NewMemoryKVStore()}
+	c := newStatsCounter()
 	if got := renderStats(context.Background(), c, "user"); !strings.HasPrefix(got, "Usage:") {
 		t.Errorf("user (no arg) should return usage, got %q", got)
 	}

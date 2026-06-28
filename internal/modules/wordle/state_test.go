@@ -8,6 +8,21 @@ import (
 	"github.com/tiennm99/miti99bot/internal/storage"
 )
 
+func newWordleGames() GameStore {
+	return storage.Typed[GameState](storage.NewMemoryProvider().Collection("wordle"))
+}
+
+func newWordleStats() StatsStore {
+	return storage.Typed[Stats](storage.NewMemoryProvider().Collection("wordle"))
+}
+
+// newWordleStores returns a games + stats store backed by the same collection
+// (disjoint key prefixes: "game:" vs "stats:").
+func newWordleStores() (GameStore, StatsStore) {
+	c := storage.NewMemoryProvider().Collection("wordle")
+	return storage.Typed[GameState](c), storage.Typed[Stats](c)
+}
+
 func TestStats_DefaultLastResultAtIsNull(t *testing.T) {
 	// Go's *int64 must marshal as null when nil, so unplayed accounts emit
 	// `"lastResultAt": null` and the field stays distinguishable from
@@ -62,9 +77,9 @@ func TestGameState_JSONShapeIsStable(t *testing.T) {
 
 func TestRecordResult_WinIncrementsStreak(t *testing.T) {
 	ctx := context.Background()
-	kv := storage.NewMemoryKVStore()
+	stats := newWordleStats()
 
-	s, err := recordResult(ctx, kv, "u1", true, 100)
+	s, err := recordResult(ctx, stats, "u1", true, 100)
 	if err != nil {
 		t.Fatalf("recordResult: %v", err)
 	}
@@ -76,7 +91,7 @@ func TestRecordResult_WinIncrementsStreak(t *testing.T) {
 	}
 
 	// Second win bumps streak; bestStreak follows.
-	s, _ = recordResult(ctx, kv, "u1", true, 200)
+	s, _ = recordResult(ctx, stats, "u1", true, 200)
 	if s.Streak != 2 || s.BestStreak != 2 {
 		t.Errorf("two wins: streak=%d best=%d", s.Streak, s.BestStreak)
 	}
@@ -84,11 +99,11 @@ func TestRecordResult_WinIncrementsStreak(t *testing.T) {
 
 func TestRecordResult_LossResetsStreakKeepsBest(t *testing.T) {
 	ctx := context.Background()
-	kv := storage.NewMemoryKVStore()
+	stats := newWordleStats()
 
-	_, _ = recordResult(ctx, kv, "u1", true, 100)
-	_, _ = recordResult(ctx, kv, "u1", true, 200)
-	s, _ := recordResult(ctx, kv, "u1", false, 300)
+	_, _ = recordResult(ctx, stats, "u1", true, 100)
+	_, _ = recordResult(ctx, stats, "u1", true, 200)
+	s, _ := recordResult(ctx, stats, "u1", false, 300)
 	if s.Streak != 0 {
 		t.Errorf("loss should reset streak, got %d", s.Streak)
 	}
@@ -101,7 +116,7 @@ func TestRecordResult_LossResetsStreakKeepsBest(t *testing.T) {
 }
 
 func TestLoadGame_MissingReturnsNil(t *testing.T) {
-	g, err := loadGame(context.Background(), storage.NewMemoryKVStore(), "nobody")
+	g, err := loadGame(context.Background(), newWordleGames(), "nobody")
 	if err != nil {
 		t.Errorf("missing game should not error: %v", err)
 	}
@@ -112,12 +127,12 @@ func TestLoadGame_MissingReturnsNil(t *testing.T) {
 
 func TestSaveGame_RoundTrip(t *testing.T) {
 	ctx := context.Background()
-	kv := storage.NewMemoryKVStore()
+	games := newWordleGames()
 	want := &GameState{Target: "crane", Guesses: []GuessRecord{}, StartedAt: 42}
-	if err := saveGame(ctx, kv, "u1", want); err != nil {
+	if err := saveGame(ctx, games, "u1", want); err != nil {
 		t.Fatal(err)
 	}
-	got, err := loadGame(ctx, kv, "u1")
+	got, err := loadGame(ctx, games, "u1")
 	if err != nil || got == nil {
 		t.Fatalf("loadGame: got=%v err=%v", got, err)
 	}

@@ -19,7 +19,7 @@ func TestHandleBuyAcceptsCoinFirstOrder(t *testing.T) {
 	}
 
 	rb.AssertSentText(t, "Bought 0.0002 BTC")
-	p, _ := LoadPortfolio(ctx, s.kv, 7, 999)
+	p, _ := LoadPortfolio(ctx, s.store, 7, 999)
 	if p.USD != 990 || p.Assets["BTC"] != 0.0002 {
 		t.Fatalf("after coin-first buy = %+v", p)
 	}
@@ -38,7 +38,7 @@ func TestHandleSellAcceptsCoinFirstOrder(t *testing.T) {
 	}
 
 	rb.AssertSentText(t, "Sold 0.01 BTC")
-	p, _ := LoadPortfolio(ctx, s.kv, 7, 999)
+	p, _ := LoadPortfolio(ctx, s.store, 7, 999)
 	if p.USD != 1000 || len(p.Assets) != 0 {
 		t.Fatalf("after coin-first sell = %+v", p)
 	}

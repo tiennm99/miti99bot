@@ -13,6 +13,12 @@ import (
 	"github.com/tiennm99/miti99bot/internal/storage"
 )
 
+// newCacheStore returns a fresh typed cache store backed by an in-memory
+// collection — the per-test equivalent of what the factory wires in production.
+func newCacheStore() CacheStore {
+	return storage.Typed[cacheRecord](storage.NewMemoryProvider().Collection("lolschedule"))
+}
+
 // mkServer spins an httptest.Server returning the supplied JSON body for
 // every page request. callCount counts upstream hits so cache tests can
 // assert "1 fetch, then no more".
@@ -54,11 +60,11 @@ const sampleBody = `{
 func TestGetEventsCached_FirstHitFetchesUpstream(t *testing.T) {
 	srv, count := mkServer(t, sampleBody)
 	c := &Client{HTTP: srv.Client(), URL: srv.URL}
-	kv := storage.NewMemoryKVStore()
+	cache := newCacheStore()
 	from := time.Date(2026, 5, 9, 0, 0, 0, 0, time.UTC)
 	to := from.Add(24 * time.Hour)
 
-	events, err := c.GetEventsCached(context.Background(), kv, from, to)
+	events, err := c.GetEventsCached(context.Background(), cache, from, to)
 	if err != nil {
 		t.Fatalf("first fetch: %v", err)
 	}
@@ -76,16 +82,16 @@ func TestGetEventsCached_FirstHitFetchesUpstream(t *testing.T) {
 func TestGetEventsCached_SecondHitUsesCache(t *testing.T) {
 	srv, count := mkServer(t, sampleBody)
 	c := &Client{HTTP: srv.Client(), URL: srv.URL}
-	kv := storage.NewMemoryKVStore()
+	cache := newCacheStore()
 	from := time.Date(2026, 5, 9, 0, 0, 0, 0, time.UTC)
 	to := from.Add(24 * time.Hour)
 
 	// First fetch primes the cache.
-	if _, err := c.GetEventsCached(context.Background(), kv, from, to); err != nil {
+	if _, err := c.GetEventsCached(context.Background(), cache, from, to); err != nil {
 		t.Fatal(err)
 	}
 	// Second fetch within TTL must NOT hit upstream.
-	if _, err := c.GetEventsCached(context.Background(), kv, from, to); err != nil {
+	if _, err := c.GetEventsCached(context.Background(), cache, from, to); err != nil {
 		t.Fatal(err)
 	}
 	if got := atomic.LoadInt32(count); got != 1 {
@@ -94,8 +100,8 @@ func TestGetEventsCached_SecondHitUsesCache(t *testing.T) {
 }
 
 func TestGetEventsCached_StaleFallback(t *testing.T) {
-	// Prime KV with a stale-but-still-fresh-enough cache record.
-	kv := storage.NewMemoryKVStore()
+	// Prime the typed cache store with a stale-but-still-fresh-enough record.
+	cache := newCacheStore()
 	from := time.Date(2026, 5, 9, 0, 0, 0, 0, time.UTC)
 	to := from.Add(24 * time.Hour)
 	staleEvents := []ScheduleEvent{
@@ -103,7 +109,7 @@ func TestGetEventsCached_StaleFallback(t *testing.T) {
 	}
 	// 10 minutes ago — past the 120s fresh window but well inside 60-min stale.
 	staleTs := time.Now().UTC().Add(-10 * time.Minute).UnixMilli()
-	if err := kv.PutJSON(context.Background(), cacheKey(from, to), cacheRecord{Ts: staleTs, Events: staleEvents}); err != nil {
+	if err := cache.Put(context.Background(), cacheKey(from, to), cacheRecord{Ts: staleTs, Events: staleEvents}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -115,7 +121,7 @@ func TestGetEventsCached_StaleFallback(t *testing.T) {
 	defer srv.Close()
 	c := &Client{HTTP: srv.Client(), URL: srv.URL}
 
-	got, err := c.GetEventsCached(context.Background(), kv, from, to)
+	got, err := c.GetEventsCached(context.Background(), cache, from, to)
 	if err != nil {
 		t.Fatalf("stale fallback should succeed: %v", err)
 	}
@@ -125,7 +131,7 @@ func TestGetEventsCached_StaleFallback(t *testing.T) {
 }
 
 func TestGetEventsCached_HardFailureWhenNoCache(t *testing.T) {
-	kv := storage.NewMemoryKVStore()
+	cache := newCacheStore()
 	from := time.Date(2026, 5, 9, 0, 0, 0, 0, time.UTC)
 	to := from.Add(24 * time.Hour)
 
@@ -135,7 +141,7 @@ func TestGetEventsCached_HardFailureWhenNoCache(t *testing.T) {
 	defer srv.Close()
 	c := &Client{HTTP: srv.Client(), URL: srv.URL}
 
-	_, err := c.GetEventsCached(context.Background(), kv, from, to)
+	_, err := c.GetEventsCached(context.Background(), cache, from, to)
 	if err == nil {
 		t.Errorf("expected error when upstream fails AND no cache")
 	}

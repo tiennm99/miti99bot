@@ -6,10 +6,10 @@ import (
 	"testing"
 )
 
-// MongoProvider.For re-validates the module name as defense-in-depth. Invalid
-// names return invalidStore without touching the DB — the branch worth locking
-// even without a live Mongo (mirrors the firestore provider test).
-func TestMongoProvider_For_RejectsInvalidName(t *testing.T) {
+// MongoProvider.Collection re-validates the module name as defense-in-depth.
+// Invalid names yield an invalidCollection whose Typed store errors without
+// touching the DB — the branch worth locking even without a live Mongo.
+func TestMongoProvider_Collection_RejectsInvalidName(t *testing.T) {
 	p := &MongoProvider{db: nil}
 	bogus := []string{
 		"",
@@ -21,45 +21,45 @@ func TestMongoProvider_For_RejectsInvalidName(t *testing.T) {
 		"with:colon",
 	}
 	for _, name := range bogus {
-		store := p.For(name)
-		if _, err := store.Get(context.Background(), "any-key"); !errors.Is(err, ErrInvalidModuleName) {
-			t.Errorf("For(%q).Get → %v, want ErrInvalidModuleName", name, err)
+		// Invalid names short-circuit to invalidCollection before touching the
+		// (nil) db, so Typed yields a store whose ops report ErrInvalidModuleName.
+		store := Typed[string](p.Collection(name))
+		if _, _, err := store.Get(context.Background(), "any-key"); !errors.Is(err, ErrInvalidModuleName) {
+			t.Errorf("Collection(%q) store Get → %v, want ErrInvalidModuleName", name, err)
 		}
 	}
+	// Valid names pass validation against a real db in
+	// TestMongoProvider_CrossModuleIsolation (gated on MONGODB_TEST_URL); a nil
+	// db here would panic in the driver for a valid name.
 }
 
 // TestMongoProvider_CrossModuleIsolation verifies collection-per-module
 // isolation: the same key written through two module stores yields independent
 // values. Gated on MONGODB_TEST_URL.
 func TestMongoProvider_CrossModuleIsolation(t *testing.T) {
-	_, db, cleanup := mongoLocalSetup(t, "wordle")
+	db, cleanup := mongoLocalSetup(t)
 	defer cleanup()
 
 	p := NewMongoProvider(db)
 	ctx := context.Background()
 
-	wordle := p.For("wordle")
-	loldle := p.For("loldle")
-	if err := wordle.Put(ctx, "shared", []byte("from-wordle")); err != nil {
+	// Mongo payloads must be a struct or map (bson inline cannot hoist a
+	// scalar); a wrapper struct is the same shape modules use.
+	wordle := Typed[wrappedScalar](p.Collection("wordle"))
+	loldle := Typed[wrappedScalar](p.Collection("loldle"))
+	if err := wordle.Put(ctx, "shared", wrappedScalar{Date: "from-wordle"}); err != nil {
 		t.Fatalf("wordle Put: %v", err)
 	}
-	if err := loldle.Put(ctx, "shared", []byte("from-loldle")); err != nil {
+	if err := loldle.Put(ctx, "shared", wrappedScalar{Date: "from-loldle"}); err != nil {
 		t.Fatalf("loldle Put: %v", err)
 	}
 
-	gotW, _ := wordle.Get(ctx, "shared")
-	gotL, _ := loldle.Get(ctx, "shared")
-	if string(gotW) != "from-wordle" {
-		t.Errorf("wordle key leaked: got %q", gotW)
+	gotW, _, _ := wordle.Get(ctx, "shared")
+	gotL, _, _ := loldle.Get(ctx, "shared")
+	if gotW.Date != "from-wordle" {
+		t.Errorf("wordle key leaked: got %q", gotW.Date)
 	}
-	if string(gotL) != "from-loldle" {
-		t.Errorf("loldle key leaked: got %q", gotL)
-	}
-	// Canonical names pass validation (not invalidStore); this also covers the
-	// valid-name branch of For against a real database.
-	for _, name := range []string{"misc", "demo-mod", "x", "a1_b-2"} {
-		if _, ok := p.For(name).(invalidStore); ok {
-			t.Errorf("For(%q) returned invalidStore; expected validation to pass", name)
-		}
+	if gotL.Date != "from-loldle" {
+		t.Errorf("loldle key leaked: got %q", gotL.Date)
 	}
 }

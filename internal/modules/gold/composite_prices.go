@@ -20,9 +20,9 @@ type compositePriceFetcher struct {
 
 // NewCompositePriceFetcherFromEnv builds the production price fetcher using
 // only the env-driven VNAppMob client.
-func NewCompositePriceFetcherFromEnv(kv storage.KVStore) priceFetcher {
+func NewCompositePriceFetcherFromEnv(coll storage.Collection) priceFetcher {
 	return &compositePriceFetcher{
-		vnappmob: NewVNAppMobClientFromEnv(kv),
+		vnappmob: NewVNAppMobClientFromEnv(coll),
 	}
 }
 

@@ -38,7 +38,7 @@ func (f fakePriceFetcher) FetchPrice(context.Context) (GoldPrice, error) {
 
 func newTestState(price float64, err error) *state {
 	return &state{
-		kv:     storage.NewMemoryKVStore(),
+		store:  newGoldStore(),
 		prices: fakePriceFetcher{price: price, err: err},
 		nowFn:  func() time.Time { return time.UnixMilli(123) },
 	}
@@ -77,7 +77,7 @@ func TestHandleTopup(t *testing.T) {
 		t.Fatalf("handleTopup: %v", err)
 	}
 	rb.AssertSentText(t, "Topped up 5.000.000 VND")
-	p, err := LoadPortfolio(ctx, s.kv, 7, 999)
+	p, err := LoadPortfolio(ctx, s.store, 7, 999)
 	if err != nil {
 		t.Fatalf("LoadPortfolio: %v", err)
 	}
@@ -98,7 +98,7 @@ func TestHandleBuyAndSell(t *testing.T) {
 		t.Fatalf("buy: %v", err)
 	}
 	rb.AssertSentText(t, "Bought 1.25 luong gold")
-	p, _ := LoadPortfolio(ctx, s.kv, 7, 999)
+	p, _ := LoadPortfolio(ctx, s.store, 7, 999)
 	if p.Luong != 1.25 || p.VND != 2_500_000 {
 		t.Fatalf("after buy: %+v", p)
 	}
@@ -107,7 +107,7 @@ func TestHandleBuyAndSell(t *testing.T) {
 		t.Fatalf("sell: %v", err)
 	}
 	rb.AssertSentText(t, "Sold 1.25 luong gold")
-	p, _ = LoadPortfolio(ctx, s.kv, 7, 999)
+	p, _ = LoadPortfolio(ctx, s.store, 7, 999)
 	if p.Luong != 0 || p.VND != 5_000_000 {
 		t.Fatalf("after sell: %+v", p)
 	}
@@ -139,7 +139,7 @@ func TestPriceErrorDoesNotMutatePortfolio(t *testing.T) {
 		t.Fatalf("buy: %v", err)
 	}
 	rb.AssertSentText(t, "Could not fetch gold price")
-	p, err := LoadPortfolio(ctx, s.kv, 7, 999)
+	p, err := LoadPortfolio(ctx, s.store, 7, 999)
 	if err != nil {
 		t.Fatalf("LoadPortfolio: %v", err)
 	}
@@ -201,7 +201,7 @@ func (f spreadPriceFetcher) FetchPrice(context.Context) (GoldPrice, error) {
 }
 
 func modDepsForTest() modules.Deps {
-	return modules.Deps{KV: storage.NewMemoryKVStore()}
+	return modules.Deps{Store: storage.NewMemoryProvider().Collection("gold")}
 }
 
 func TestHandlePrice(t *testing.T) {
@@ -239,7 +239,7 @@ func TestHandlePriceFetchError(t *testing.T) {
 func TestHandleBuyUsesSellPrice(t *testing.T) {
 	ctx := context.Background()
 	s := &state{
-		kv:     storage.NewMemoryKVStore(),
+		store:  newGoldStore(),
 		prices: spreadPriceFetcher{buy: 90_000_000, sell: 91_000_000},
 		nowFn:  func() time.Time { return time.UnixMilli(123) },
 	}
@@ -253,7 +253,7 @@ func TestHandleBuyUsesSellPrice(t *testing.T) {
 	if !strings.Contains(text, "91.000.000 VND/luong") {
 		t.Fatalf("expected sell price 91.000.000 in %q", text)
 	}
-	p, _ := LoadPortfolio(ctx, s.kv, 7, 999)
+	p, _ := LoadPortfolio(ctx, s.store, 7, 999)
 	if p.VND != 409_000_000 {
 		t.Fatalf("balance after buy at 91M: got %v, want 409000000", p.VND)
 	}
@@ -262,7 +262,7 @@ func TestHandleBuyUsesSellPrice(t *testing.T) {
 func TestHandleSellUsesBuyPrice(t *testing.T) {
 	ctx := context.Background()
 	s := &state{
-		kv:     storage.NewMemoryKVStore(),
+		store:  newGoldStore(),
 		prices: spreadPriceFetcher{buy: 90_000_000, sell: 91_000_000},
 		nowFn:  func() time.Time { return time.UnixMilli(123) },
 	}
@@ -277,7 +277,7 @@ func TestHandleSellUsesBuyPrice(t *testing.T) {
 	if !strings.Contains(text, "90.000.000 VND/luong") {
 		t.Fatalf("expected buy price 90.000.000 in %q", text)
 	}
-	p, _ := LoadPortfolio(ctx, s.kv, 7, 999)
+	p, _ := LoadPortfolio(ctx, s.store, 7, 999)
 	if p.VND != 499_000_000 {
 		t.Fatalf("balance after sell at 90M: got %v, want 499000000", p.VND)
 	}

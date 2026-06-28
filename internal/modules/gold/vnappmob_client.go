@@ -25,14 +25,20 @@ const (
 	vnappmobHTTPTimeout   = 3 * time.Second // kept under the handler deadline; see chathelper.FetchContext
 )
 
+// apiKeyCache is the persisted shape for the cached VNAppMob JWT.
+type apiKeyCache struct {
+	Token string `json:"token" bson:"token"`
+	Exp   int64  `json:"exp" bson:"exp"`
+}
+
 // VNAppMobClient fetches Vietnam SJC gold prices from api.vnappmob.com.
-// It self-manages a free JWT API key, caching it in KV and refreshing it
-// before expiry or when the SJC endpoint returns 403.
+// It self-manages a free JWT API key, caching it in the typed store and
+// refreshing it before expiry or when the SJC endpoint returns 403.
 type VNAppMobClient struct {
 	HTTP    *http.Client
-	BaseURL string          // optional override; default https://api.vnappmob.com
-	Token   string          // optional env override (GOLD_VNAPP_API_KEY)
-	KV      storage.KVStore // module-scoped KV store
+	BaseURL string                        // optional override; default https://api.vnappmob.com
+	Token   string                        // optional env override (GOLD_VNAPP_API_KEY)
+	cache   storage.DocStore[apiKeyCache] // module-scoped typed cache store
 
 	nowFn func() time.Time
 	mu    sync.Mutex
@@ -42,11 +48,11 @@ type VNAppMobClient struct {
 // GOLD_VNAPP_API_KEY from the environment. The API key env var is intended
 // for local dev or SSM injection; when empty the client refreshes the key
 // automatically via the VNAppMob refresh endpoint.
-func NewVNAppMobClientFromEnv(kv storage.KVStore) *VNAppMobClient {
+func NewVNAppMobClientFromEnv(coll storage.Collection) *VNAppMobClient {
 	return &VNAppMobClient{
 		BaseURL: strings.TrimSpace(os.Getenv("GOLD_VNAPP_API_URL")),
 		Token:   strings.TrimSpace(os.Getenv("GOLD_VNAPP_API_KEY")),
-		KV:      kv,
+		cache:   storage.Typed[apiKeyCache](coll),
 	}
 }
 
@@ -161,8 +167,8 @@ type httpStatusError struct {
 
 func (e *httpStatusError) Error() string { return e.msg }
 
-// getKey returns a valid API key, refreshing from KV or the remote endpoint
-// when the current key is missing or close to expiry.
+// getKey returns a valid API key, refreshing from the typed cache store or the
+// remote endpoint when the current key is missing or close to expiry.
 func (c *VNAppMobClient) getKey(ctx context.Context) (string, error) {
 	if c.Token != "" {
 		return c.Token, nil
@@ -171,11 +177,8 @@ func (c *VNAppMobClient) getKey(ctx context.Context) (string, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	var cached struct {
-		Token string `json:"token"`
-		Exp   int64  `json:"exp"`
-	}
-	if err := c.KV.GetJSON(ctx, vnappmobKeyCacheKey, &cached); err == nil {
+	cached, _, err := c.cache.Get(ctx, vnappmobKeyCacheKey)
+	if err == nil {
 		if cached.Token != "" && !c.isExpired(cached.Exp) {
 			return cached.Token, nil
 		}
@@ -187,8 +190,9 @@ func (c *VNAppMobClient) getKey(ctx context.Context) (string, error) {
 		return "", err
 	}
 
-	// Re-read from KV to get the freshly stored key.
-	if err := c.KV.GetJSON(ctx, vnappmobKeyCacheKey, &cached); err != nil {
+	// Re-read from cache to get the freshly stored key.
+	cached, _, err = c.cache.Get(ctx, vnappmobKeyCacheKey)
+	if err != nil {
 		return "", fmt.Errorf("vnappmob: read refreshed key: %w", err)
 	}
 	if cached.Token == "" {
@@ -197,7 +201,7 @@ func (c *VNAppMobClient) getKey(ctx context.Context) (string, error) {
 	return cached.Token, nil
 }
 
-// refreshKey acquires a new JWT from VNAppMob and stores it in KV.
+// refreshKey acquires a new JWT from VNAppMob and stores it in the typed cache.
 // It is safe to call concurrently; last-write-wins is acceptable because all
 // callers receive a valid key.
 func (c *VNAppMobClient) refreshKey(ctx context.Context) error {
@@ -256,10 +260,7 @@ func (c *VNAppMobClient) refreshKeyLocked(ctx context.Context) error {
 		// Store anyway; next call will refresh if expiry cannot be verified.
 	}
 
-	if err := c.KV.PutJSON(ctx, vnappmobKeyCacheKey, struct {
-		Token string `json:"token"`
-		Exp   int64  `json:"exp"`
-	}{Token: token, Exp: exp}); err != nil {
+	if err := c.cache.Put(ctx, vnappmobKeyCacheKey, apiKeyCache{Token: token, Exp: exp}); err != nil {
 		return fmt.Errorf("vnappmob: cache key: %w", err)
 	}
 	log.Info("vnappmob_key_refreshed", "exp", exp)

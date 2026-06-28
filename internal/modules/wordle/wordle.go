@@ -2,13 +2,19 @@ package wordle
 
 import (
 	"github.com/tiennm99/miti99bot/internal/modules"
+	"github.com/tiennm99/miti99bot/internal/storage"
 )
 
 // New is the wordle module Factory. Loads the embedded dictionary once,
-// captures the per-module KV via closure, and registers all four commands.
+// captures the per-module typed stores via closure, and registers all four commands.
 func New(deps modules.Deps) modules.Module {
 	words, set := loadWords()
-	s := &state{kv: deps.KV, words: words, set: set}
+	s := &state{
+		games: storage.Typed[GameState](deps.Store),
+		stats: storage.Typed[Stats](deps.Store),
+		words: words,
+		set:   set,
+	}
 
 	return modules.Module{
 		Commands: []modules.Command{

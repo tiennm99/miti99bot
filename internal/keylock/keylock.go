@@ -2,7 +2,7 @@
 // (typically a chat / user / subject identifier) across goroutines.
 //
 // Why a separate package: every game module needs a per-subject mutex to
-// turn KVStore's single-op atomicity into safe Get→mutate→Put. The bot
+// turn the store's single-op atomicity into safe Get→mutate→Put. The bot
 // dispatcher runs each Telegram update in its own goroutine, so without
 // explicit per-subject serialisation two updates to the same game could
 // race and drop one write.

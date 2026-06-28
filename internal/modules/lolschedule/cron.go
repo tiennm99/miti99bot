@@ -110,6 +110,15 @@ type messageSender interface {
 	SendMessage(ctx context.Context, params *bot.SendMessageParams) (*models.Message, error)
 }
 
+// lastPushDoc wraps the last-push date string so it can be stored as a named
+// root field in a Mongo document (a bare scalar cannot be a root doc).
+type lastPushDoc struct {
+	Date string `json:"date" bson:"date"`
+}
+
+// PushDateStore is the typed store for last-push date documents.
+type PushDateStore = storage.DocStore[lastPushDoc]
+
 // dailyPushCron returns the cron registration. Schedule is documentation only.
 func (s *state) dailyPushCron() modules.Cron {
 	return modules.Cron{
@@ -134,30 +143,13 @@ func (s *state) dailyPushHandler(ctx context.Context, deps modules.Deps) error {
 // for the daily push: a winner proceeds to fan out; a loser (another trigger
 // already claimed today) returns false and sends nothing.
 //
-// The claim is a version-based optimistic write on lastPushDateKey so two
-// simultaneous triggers cannot both win. Every real KV backend implements
-// VersionedStore; if a bare store without it is used (only in narrow tests), it
-// falls back to a plain Put — losing the atomic guarantee but preserving the
-// "no-op if already today" behaviour.
-func claimDailyPush(ctx context.Context, kv storage.KVStore, today string) (bool, error) {
-	vs, ok := kv.(storage.VersionedStore)
-	if !ok {
-		// No versioned support (a bare store in narrow tests): best-effort Put,
-		// losing the atomic guarantee but preserving "no-op if already today".
-		current, err := kv.Get(ctx, lastPushDateKey)
-		if err == nil && string(current) == today {
-			return false, nil
-		}
-		if err != nil && !errors.Is(err, storage.ErrNotFound) {
-			return false, err
-		}
-		return true, kv.Put(ctx, lastPushDateKey, []byte(today))
-	}
-
-	current, version, err := vs.GetVersioned(ctx, lastPushDateKey)
+// The claim uses version-based optimistic write (PutVersioned) on
+// lastPushDateKey so two simultaneous triggers cannot both win.
+func claimDailyPush(ctx context.Context, store PushDateStore, today string) (bool, error) {
+	current, version, err := store.Get(ctx, lastPushDateKey)
 	switch {
 	case err == nil:
-		if string(current) == today {
+		if current.Date == today {
 			return false, nil // already pushed today
 		}
 	case errors.Is(err, storage.ErrNotFound):
@@ -166,7 +158,7 @@ func claimDailyPush(ctx context.Context, kv storage.KVStore, today string) (bool
 		return false, err
 	}
 
-	if err := vs.PutVersioned(ctx, lastPushDateKey, version, []byte(today)); err != nil {
+	if err := store.PutVersioned(ctx, lastPushDateKey, version, lastPushDoc{Date: today}); err != nil {
 		if errors.Is(err, storage.ErrConflict) {
 			return false, nil // another trigger claimed today first
 		}
@@ -182,7 +174,7 @@ func claimDailyPush(ctx context.Context, kv storage.KVStore, today string) (bool
 // MessageThreadID is forwarded on every send so subscribers in a forum-topic
 // receive the digest in that topic, not in General.
 func runDailyPush(ctx context.Context, s *state, sender messageSender) error {
-	subs, err := listSubscribers(ctx, s.kv)
+	subs, err := listSubscribers(ctx, s.subscribers)
 	if err != nil {
 		return fmt.Errorf("lolschedule daily push: list subscribers: %w", err)
 	}
@@ -193,7 +185,7 @@ func runDailyPush(ctx context.Context, s *state, sender messageSender) error {
 
 	from := ictDayStartOf(s.now())
 	to := addDays(from, 1)
-	events, err := s.client.GetEventsCached(ctx, s.kv, from, to)
+	events, err := s.client.GetEventsCached(ctx, s.cache, from, to)
 	if err != nil {
 		return fmt.Errorf("lolschedule daily push: fetch matches: %w", err)
 	}
@@ -205,7 +197,7 @@ func runDailyPush(ctx context.Context, s *state, sender messageSender) error {
 	// send nothing. Placed after the fetch so a transient fetch failure does
 	// not consume the day's claim.
 	today := s.now().UTC().Format("2006-01-02")
-	won, err := claimDailyPush(ctx, s.kv, today)
+	won, err := claimDailyPush(ctx, s.pushDate, today)
 	if err != nil {
 		return fmt.Errorf("lolschedule daily push: claim date: %w", err)
 	}
@@ -272,7 +264,7 @@ func pruneDeadSubscribers(ctx context.Context, s *state, chatWide map[int64]stru
 	defer s.subscribersMu.Unlock()
 	removed := 0
 	for chatID := range chatWide {
-		n, err := removeAllForChat(ctx, s.kv, chatID)
+		n, err := removeAllForChat(ctx, s.subscribers, chatID)
 		if err != nil {
 			log.Warn("lolschedule prune dead chat failed", "chat", chatID, "err", err)
 			continue
@@ -285,7 +277,7 @@ func pruneDeadSubscribers(ctx context.Context, s *state, chatWide map[int64]stru
 		if _, ok := chatWide[sub.ChatID]; ok {
 			continue
 		}
-		ok, err := removeSubscriber(ctx, s.kv, sub.ChatID, sub.ThreadID)
+		ok, err := removeSubscriber(ctx, s.subscribers, sub.ChatID, sub.ThreadID)
 		if err != nil {
 			log.Warn("lolschedule prune dead topic failed",
 				"chat", sub.ChatID, "thread", sub.ThreadID, "err", err)

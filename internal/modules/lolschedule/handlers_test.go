@@ -16,7 +16,8 @@ import (
 // installSchedule wires the lolschedule module to a recording bot, with a
 // custom upstream HTTP server returning bodyJSON for every request. nowMs
 // fixes the clock so date-based handlers are deterministic.
-func installSchedule(t *testing.T, bodyJSON string, nowMs int64) (*testutil.RecordingBot, storage.KVStore) {
+// Returns the recording bot and the subscriber store for inspection in tests.
+func installSchedule(t *testing.T, bodyJSON string, nowMs int64) (*testutil.RecordingBot, SubscriberStore) {
 	t.Helper()
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -25,13 +26,14 @@ func installSchedule(t *testing.T, bodyJSON string, nowMs int64) (*testutil.Reco
 	t.Cleanup(upstream.Close)
 
 	rb := testutil.NewRecordingBot(t)
-	provider := storage.NewMemoryProvider()
-	kv := provider.For("lolschedule")
+	col := storage.NewMemoryProvider().Collection("lolschedule")
 
 	s := &state{
-		kv:     kv,
-		client: &Client{HTTP: upstream.Client(), URL: upstream.URL},
-		nowFn:  func() time.Time { return time.UnixMilli(nowMs).UTC() },
+		subscribers: storage.Typed[subscribersDoc](col),
+		pushDate:    storage.Typed[lastPushDoc](col),
+		cache:       storage.Typed[cacheRecord](col),
+		client:      &Client{HTTP: upstream.Client(), URL: upstream.URL},
+		nowFn:       func() time.Time { return time.UnixMilli(nowMs).UTC() },
 	}
 	mod := modules.Module{
 		Name: "lolschedule",
@@ -51,7 +53,7 @@ func installSchedule(t *testing.T, bodyJSON string, nowMs int64) (*testutil.Reco
 		reg.AllCommands[c.Name] = c
 	}
 	modules.Install(rb.Bot, reg, modules.Auth{})
-	return rb, kv
+	return rb, s.subscribers
 }
 
 // 2026-05-09 12:00 UTC = 19:00 ICT (still May 9 ICT day). Used as the fake
@@ -119,7 +121,7 @@ func TestHandleWeek_RendersWeek(t *testing.T) {
 }
 
 func TestHandleSubscribe_AddsAndIsIdempotent(t *testing.T) {
-	rb, kv := installSchedule(t, todayBody, fakeNowMs)
+	rb, subsStore := installSchedule(t, todayBody, fakeNowMs)
 	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(7, "/lolschedule_subscribe"))
 	if got := rb.LastSent().Text(); !strings.HasPrefix(got, "✅") {
 		t.Errorf("first subscribe should confirm; got %q", got)
@@ -129,7 +131,7 @@ func TestHandleSubscribe_AddsAndIsIdempotent(t *testing.T) {
 	if got := rb.LastSent().Text(); !strings.Contains(got, "Already subscribed") {
 		t.Errorf("duplicate subscribe should report Already; got %q", got)
 	}
-	ids, _ := listSubscribers(context.Background(), kv)
+	ids, _ := listSubscribers(context.Background(), subsStore)
 	if len(ids) != 1 || ids[0] != (Subscriber{ChatID: 7}) {
 		t.Errorf("subscribers = %v, want [{7 0}]", ids)
 	}
@@ -140,12 +142,12 @@ func TestHandleSubscribe_AddsAndIsIdempotent(t *testing.T) {
 // records that thread on the Subscriber so the daily push lands in the
 // originating topic instead of General.
 func TestHandleSubscribe_ForumTopic_CapturesThreadID(t *testing.T) {
-	rb, kv := installSchedule(t, todayBody, fakeNowMs)
+	rb, subsStore := installSchedule(t, todayBody, fakeNowMs)
 	upd := testutil.NewSupergroupMessage(555, 999, "/lolschedule_subscribe")
 	upd.Message.MessageThreadID = 42
 	rb.Bot.ProcessUpdate(context.Background(), upd)
 
-	subs, _ := listSubscribers(context.Background(), kv)
+	subs, _ := listSubscribers(context.Background(), subsStore)
 	want := Subscriber{ChatID: 555, ThreadID: 42}
 	if len(subs) != 1 || subs[0] != want {
 		t.Errorf("subscribers = %v, want [%v]", subs, want)
@@ -156,7 +158,7 @@ func TestHandleSubscribe_ForumTopic_CapturesThreadID(t *testing.T) {
 // unsubscribing from one topic does not affect sister-topic subscriptions
 // in the same chat.
 func TestHandleUnsubscribe_ForumTopic_RemovesOnlyThatTopic(t *testing.T) {
-	rb, kv := installSchedule(t, todayBody, fakeNowMs)
+	rb, subsStore := installSchedule(t, todayBody, fakeNowMs)
 
 	// Subscribe in two topics of the same supergroup.
 	for _, tid := range []int{42, 99} {
@@ -170,7 +172,7 @@ func TestHandleUnsubscribe_ForumTopic_RemovesOnlyThatTopic(t *testing.T) {
 	upd.Message.MessageThreadID = 42
 	rb.Bot.ProcessUpdate(context.Background(), upd)
 
-	subs, _ := listSubscribers(context.Background(), kv)
+	subs, _ := listSubscribers(context.Background(), subsStore)
 	want := Subscriber{ChatID: 555, ThreadID: 99}
 	if len(subs) != 1 || subs[0] != want {
 		t.Errorf("subscribers = %v, want [%v]", subs, want)
@@ -199,12 +201,13 @@ func TestHandleSchedule_UpstreamFailureGivesFriendlyError(t *testing.T) {
 	defer upstream.Close()
 
 	rb := testutil.NewRecordingBot(t)
-	provider := storage.NewMemoryProvider()
-	kv := provider.For("lolschedule")
+	col := storage.NewMemoryProvider().Collection("lolschedule")
 	s := &state{
-		kv:     kv,
-		client: &Client{HTTP: upstream.Client(), URL: upstream.URL},
-		nowFn:  func() time.Time { return time.UnixMilli(fakeNowMs).UTC() },
+		subscribers: storage.Typed[subscribersDoc](col),
+		pushDate:    storage.Typed[lastPushDoc](col),
+		cache:       storage.Typed[cacheRecord](col),
+		client:      &Client{HTTP: upstream.Client(), URL: upstream.URL},
+		nowFn:       func() time.Time { return time.UnixMilli(fakeNowMs).UTC() },
 	}
 	cmd := modules.Command{Name: "lolschedule_today", Visibility: modules.VisibilityPublic, Description: "x", Handler: s.handleToday}
 	reg := &modules.Registry{

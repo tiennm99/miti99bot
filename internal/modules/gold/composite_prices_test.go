@@ -92,7 +92,7 @@ func TestGoldPriceLines(t *testing.T) {
 }
 
 func TestNewCompositePriceFetcherFromEnv(t *testing.T) {
-	f, ok := NewCompositePriceFetcherFromEnv(storage.NewMemoryKVStore()).(*compositePriceFetcher)
+	f, ok := NewCompositePriceFetcherFromEnv(storage.NewMemoryProvider().Collection("gold")).(*compositePriceFetcher)
 	if !ok {
 		t.Fatalf("expected *compositePriceFetcher, got %T", f)
 	}

@@ -24,14 +24,17 @@ type priceFetcher interface {
 }
 
 type state struct {
-	kv     storage.KVStore
+	store  PortfolioStore
 	prices priceFetcher
 	locks  keylock.Map
 	nowFn  func() time.Time
 }
 
-func newState(kv storage.KVStore) *state {
-	return &state{kv: kv, prices: NewCompositePriceFetcherFromEnv(kv)}
+func newState(coll storage.Collection) *state {
+	return &state{
+		store:  storage.Typed[Portfolio](coll),
+		prices: NewCompositePriceFetcherFromEnv(coll),
+	}
 }
 
 func (s *state) now() time.Time {
