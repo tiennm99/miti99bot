@@ -144,6 +144,15 @@ func main() {
 		log.Warn("OWNER_ID unset; all Private + Protected commands will be denied")
 	}
 
+	// Clear any webhook left over from the AWS deployment at startup, before the
+	// owner DM and before polling. getUpdates (long polling, below) returns HTTP
+	// 409 while a webhook is set. drop_pending_updates=false preserves Telegram's
+	// buffered queue so the poller drains updates that arrived during cutover
+	// (lossless cut).
+	if _, err := b.DeleteWebhook(rootCtx, &bot.DeleteWebhookParams{DropPendingUpdates: false}); err != nil {
+		log.Warn("deleteWebhook failed; getUpdates may 409 if a webhook is still set", "err", err)
+	}
+
 	deploynotify.Run(rootCtx, deploynotify.Config{
 		Bot:     b,
 		Store:   deploynotify.NewStore(provider.Collection("deploynotify")),
@@ -173,13 +182,7 @@ func main() {
 
 	// Long polling is the sole Telegram transport (no webhook, no public
 	// ingress). Telegram permits exactly one getUpdates consumer per bot token,
-	// so deploy exactly one replica. Clear any webhook left over from the AWS
-	// deployment first — getUpdates returns HTTP 409 while a webhook is set.
-	// drop_pending_updates=false preserves Telegram's buffered queue so the
-	// poller drains updates that arrived during cutover (lossless cut).
-	if _, err := b.DeleteWebhook(rootCtx, &bot.DeleteWebhookParams{DropPendingUpdates: false}); err != nil {
-		log.Warn("deleteWebhook failed; getUpdates may 409 if a webhook is still set", "err", err)
-	}
+	// so deploy exactly one replica. The webhook was cleared at startup above.
 	go func() {
 		log.Info("telegram long polling started")
 		b.Start(rootCtx) // returns when rootCtx is cancelled
