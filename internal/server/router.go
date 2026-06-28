@@ -13,7 +13,6 @@ import (
 
 	"github.com/tiennm99/miti99bot/internal/log"
 	"github.com/tiennm99/miti99bot/internal/modules"
-	"github.com/tiennm99/miti99bot/internal/telegram"
 )
 
 // cronNameRe limits cron path segments to a safe alphabet so log injection via
@@ -21,35 +20,34 @@ import (
 // router boundary). Same shape as Telegram command names.
 var cronNameRe = regexp.MustCompile(`^[a-z0-9_]{1,32}$`)
 
-// cronAuthHeader is the shared-secret header EventBridge Scheduler attaches when
-// invoking /cron/{name}.
+// cronAuthHeader is the shared-secret header a caller attaches when invoking
+// /cron/{name} for a manual trigger.
 const cronAuthHeader = "X-Cron-Token"
 
 // Config wires the router's runtime dependencies.
 type Config struct {
-	Bot           *bot.Bot
-	Registry      *modules.Registry
-	WebhookSecret string
+	Bot      *bot.Bot
+	Registry *modules.Registry
 
-	// CronSecret protects /cron/{name} against unauthenticated calls; EventBridge
-	// Scheduler attaches it as the X-Cron-Token header. Empty means /cron/{name}
-	// is fully disabled (404).
+	// CronSecret protects /cron/{name} against unauthenticated calls; a caller
+	// attaches it as the X-Cron-Token header. Empty means /cron/{name} is fully
+	// disabled (404) — the default on self-host, where the in-process scheduler
+	// (internal/cron) is the sole cron trigger.
 	CronSecret string
 }
 
 // New builds the application's HTTP handler. Routes:
 //
-//	GET  /                  → health
-//	POST /webhook           → Telegram update intake (constant-time secret check)
-//	POST /cron/{name}       → EventBridge Scheduler entry (shared-secret check)
+//	GET  /                  → health (Coolify container monitor; not publicly routed)
+//	POST /cron/{name}       → optional manual cron trigger (shared-secret check)
 //
-// Anything else is 404. All routes pass through LogRequests so every
-// request emits a structured `req` log line (CloudWatch Logs consumes them
-// for 5xx-rate alerts and per-route latency).
+// There is no /webhook route: Telegram updates arrive via long polling
+// (cmd/server runs b.Start), so the bot needs no public inbound ingress.
+// Anything else is 404. All routes pass through LogRequests so every request
+// emits a structured `req` log line.
 func New(cfg Config) http.Handler {
 	mux := http.NewServeMux()
 	mux.Handle("/", HealthHandler())
-	mux.Handle("/webhook", telegram.WebhookHandler(cfg.Bot, cfg.WebhookSecret))
 	mux.Handle("/cron/", cronHandler(cfg.Registry, cfg.CronSecret))
 	return LogRequests(mux)
 }
