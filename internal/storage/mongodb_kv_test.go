@@ -89,21 +89,34 @@ func TestMongoKVStore_GetMissing(t *testing.T) {
 	}
 }
 
-func TestMongoKVStore_NonUTF8RoundTrip(t *testing.T) {
-	s, _, cleanup := mongoLocalSetup(t, "wordle")
+// TestMongoKVStore_ValueStoredAsViewableString verifies value is persisted as a
+// BSON string (directly readable in the Atlas/Compass UI), not opaque BinData,
+// and that UTF-8 JSON round-trips byte-identically.
+func TestMongoKVStore_ValueStoredAsViewableString(t *testing.T) {
+	s, db, cleanup := mongoLocalSetup(t, "wordle")
 	defer cleanup()
 
 	ctx := context.Background()
-	raw := []byte{0x00, 0xff, 0xfe, 0x01, 0x80}
-	if err := s.Put(ctx, "bin", raw); err != nil {
+	payload := []byte(`{"word":"chào","score":42}`) // multi-byte UTF-8
+	if err := s.Put(ctx, "u1", payload); err != nil {
 		t.Fatalf("Put: %v", err)
 	}
-	got, err := s.Get(ctx, "bin")
+	got, err := s.Get(ctx, "u1")
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
-	if string(got) != string(raw) {
-		t.Errorf("non-UTF-8 round trip: got %v, want %v", got, raw)
+	if string(got) != string(payload) {
+		t.Errorf("round trip: got %q, want %q", got, payload)
+	}
+
+	// Inspect the raw document: the value field must decode as a Go string
+	// (BSON string type), proving it is viewable directly rather than BinData.
+	var doc bson.M
+	if err := db.Collection("wordle").FindOne(ctx, bson.M{"_id": "u1"}).Decode(&doc); err != nil {
+		t.Fatalf("raw FindOne: %v", err)
+	}
+	if _, ok := doc["value"].(string); !ok {
+		t.Errorf("value stored as %T, want string (directly viewable)", doc["value"])
 	}
 }
 

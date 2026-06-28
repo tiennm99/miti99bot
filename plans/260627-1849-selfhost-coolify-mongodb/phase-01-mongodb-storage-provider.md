@@ -28,11 +28,11 @@ Reuse the shared helpers already in `internal/storage`:
 - `collectionNameRe` (in `firestore_provider.go`) — module-name alphabet.
 - `invalidStore` (in `invalid_store.go`) — returned for bad module names.
 
-Document shape (parity with firestore `value`/`updatedAt`):
+Document shape:
 ```
-{ "_id": "<key>", "value": <BinData>, "updatedAt": <int64 nanos> }
+{ "_id": "<key>", "value": "<JSON string>", "updatedAt": <int64 nanos> }
 ```
-Store `value` as BSON binary (`bson.Binary`) so non-UTF-8 round-trips; on read accept both binary and string (firestore does the same dual-type handling). **Store `updatedAt` as int64 unix-nanos (NOT BSON datetime)** — matches DynamoDB exactly (`dynamodb_kv.go:101`), keeps migration byte-faithful, and avoids ms-truncation if a future TTL/sort ever reads it. The migrator (Phase 4) and the provider MUST share one encoding — see Phase 4 (migrator writes through `MongoKVStore.Put`, not raw `UpdateOne`).
+Store `value` as a **BSON string** (decided 2026-06-28) so it is directly readable in the Atlas/Compass UI — mirroring DynamoDB's String storage (`dynamodb_kv.go:88`). Every caller writes JSON (UTF-8 safe); non-UTF-8 callers must encode upstream (e.g. base64), the same constraint DynamoDB carries. On read, accept both string and binary (the binary case is a backward-compat fallback for any docs written by the original binary build). **Store `updatedAt` as int64 unix-nanos (NOT BSON datetime)** — matches DynamoDB exactly (`dynamodb_kv.go:101`), keeps migration faithful, and avoids ms-truncation if a future TTL/sort ever reads it. The migrator (Phase 4) and the provider MUST share one encoding — see Phase 4 (migrator writes through `MongoKVStore.Put`, not raw `UpdateOne`).
 
 `CompareAndSwap` mapping — the `expected == nil` branch is a LIVE path (first write of every new coin/gold portfolio, `coin/portfolio.go:81-83`, `gold/portfolio.go:62-80`), not an edge case. Map it to a plain **`InsertOne`** and rely SOLELY on the unique `_id` index for the conflict:
 - `expected == nil` → `InsertOne({_id, value, updatedAt})`; `mongo.IsDuplicateKeyError(err)` → `ErrConflict`. Do NOT use a `{value:{$exists:false}}` upsert filter (it can false-conflict on a value-less doc and muddies the contract).
