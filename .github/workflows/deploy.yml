@@ -1,8 +1,13 @@
 name: deploy-aws
 
+# RETIRED: miti99bot is self-hosted on Coolify + MongoDB Atlas (see
+# docs/deploy-coolify-selfhosted.md). The AWS stack is decommissioned
+# (docs/aws-decommission-runbook.md). The automatic push-to-main trigger is
+# removed so a merge can never recreate the AWS stack. Kept as manual-only
+# (workflow_dispatch) for reference; it requires the github-deploy-miti99bot
+# OIDC role, which the decommission deletes — so a manual run fails until AWS
+# is intentionally re-bootstrapped.
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 permissions:
