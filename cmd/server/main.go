@@ -36,10 +36,21 @@ import (
 	"github.com/tiennm99/miti99bot/internal/telegram"
 )
 
-// gitSHA is populated at build time via `-ldflags "-X main.gitSHA=<sha>"`
-// (see Makefile). Empty value means the binary was built without that flag —
-// deploynotify treats it as a signal to stay silent.
+// gitSHA is the local-build fallback, populated via `-ldflags "-X
+// main.gitSHA=<sha>"` (see Makefile). On Coolify the commit comes from the
+// SOURCE_COMMIT runtime env instead (resolveCommitSHA prefers it). Empty from
+// both sources means deploynotify stays silent.
 var gitSHA string
+
+// resolveCommitSHA returns the commit identifier for the deploy notification.
+// Coolify injects SOURCE_COMMIT into the container environment at runtime, so
+// prefer it; fall back to the ldflags-baked gitSHA for local builds.
+func resolveCommitSHA(envSourceCommit string) string {
+	if s := strings.TrimSpace(envSourceCommit); s != "" {
+		return s
+	}
+	return gitSHA
+}
 
 // factories is the static module catalog. Adding a new module is a one-line
 // change here. Lives in main rather than the modules package to avoid an
@@ -157,7 +168,7 @@ func main() {
 		Bot:     b,
 		Store:   deploynotify.NewStore(provider.Collection("deploynotify")),
 		OwnerID: cfg.BotOwnerID,
-		GitSHA:  gitSHA,
+		GitSHA:  resolveCommitSHA(cfg.SourceCommit),
 	})
 
 	handler := server.New()
@@ -260,6 +271,7 @@ func buildProvider(ctx context.Context, cfg config) (storage.Provider, func(), e
 type config struct {
 	Port                  string
 	TelegramBotToken      string
+	SourceCommit          string // Coolify-injected commit SHA (runtime env) for deploynotify
 	GeminiAPIKey          string
 	GoldPriceAPIURL       string
 	GoldFXAPIURL          string
@@ -299,6 +311,7 @@ func loadConfig() config {
 	return config{
 		Port:                  port,
 		TelegramBotToken:      envMap["TELEGRAM_BOT_TOKEN"],
+		SourceCommit:          envMap["SOURCE_COMMIT"],
 		GeminiAPIKey:          envMap["GEMINI_API_KEY"],
 		GoldPriceAPIURL:       envMap["GOLD_PRICE_API_URL"],
 		GoldFXAPIURL:          envMap["GOLD_FX_API_URL"],
