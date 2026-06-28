@@ -15,7 +15,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
-	"github.com/go-telegram/bot"
 	"github.com/tiennm99/miti99bot/internal/ai"
 	"github.com/tiennm99/miti99bot/internal/cron"
 	"github.com/tiennm99/miti99bot/internal/deploynotify"
@@ -147,7 +146,7 @@ func main() {
 	// Clear any webhook left over from the AWS deployment at startup, before the
 	// owner DM and before polling. getUpdates (long polling, below) returns HTTP
 	// 409 while a webhook is set, so a stuck webhook silently breaks the bot.
-	clearWebhook(rootCtx, b)
+	clearWebhook(rootCtx, cfg.TelegramBotToken)
 
 	deploynotify.Run(rootCtx, deploynotify.Config{
 		Bot:     b,
@@ -205,13 +204,14 @@ const (
 )
 
 // clearWebhook deletes any configured webhook so getUpdates (long polling) does
-// not 409. It is best-effort but retried: a transient empty-body decode error
-// on the first attempt must not leave the bot permanently unable to poll.
-// DropPendingUpdates=false preserves Telegram's buffered queue so the poller
-// drains updates that arrived during cutover (lossless cut).
-func clearWebhook(ctx context.Context, b *bot.Bot) {
+// not 409. It is best-effort but retried so a flaky network does not leave the
+// bot permanently unable to poll. Uses telegram.DeleteWebhook (a plain Bot API
+// GET) rather than the go-telegram helper, whose empty-multipart POST comes back
+// with an empty body in some environments. Pending updates are kept so the
+// poller drains the buffered queue for a lossless cutover.
+func clearWebhook(ctx context.Context, token string) {
 	for attempt := 1; attempt <= webhookDeleteAttempts; attempt++ {
-		_, err := b.DeleteWebhook(ctx, &bot.DeleteWebhookParams{DropPendingUpdates: false})
+		err := telegram.DeleteWebhook(ctx, token)
 		if err == nil {
 			log.Info("webhook cleared", "attempt", attempt)
 			return
