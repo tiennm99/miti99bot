@@ -36,21 +36,23 @@ func NewMongoKVStore(coll *mongo.Collection, moduleName string) *MongoKVStore {
 }
 
 // decodeValue extracts the stored value bytes from a decoded document. The
-// driver decodes a BSON binary into bson.Binary and a BSON string into string;
-// accept both so values written by any path (or a future schema) round-trip,
-// mirroring FirestoreKVStore's dual-type handling.
+// driver decodes a BSON string into string and a BSON binary into bson.Binary;
+// accept both so values written by any path round-trip. String is the current
+// encoding (human-readable in the Atlas UI); the binary case is retained for
+// backward compatibility with any documents written by an earlier build that
+// stored value as BSON binary.
 func (s *MongoKVStore) decodeValue(key string, doc bson.M) ([]byte, error) {
 	raw, ok := doc[mongoValueField]
 	if !ok {
 		return nil, fmt.Errorf("mongo get %s/%s: missing %q field", s.moduleName, key, mongoValueField)
 	}
 	switch v := raw.(type) {
+	case string:
+		return []byte(v), nil
 	case bson.Binary:
 		return v.Data, nil
 	case []byte:
 		return v, nil
-	case string:
-		return []byte(v), nil
 	default:
 		return nil, fmt.Errorf("mongo get %s/%s: unexpected value type %T", s.moduleName, key, raw)
 	}
@@ -85,13 +87,15 @@ func (s *MongoKVStore) GetJSON(ctx context.Context, key string, dst any) error {
 }
 
 // doc builds the persisted document for key/val with a fresh updatedAt stamp.
-// value is stored as BSON binary (generic subtype) so non-UTF-8 payloads
-// round-trip; updatedAt is int64 unix-nanos to match DynamoDB byte-for-byte
-// (see dynamodb_kv.go) and keep migration faithful.
+// value is stored as a BSON string so it is human-readable in the Atlas/Compass
+// UI (mirrors DynamoDB's String storage, dynamodb_kv.go). Every current caller
+// writes JSON, which is UTF-8 safe; non-UTF-8 callers must encode upstream
+// (e.g. base64), same constraint as DynamoDB. updatedAt is int64 unix-nanos to
+// match DynamoDB and keep migration faithful.
 func (s *MongoKVStore) doc(key string, val []byte) bson.M {
 	return bson.M{
 		mongoIDField:        key,
-		mongoValueField:     bson.Binary{Subtype: bson.TypeBinaryGeneric, Data: val},
+		mongoValueField:     string(val),
 		mongoUpdatedAtField: time.Now().UTC().UnixNano(),
 	}
 }
@@ -147,10 +151,10 @@ func (s *MongoKVStore) CompareAndSwap(ctx context.Context, key string, expected 
 	res, err := s.coll.UpdateOne(ctx,
 		bson.M{
 			mongoIDField:    key,
-			mongoValueField: bson.Binary{Subtype: bson.TypeBinaryGeneric, Data: expected},
+			mongoValueField: string(expected),
 		},
 		bson.M{"$set": bson.M{
-			mongoValueField:     bson.Binary{Subtype: bson.TypeBinaryGeneric, Data: val},
+			mongoValueField:     string(val),
 			mongoUpdatedAtField: time.Now().UTC().UnixNano(),
 		}},
 	)
