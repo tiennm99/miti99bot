@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"reflect"
 	"sync"
 	"testing"
 	"time"
@@ -89,34 +90,93 @@ func TestMongoKVStore_GetMissing(t *testing.T) {
 	}
 }
 
-// TestMongoKVStore_ValueStoredAsViewableString verifies value is persisted as a
-// BSON string (directly readable in the Atlas/Compass UI), not opaque BinData,
-// and that UTF-8 JSON round-trips byte-identically.
-func TestMongoKVStore_ValueStoredAsViewableString(t *testing.T) {
+// TestMongoKVStore_NativeValueRepresentation verifies a JSON object value is
+// persisted as a NATIVE BSON document (expandable/queryable in Atlas), and a
+// bare non-JSON value as a string — and that both round-trip.
+func TestMongoKVStore_NativeValueRepresentation(t *testing.T) {
 	s, db, cleanup := mongoLocalSetup(t, "wordle")
 	defer cleanup()
 
 	ctx := context.Background()
-	payload := []byte(`{"word":"chào","score":42}`) // multi-byte UTF-8
-	if err := s.Put(ctx, "u1", payload); err != nil {
-		t.Fatalf("Put: %v", err)
+	obj := []byte(`{"word":"chào","score":42}`) // multi-byte UTF-8 object
+	if err := s.Put(ctx, "obj", obj); err != nil {
+		t.Fatalf("Put obj: %v", err)
 	}
-	got, err := s.Get(ctx, "u1")
-	if err != nil {
-		t.Fatalf("Get: %v", err)
-	}
-	if string(got) != string(payload) {
-		t.Errorf("round trip: got %q, want %q", got, payload)
+	// A bare string (lolschedule date-guard style) is not JSON → stored as string.
+	if err := s.Put(ctx, "bare", []byte("2026-06-28")); err != nil {
+		t.Fatalf("Put bare: %v", err)
 	}
 
-	// Inspect the raw document: the value field must decode as a Go string
-	// (BSON string type), proving it is viewable directly rather than BinData.
-	var doc bson.M
-	if err := db.Collection("wordle").FindOne(ctx, bson.M{"_id": "u1"}).Decode(&doc); err != nil {
-		t.Fatalf("raw FindOne: %v", err)
+	var objDoc, bareDoc bson.M
+	if err := db.Collection("wordle").FindOne(ctx, bson.M{"_id": "obj"}).Decode(&objDoc); err != nil {
+		t.Fatalf("raw FindOne obj: %v", err)
 	}
-	if _, ok := doc["value"].(string); !ok {
-		t.Errorf("value stored as %T, want string (directly viewable)", doc["value"])
+	switch objDoc["value"].(type) {
+	case bson.M, bson.D:
+		// native object — good
+	default:
+		t.Errorf("object value stored as %T, want native bson document", objDoc["value"])
+	}
+	if err := db.Collection("wordle").FindOne(ctx, bson.M{"_id": "bare"}).Decode(&bareDoc); err != nil {
+		t.Fatalf("raw FindOne bare: %v", err)
+	}
+	if _, ok := bareDoc["value"].(string); !ok {
+		t.Errorf("bare value stored as %T, want string", bareDoc["value"])
+	}
+
+	// Round-trips.
+	if got, _ := s.Get(ctx, "bare"); string(got) != "2026-06-28" {
+		t.Errorf("bare round trip: got %q", got)
+	}
+	var back map[string]any
+	if err := s.GetJSON(ctx, "obj", &back); err != nil {
+		t.Fatalf("GetJSON obj: %v", err)
+	}
+	if back["word"] != "chào" {
+		t.Errorf("object round trip lost data: %v", back)
+	}
+}
+
+// TestMongoKVStore_Int64Fidelity is the codec gate: an int64 field must survive
+// the JSON↔BSON round trip as an integer, not collapse to a float (which would
+// make GetJSON into an int64 field fail or drift).
+func TestMongoKVStore_Int64Fidelity(t *testing.T) {
+	s, db, cleanup := mongoLocalSetup(t, "coin")
+	defer cleanup()
+
+	ctx := context.Background()
+	type meta struct {
+		CreatedAt int64   `json:"createdAt"` // UnixMilli ~1.7e12
+		Invested  float64 `json:"invested"`
+	}
+	type portfolio struct {
+		USD  float64          `json:"usd"`
+		Meta meta             `json:"meta"`
+		Qty  map[string]int64 `json:"qty"`
+	}
+	in := portfolio{USD: 1234.56, Meta: meta{CreatedAt: 1719500000000, Invested: 5000}, Qty: map[string]int64{"BTC": 3}}
+	if err := s.PutJSON(ctx, "u1", in); err != nil {
+		t.Fatalf("PutJSON: %v", err)
+	}
+	var out portfolio
+	if err := s.GetJSON(ctx, "u1", &out); err != nil {
+		t.Fatalf("GetJSON: %v", err)
+	}
+	if !reflect.DeepEqual(out, in) {
+		t.Errorf("fidelity lost: got %+v, want %+v", out, in)
+	}
+	// The stored CreatedAt must be a BSON int (int32/int64), not a double.
+	var doc bson.M
+	_ = db.Collection("coin").FindOne(ctx, bson.M{"_id": "u1"}).Decode(&doc)
+	if m, ok := doc["value"].(bson.M); ok {
+		if meta, ok := m["meta"].(bson.M); ok {
+			switch meta["createdAt"].(type) {
+			case int64, int32:
+				// good — preserved as integer
+			default:
+				t.Errorf("createdAt stored as %T, want int64 (json.Number codec)", meta["createdAt"])
+			}
+		}
 	}
 }
 
@@ -177,45 +237,70 @@ func TestMongoKVStore_ListPrefix(t *testing.T) {
 	}
 }
 
-func TestMongoKVStore_CompareAndSwap(t *testing.T) {
+func TestMongoKVStore_Versioned(t *testing.T) {
 	s, _, cleanup := mongoLocalSetup(t, "gold")
 	defer cleanup()
 
 	ctx := context.Background()
-	// Create-if-absent succeeds once, then conflicts.
-	if err := s.CompareAndSwap(ctx, "user:1", nil, []byte("v1")); err != nil {
-		t.Fatalf("CompareAndSwap create: %v", err)
+	// Create-if-absent (version 0) succeeds once, then conflicts.
+	if err := s.PutVersioned(ctx, "user:1", 0, []byte("v1")); err != nil {
+		t.Fatalf("PutVersioned create: %v", err)
 	}
-	if err := s.CompareAndSwap(ctx, "user:1", nil, []byte("v2")); !errors.Is(err, ErrConflict) {
-		t.Errorf("CompareAndSwap create over existing: got %v, want ErrConflict", err)
+	if err := s.PutVersioned(ctx, "user:1", 0, []byte("v2")); !errors.Is(err, ErrConflict) {
+		t.Errorf("create over existing: got %v, want ErrConflict", err)
 	}
 
-	// Swap with matching expected succeeds; stale expected conflicts.
-	if err := s.CompareAndSwap(ctx, "user:1", []byte("v1"), []byte("v2")); err != nil {
-		t.Fatalf("CompareAndSwap matching: %v", err)
+	val, ver, err := s.GetVersioned(ctx, "user:1")
+	if err != nil || string(val) != "v1" || ver != 1 {
+		t.Fatalf("GetVersioned: got (%q, v=%d, %v), want (v1, 1, nil)", val, ver, err)
 	}
-	if err := s.CompareAndSwap(ctx, "user:1", []byte("v1"), []byte("v3")); !errors.Is(err, ErrConflict) {
-		t.Errorf("CompareAndSwap stale: got %v, want ErrConflict", err)
+
+	// Swap with matching version succeeds and bumps; stale version conflicts.
+	if err := s.PutVersioned(ctx, "user:1", 1, []byte("v2")); err != nil {
+		t.Fatalf("swap matching version: %v", err)
 	}
-	got, err := s.Get(ctx, "user:1")
-	if err != nil {
-		t.Fatalf("Get: %v", err)
+	if err := s.PutVersioned(ctx, "user:1", 1, []byte("v3")); !errors.Is(err, ErrConflict) {
+		t.Errorf("stale version: got %v, want ErrConflict", err)
 	}
-	if string(got) != "v2" {
+	if got, _ := s.Get(ctx, "user:1"); string(got) != "v2" {
 		t.Errorf("stored value = %q, want %q", got, "v2")
 	}
 
-	// Non-nil expected on a missing key conflicts (caller reloads and retries).
-	if err := s.CompareAndSwap(ctx, "user:missing", []byte("v1"), []byte("v2")); !errors.Is(err, ErrConflict) {
-		t.Errorf("CompareAndSwap missing key: got %v, want ErrConflict", err)
+	// Swap on a missing key conflicts.
+	if err := s.PutVersioned(ctx, "user:missing", 1, []byte("v2")); !errors.Is(err, ErrConflict) {
+		t.Errorf("swap missing key: got %v, want ErrConflict", err)
 	}
 }
 
-// TestMongoKVStore_CompareAndSwap_ConcurrentInsert proves the absent-insert
-// race is linearizable: N goroutines racing a nil-expected CAS on the same key
-// must yield exactly one winner; every loser gets ErrConflict (never a silent
-// overwrite). This is the blocking correctness gate from Phase 1.
-func TestMongoKVStore_CompareAndSwap_ConcurrentInsert(t *testing.T) {
+// TestMongoKVStore_PutVersioned_AdoptsLegacyDoc proves a document written by an
+// older build (no version field) is treated as version 0 and updated cleanly,
+// so existing users' portfolios keep working after the rollout.
+func TestMongoKVStore_PutVersioned_AdoptsLegacyDoc(t *testing.T) {
+	s, db, cleanup := mongoLocalSetup(t, "coin")
+	defer cleanup()
+
+	ctx := context.Background()
+	// Seed a legacy doc: value string, NO version field.
+	if _, err := db.Collection("coin").InsertOne(ctx, bson.M{"_id": "user:9", "value": "legacy"}); err != nil {
+		t.Fatalf("seed legacy doc: %v", err)
+	}
+	val, ver, err := s.GetVersioned(ctx, "user:9")
+	if err != nil || string(val) != "legacy" || ver != 0 {
+		t.Fatalf("GetVersioned legacy: got (%q, v=%d, %v), want (legacy, 0, nil)", val, ver, err)
+	}
+	// Claim it at version 0 — must succeed (no spurious conflict).
+	if err := s.PutVersioned(ctx, "user:9", 0, []byte("migrated")); err != nil {
+		t.Fatalf("adopt legacy doc: %v", err)
+	}
+	if got, ver, _ := s.GetVersioned(ctx, "user:9"); string(got) != "migrated" || ver != 1 {
+		t.Errorf("after adopt: got (%q, v=%d), want (migrated, 1)", got, ver)
+	}
+}
+
+// TestMongoKVStore_PutVersioned_ConcurrentCreate proves the absent-create race
+// is linearizable: N goroutines racing PutVersioned(_, 0, _) on one key yield
+// exactly one winner; losers get ErrConflict. Blocking correctness gate.
+func TestMongoKVStore_PutVersioned_ConcurrentCreate(t *testing.T) {
 	s, _, cleanup := mongoLocalSetup(t, "coin")
 	defer cleanup()
 
@@ -229,8 +314,8 @@ func TestMongoKVStore_CompareAndSwap_ConcurrentInsert(t *testing.T) {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			<-start // release all goroutines at once to maximize contention
-			err := s.CompareAndSwap(ctx, "race", nil, []byte(fmt.Sprintf("v%d", i)))
+			<-start
+			err := s.PutVersioned(ctx, "race", 0, []byte(fmt.Sprintf("v%d", i)))
 			mu.Lock()
 			defer mu.Unlock()
 			switch {
@@ -240,7 +325,7 @@ func TestMongoKVStore_CompareAndSwap_ConcurrentInsert(t *testing.T) {
 				conflicts++
 			default:
 				others++
-				t.Errorf("unexpected CAS error: %v", err)
+				t.Errorf("unexpected error: %v", err)
 			}
 		}(i)
 	}
@@ -248,13 +333,13 @@ func TestMongoKVStore_CompareAndSwap_ConcurrentInsert(t *testing.T) {
 	wg.Wait()
 
 	if wins != 1 {
-		t.Errorf("concurrent nil-expected CAS: got %d winners, want exactly 1", wins)
+		t.Errorf("concurrent create: got %d winners, want exactly 1", wins)
 	}
 	if conflicts != n-1 {
-		t.Errorf("concurrent nil-expected CAS: got %d conflicts, want %d", conflicts, n-1)
+		t.Errorf("concurrent create: got %d conflicts, want %d", conflicts, n-1)
 	}
 	if others != 0 {
-		t.Errorf("concurrent CAS produced %d non-conflict errors", others)
+		t.Errorf("concurrent create produced %d non-conflict errors", others)
 	}
 }
 

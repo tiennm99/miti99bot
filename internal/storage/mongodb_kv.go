@@ -18,6 +18,7 @@ const (
 	mongoIDField        = "_id"
 	mongoValueField     = "value"
 	mongoUpdatedAtField = "updatedAt"
+	mongoVersionField   = "version"
 )
 
 // MongoKVStore is a KVStore backed by a single MongoDB collection. The caller
@@ -35,12 +36,13 @@ func NewMongoKVStore(coll *mongo.Collection, moduleName string) *MongoKVStore {
 	return &MongoKVStore{coll: coll, moduleName: moduleName}
 }
 
-// decodeValue extracts the stored value bytes from a decoded document. The
-// driver decodes a BSON string into string and a BSON binary into bson.Binary;
-// accept both so values written by any path round-trip. String is the current
-// encoding (human-readable in the Atlas UI); the binary case is retained for
-// backward compatibility with any documents written by an earlier build that
-// stored value as BSON binary.
+// decodeValue extracts the stored value bytes from a decoded document,
+// reconstructing the caller's JSON []byte from whichever representation is on
+// disk:
+//   - native object/array (bson.M / bson.A / bson.D) → re-serialized to JSON;
+//   - string → the bytes verbatim (bare scalars / non-JSON values, e.g. a date);
+//   - bson.Binary / []byte → legacy fallback for docs written by an earlier
+//     build that stored value as a binary blob.
 func (s *MongoKVStore) decodeValue(key string, doc bson.M) ([]byte, error) {
 	raw, ok := doc[mongoValueField]
 	if !ok {
@@ -49,6 +51,8 @@ func (s *MongoKVStore) decodeValue(key string, doc bson.M) ([]byte, error) {
 	switch v := raw.(type) {
 	case string:
 		return []byte(v), nil
+	case bson.M, bson.A, bson.D:
+		return nativeToJSON(v)
 	case bson.Binary:
 		return v.Data, nil
 	case []byte:
@@ -86,29 +90,22 @@ func (s *MongoKVStore) GetJSON(ctx context.Context, key string, dst any) error {
 	return nil
 }
 
-// doc builds the persisted document for key/val with a fresh updatedAt stamp.
-// value is stored as a BSON string so it is human-readable in the Atlas/Compass
-// UI (mirrors DynamoDB's String storage, dynamodb_kv.go). Every current caller
-// writes JSON, which is UTF-8 safe; non-UTF-8 callers must encode upstream
-// (e.g. base64), same constraint as DynamoDB. updatedAt is int64 unix-nanos to
-// match DynamoDB and keep migration faithful.
-func (s *MongoKVStore) doc(key string, val []byte) bson.M {
-	return bson.M{
-		mongoIDField:        key,
-		mongoValueField:     string(val),
-		mongoUpdatedAtField: time.Now().UTC().UnixNano(),
-	}
-}
-
-// Put writes raw bytes at key, creating or overwriting.
+// Put writes raw bytes at key, creating or overwriting, and bumps the version
+// (so a concurrent versioned writer that read the old version sees a conflict).
 func (s *MongoKVStore) Put(ctx context.Context, key string, val []byte) error {
 	if err := validateKey(key); err != nil {
 		return err
 	}
-	_, err := s.coll.ReplaceOne(ctx,
+	_, err := s.coll.UpdateOne(ctx,
 		bson.M{mongoIDField: key},
-		s.doc(key, val),
-		options.Replace().SetUpsert(true),
+		bson.M{
+			"$set": bson.M{
+				mongoValueField:     encodeValue(val),
+				mongoUpdatedAtField: time.Now().UTC().UnixNano(),
+			},
+			"$inc": bson.M{mongoVersionField: 1},
+		},
+		options.UpdateOne().SetUpsert(true),
 	)
 	if err != nil {
 		return fmt.Errorf("mongo put %s/%s: %w", s.moduleName, key, err)
@@ -125,46 +122,97 @@ func (s *MongoKVStore) PutJSON(ctx context.Context, key string, val any) error {
 	return s.Put(ctx, key, raw)
 }
 
-// CompareAndSwap conditionally replaces the value only when it still equals
-// expected. A nil expected means the key must not yet exist.
+// GetVersioned returns the value and its version, or ErrNotFound. A document
+// written by an older build that has no version field reports version 0 (and no
+// error), so PutVersioned(expectedVersion=0) can adopt it.
+func (s *MongoKVStore) GetVersioned(ctx context.Context, key string) ([]byte, int64, error) {
+	if err := validateKey(key); err != nil {
+		return nil, 0, err
+	}
+	var doc bson.M
+	err := s.coll.FindOne(ctx, bson.M{mongoIDField: key}).Decode(&doc)
+	if err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return nil, 0, ErrNotFound
+		}
+		return nil, 0, fmt.Errorf("mongo get %s/%s: %w", s.moduleName, key, err)
+	}
+	val, err := s.decodeValue(key, doc)
+	if err != nil {
+		return nil, 0, err
+	}
+	return val, decodeVersion(doc), nil
+}
+
+// PutVersioned writes val only if the stored version equals expectedVersion,
+// then bumps it. expectedVersion == 0 means "create, or adopt a key that has no
+// version field yet" (a legacy doc). ErrConflict on a version mismatch.
 //
-//   - expected == nil → InsertOne; the unique _id index makes the absent-insert
-//     race linearizable (exactly one writer wins, losers get a duplicate-key
-//     error → ErrConflict). This is a LIVE first-write path (every new
-//     coin/gold portfolio), not an edge case.
-//   - expected != nil → UpdateOne filtered on the matching value; MatchedCount
-//     of 0 means the stored value changed (or the key is absent) → ErrConflict.
-func (s *MongoKVStore) CompareAndSwap(ctx context.Context, key string, expected []byte, val []byte) error {
+//   - expectedVersion == 0 → upsert matching {_id} with version absent or 0; a
+//     key that already has version ≥ 1 fails the filter, the upsert attempts an
+//     insert on the same _id, and the unique-_id index returns duplicate-key →
+//     ErrConflict (linearizable single-winner for the first write).
+//   - expectedVersion > 0 → UpdateOne on {_id, version:expected}; MatchedCount
+//     of 0 means the version moved → ErrConflict.
+func (s *MongoKVStore) PutVersioned(ctx context.Context, key string, expectedVersion int64, val []byte) error {
 	if err := validateKey(key); err != nil {
 		return err
 	}
-	if expected == nil {
-		_, err := s.coll.InsertOne(ctx, s.doc(key, val))
+	now := time.Now().UTC().UnixNano()
+	if expectedVersion == 0 {
+		_, err := s.coll.UpdateOne(ctx,
+			bson.M{
+				mongoIDField: key,
+				"$or": bson.A{
+					bson.M{mongoVersionField: bson.M{"$exists": false}},
+					bson.M{mongoVersionField: int64(0)},
+				},
+			},
+			bson.M{"$set": bson.M{
+				mongoValueField:     encodeValue(val),
+				mongoUpdatedAtField: now,
+				mongoVersionField:   int64(1),
+			}},
+			options.UpdateOne().SetUpsert(true),
+		)
 		if err != nil {
 			if mongo.IsDuplicateKeyError(err) {
 				return ErrConflict
 			}
-			return fmt.Errorf("mongo compare-and-swap %s/%s: %w", s.moduleName, key, err)
+			return fmt.Errorf("mongo put-versioned %s/%s: %w", s.moduleName, key, err)
 		}
 		return nil
 	}
 	res, err := s.coll.UpdateOne(ctx,
+		bson.M{mongoIDField: key, mongoVersionField: expectedVersion},
 		bson.M{
-			mongoIDField:    key,
-			mongoValueField: string(expected),
+			"$set": bson.M{mongoValueField: encodeValue(val), mongoUpdatedAtField: now},
+			"$inc": bson.M{mongoVersionField: 1},
 		},
-		bson.M{"$set": bson.M{
-			mongoValueField:     string(val),
-			mongoUpdatedAtField: time.Now().UTC().UnixNano(),
-		}},
 	)
 	if err != nil {
-		return fmt.Errorf("mongo compare-and-swap %s/%s: %w", s.moduleName, key, err)
+		return fmt.Errorf("mongo put-versioned %s/%s: %w", s.moduleName, key, err)
 	}
 	if res.MatchedCount == 0 {
 		return ErrConflict
 	}
 	return nil
+}
+
+// decodeVersion reads the version field from a decoded doc, defaulting to 0 for
+// legacy docs that predate the version field. The driver may decode a BSON int
+// as int32 or int64.
+func decodeVersion(doc bson.M) int64 {
+	switch v := doc[mongoVersionField].(type) {
+	case int64:
+		return v
+	case int32:
+		return int64(v)
+	case float64:
+		return int64(v)
+	default:
+		return 0
+	}
 }
 
 // Delete removes the document at key. Deleting a missing key is not an error

@@ -68,17 +68,17 @@ func TestPrefixed_NotFoundPropagates(t *testing.T) {
 	}
 }
 
-func TestPrefixed_CompareAndSwapDelegatesWithPrefixedKey(t *testing.T) {
+func TestPrefixed_VersionedDelegatesWithPrefixedKey(t *testing.T) {
 	ctx := context.Background()
 	base := NewMemoryKVStore()
 	mod := Prefixed(base, "gold")
 
-	cas, ok := mod.(CompareAndSwapStore)
+	vs, ok := mod.(VersionedStore)
 	if !ok {
-		t.Fatal("Prefixed store does not implement CompareAndSwapStore")
+		t.Fatal("Prefixed store does not implement VersionedStore")
 	}
-	if err := cas.CompareAndSwap(ctx, "user:1", nil, []byte("v1")); err != nil {
-		t.Fatalf("CompareAndSwap create: %v", err)
+	if err := vs.PutVersioned(ctx, "user:1", 0, []byte("v1")); err != nil {
+		t.Fatalf("PutVersioned create: %v", err)
 	}
 
 	// The write must land under the prefixed key on the inner store.
@@ -90,31 +90,37 @@ func TestPrefixed_CompareAndSwapDelegatesWithPrefixedKey(t *testing.T) {
 		t.Errorf("inner value = %q, want %q", got, "v1")
 	}
 
-	// Stale expected must surface the inner store's conflict.
-	if err := cas.CompareAndSwap(ctx, "user:1", []byte("stale"), []byte("v2")); !errors.Is(err, ErrConflict) {
-		t.Errorf("CompareAndSwap stale: got %v, want ErrConflict", err)
+	// GetVersioned reads through the prefix and returns the inner version.
+	val, ver, err := vs.GetVersioned(ctx, "user:1")
+	if err != nil || string(val) != "v1" || ver != 1 {
+		t.Fatalf("GetVersioned: got (%q, v=%d, %v), want (v1, 1, nil)", val, ver, err)
 	}
-	if err := cas.CompareAndSwap(ctx, "user:1", []byte("v1"), []byte("v2")); err != nil {
-		t.Errorf("CompareAndSwap matching: %v", err)
+
+	// Stale version must surface the inner store's conflict.
+	if err := vs.PutVersioned(ctx, "user:1", 99, []byte("v2")); !errors.Is(err, ErrConflict) {
+		t.Errorf("stale version: got %v, want ErrConflict", err)
+	}
+	if err := vs.PutVersioned(ctx, "user:1", 1, []byte("v2")); err != nil {
+		t.Errorf("matching version: %v", err)
 	}
 }
 
-// plainStore hides the inner store's CompareAndSwap method so the wrapper's
+// plainStore hides the inner store's versioned methods so the wrapper's
 // missing-capability path can be exercised.
 type plainStore struct {
 	KVStore
 }
 
-func TestPrefixed_CompareAndSwapUnsupportedInner(t *testing.T) {
+func TestPrefixed_VersionedUnsupportedInner(t *testing.T) {
 	mod := Prefixed(&plainStore{KVStore: NewMemoryKVStore()}, "gold")
-	cas := mod.(CompareAndSwapStore)
+	vs := mod.(VersionedStore)
 
-	err := cas.CompareAndSwap(context.Background(), "user:1", nil, []byte("v1"))
+	err := vs.PutVersioned(context.Background(), "user:1", 0, []byte("v1"))
 	if !errors.Is(err, errors.ErrUnsupported) {
 		t.Errorf("got %v, want errors.ErrUnsupported", err)
 	}
 	if errors.Is(err, ErrConflict) {
-		t.Error("missing CAS capability must not be reported as a retryable conflict")
+		t.Error("missing versioned capability must not be reported as a retryable conflict")
 	}
 }
 

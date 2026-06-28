@@ -36,14 +36,22 @@ func (p *prefixedStore) Put(ctx context.Context, key string, val []byte) error {
 	return p.inner.Put(ctx, p.k(key), val)
 }
 
-func (p *prefixedStore) CompareAndSwap(ctx context.Context, key string, expected []byte, val []byte) error {
-	cas, ok := p.inner.(CompareAndSwapStore)
+func (p *prefixedStore) GetVersioned(ctx context.Context, key string) ([]byte, int64, error) {
+	vs, ok := p.inner.(VersionedStore)
+	if !ok {
+		return nil, 0, fmt.Errorf("storage: inner store does not support versioned reads: %w", errors.ErrUnsupported)
+	}
+	return vs.GetVersioned(ctx, p.k(key))
+}
+
+func (p *prefixedStore) PutVersioned(ctx context.Context, key string, expectedVersion int64, val []byte) error {
+	vs, ok := p.inner.(VersionedStore)
 	if !ok {
 		// A missing capability is permanent: report it as unsupported so
 		// callers fail fast instead of retrying it as a write conflict.
-		return fmt.Errorf("storage: inner store does not support compare-and-swap: %w", errors.ErrUnsupported)
+		return fmt.Errorf("storage: inner store does not support versioned writes: %w", errors.ErrUnsupported)
 	}
-	return cas.CompareAndSwap(ctx, p.k(key), expected, val)
+	return vs.PutVersioned(ctx, p.k(key), expectedVersion, val)
 }
 
 func (p *prefixedStore) PutJSON(ctx context.Context, key string, val any) error {
