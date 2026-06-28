@@ -7,6 +7,28 @@ import (
 	"github.com/tiennm99/miti99bot/internal/storage"
 )
 
+func TestResolveCommitSHA(t *testing.T) {
+	prev := gitSHA
+	defer func() { gitSHA = prev }()
+
+	// Coolify runtime env wins over the baked fallback.
+	gitSHA = "baked"
+	if got := resolveCommitSHA("  runtime-sha "); got != "runtime-sha" {
+		t.Errorf("env present: got %q, want trimmed runtime-sha", got)
+	}
+
+	// Empty env falls back to the ldflags-baked value.
+	if got := resolveCommitSHA(""); got != "baked" {
+		t.Errorf("env empty: got %q, want baked fallback", got)
+	}
+
+	// Neither source set → empty (deploynotify stays silent).
+	gitSHA = ""
+	if got := resolveCommitSHA("   "); got != "" {
+		t.Errorf("both empty: got %q, want empty", got)
+	}
+}
+
 func TestFactoriesIncludesGoldAndCoin(t *testing.T) {
 	catalog := factories()
 	if catalog["gold"] == nil {
