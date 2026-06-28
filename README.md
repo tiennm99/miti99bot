@@ -24,7 +24,7 @@ Disable any module by editing `MODULES` in `template.yaml`.
 ```
 cmd/server/                  entrypoint (long polling + in-process cron + HTTP health)
 cmd/migrate-dynamo-to-mongo/ one-off DynamoDB → MongoDB Atlas data migrator
-internal/server/             HTTP routes (/ health, /cron/{name} manual trigger)
+internal/server/             HTTP route (/ health only; cron has no HTTP route)
 internal/telegram/           Telegram long-polling bot wrapper
 internal/cron/               in-process cron scheduler (replaces EventBridge)
 internal/modules/            Module framework, registry, dispatchers, modules
