@@ -63,6 +63,14 @@ and the `STOCK/COIN/GOLD *_API_URL` overrides (modules use coded defaults).
 4. Copy the `mongodb+srv://…` connection string into `MONGO_URL` and put the
    db name in `MONGO_DATABASE`.
 
+> Storage layout: one collection per module; each document is
+> `{ _id: <user key>, value: <native BSON document>, version, updatedAt }`.
+> Values are stored as native BSON (objects/arrays expand and are queryable in
+> Compass); non-JSON values (e.g. a date guard) are plain strings. Concurrency
+> uses the `version` field (optimistic lock). If you migrated data with an older
+> build that stored `value` as a string/blob, re-run the migrator (idempotent)
+> so values become native.
+
 ## 2. Coolify
 
 1. New resource → from this Git repo (Docker Compose), or a prebuilt image.
