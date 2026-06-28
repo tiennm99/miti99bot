@@ -1,6 +1,6 @@
 # miti99bot
 
-Plug-n-play Telegram bot framework in Go. Runs on AWS Lambda + DynamoDB + EventBridge Scheduler. Strictly free-tier.
+Plug-n-play Telegram bot framework in Go. Self-hosted on Coolify + MongoDB Atlas via long polling and an in-process cron scheduler. (Previously ran on AWS Lambda + DynamoDB + EventBridge — now retired; see [`docs/deploy-aws.md`](docs/deploy-aws.md) for history.)
 
 ## Modules
 
@@ -22,36 +22,48 @@ Disable any module by editing `MODULES` in `template.yaml`.
 ## Layout
 
 ```
-cmd/server/             entrypoint
-internal/server/        HTTP routes (/, /webhook, /cron/{name})
-internal/telegram/      Telegram webhook + bot wrapper
-internal/modules/       Module framework, registry, dispatchers, modules
-internal/storage/       KVStore interface; memory + dynamodb providers
-internal/ai/            Gemini client (used by twentyq)
-template.yaml           AWS SAM IaC (Lambda + Function URL + DynamoDB + Logs + Budget)
-docs/deploy-aws-free-tier-guide.md   Full onboarding guide
-docs/deploy-aws.md                   Steady-state operations
-aws/README.md                        One-time AWS account setup
+cmd/server/                  entrypoint (long polling + in-process cron + HTTP health)
+cmd/migrate-dynamo-to-mongo/ one-off DynamoDB → MongoDB Atlas data migrator
+internal/server/             HTTP routes (/ health, /cron/{name} manual trigger)
+internal/telegram/           Telegram long-polling bot wrapper
+internal/cron/               in-process cron scheduler (replaces EventBridge)
+internal/modules/            Module framework, registry, dispatchers, modules
+internal/storage/            KVProvider interface; memory + firestore + dynamodb + mongodb
+internal/ai/                 Gemini client (used by twentyq)
+docker-compose.yml           Coolify self-host stack (single bot service)
+docs/deploy-coolify-selfhosted.md    Self-host onboarding + cutover runbook
+docs/aws-decommission-runbook.md     AWS teardown (post-cutover)
+template.yaml, aws/          Retired AWS SAM IaC + setup (kept for history)
 ```
 
 ## Run locally
 
-In-memory KV (no AWS required):
+In-memory KV (no database required):
 
 ```sh
 TELEGRAM_BOT_TOKEN=… \
-TELEGRAM_WEBHOOK_SECRET=local \
-PORT=8080 \
 MODULES= \
 go run ./cmd/server
 ```
 
-End-to-end smoke test against a Telegram dev bot needs `ngrok` (local) or a deployed Function URL. The dev bot is created manually; token injected via env vars only.
+The bot uses long polling, so a local run talks to Telegram directly — no `ngrok`, no public URL. Ensure the bot's webhook is unset (the server clears it on startup) or `getUpdates` 409s. The dev bot is created manually; token injected via env vars only.
 
-For DynamoDB integration tests:
+Persistent MongoDB locally (auto-selected when `MONGO_URL` is set):
+
+```sh
+make mongo-local
+TELEGRAM_BOT_TOKEN=… \
+MONGO_URL=mongodb://127.0.0.1:27017 \
+MONGO_DATABASE=miti99bot_dev \
+go run ./cmd/server
+```
+
+For storage integration tests (each skips when its emulator env var is unset):
 ```sh
 make dynamodb-local      # docker run amazon/dynamodb-local on :8001
-make test-dynamodb       # runs internal/storage tests against DDB Local
+make test-dynamodb       # internal/storage tests against DynamoDB Local
+make mongo-local         # docker run mongo:7 on :27017
+make test-mongo          # internal/storage tests against local MongoDB
 ```
 
 ## Test
@@ -64,11 +76,9 @@ make test-dynamodb    # storage tests against DynamoDB Local (requires Docker)
 
 ## Deploy
 
-First-time onboarding: see [`docs/deploy-aws-free-tier-guide.md`](docs/deploy-aws-free-tier-guide.md).
+**Self-host (current):** [`docs/deploy-coolify-selfhosted.md`](docs/deploy-coolify-selfhosted.md) — Coolify + MongoDB Atlas (free M0), long polling (no public ingress), in-process cron. Storage auto-selects `mongodb` when `MONGO_URL` is set; the cron scheduler runs by default. Migrate existing data with [`cmd/migrate-dynamo-to-mongo`](cmd/migrate-dynamo-to-mongo/README.md), then tear down AWS via [`docs/aws-decommission-runbook.md`](docs/aws-decommission-runbook.md).
 
-Steady-state operations: [`docs/deploy-aws.md`](docs/deploy-aws.md).
-
-After the initial setup, every push to `main` triggers `.github/workflows/deploy.yml` (GitHub Actions OIDC → SAM deploy). No long-lived AWS keys.
+**AWS (retired):** [`docs/deploy-aws.md`](docs/deploy-aws.md) — kept for history.
 
 ## License
 

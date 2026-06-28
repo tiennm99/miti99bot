@@ -1,5 +1,10 @@
 # Deploy miti99bot to AWS (Free Tier)
 
+> **RETIRED.** `miti99bot` is now self-hosted on Coolify + MongoDB Atlas — see
+> [`deploy-coolify-selfhosted.md`](./deploy-coolify-selfhosted.md). The AWS stack
+> is decommissioned ([`aws-decommission-runbook.md`](./aws-decommission-runbook.md)).
+> Kept for historical reference / if AWS is ever revisited.
+
 End-to-end onboarding guide for deploying `miti99bot` on AWS. Everything below stays inside the AWS free tier in region `ap-southeast-1` (Singapore).
 
 Related docs:

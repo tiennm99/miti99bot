@@ -1,5 +1,10 @@
 # Deploy: AWS (Lambda + DynamoDB + EventBridge)
 
+> **RETIRED.** `miti99bot` is now self-hosted on Coolify + MongoDB Atlas — see
+> [`deploy-coolify-selfhosted.md`](./deploy-coolify-selfhosted.md). The AWS stack
+> is decommissioned ([`aws-decommission-runbook.md`](./aws-decommission-runbook.md)).
+> Kept for historical reference / if AWS is ever revisited.
+
 This is the production deploy path for `miti99bot`. Strict free-tier targets, region `ap-southeast-1`.
 
 > **First-time setup:** see `aws/README.md`. This doc is for steady-state operations.
