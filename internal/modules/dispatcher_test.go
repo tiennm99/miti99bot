@@ -1,9 +1,15 @@
 package modules
 
 import (
+	"bytes"
+	"encoding/json"
+	"errors"
+	"log/slog"
 	"testing"
 
 	"github.com/go-telegram/bot/models"
+
+	"github.com/tiennm99/miti99bot/internal/log"
 )
 
 func TestAuth_Permits(t *testing.T) {
@@ -21,10 +27,10 @@ func TestAuth_Permits(t *testing.T) {
 	}
 
 	cases := []struct {
-		name    string
-		v       Visibility
-		update  *models.Update
-		expect  bool
+		name   string
+		v      Visibility
+		update *models.Update
+		expect bool
 	}{
 		{"public-no-message", VisibilityPublic, &models.Update{}, true},
 		{"public-stranger", VisibilityPublic, updateFrom(stranger), true},
@@ -149,6 +155,68 @@ func TestMatchCommand(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestLogCommand(t *testing.T) {
+	capture := func(update *models.Update, err error) map[string]any {
+		var buf bytes.Buffer
+		prev := log.Default()
+		log.SetDefault(slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
+		defer log.SetDefault(prev)
+
+		logCommand("ping", update, err)
+
+		var out map[string]any
+		if e := json.Unmarshal(buf.Bytes(), &out); e != nil {
+			t.Fatalf("log line not JSON: %v (%q)", e, buf.String())
+		}
+		return out
+	}
+
+	t.Run("group success logs input, sender, chat", func(t *testing.T) {
+		update := &models.Update{Message: &models.Message{
+			Text: "/ping now",
+			From: &models.User{ID: 42, Username: "alice"},
+			Chat: models.Chat{ID: -100, Type: models.ChatTypeSupergroup, Title: "Squad"},
+		}}
+		got := capture(update, nil)
+		if got["level"] != "INFO" {
+			t.Errorf("level = %v, want INFO", got["level"])
+		}
+		want := map[string]any{
+			"command": "ping", "input": "/ping now", "chat_type": "supergroup",
+			"chat_title": "Squad", "username": "alice",
+		}
+		for k, v := range want {
+			if got[k] != v {
+				t.Errorf("%s = %v, want %v", k, got[k], v)
+			}
+		}
+		if got["user_id"].(float64) != 42 || got["chat_id"].(float64) != -100 {
+			t.Errorf("ids = user %v chat %v, want 42 / -100", got["user_id"], got["chat_id"])
+		}
+	})
+
+	t.Run("dm error logs at ERROR with err", func(t *testing.T) {
+		update := &models.Update{Message: &models.Message{
+			Text: "/ping",
+			From: &models.User{ID: 7},
+			Chat: models.Chat{ID: 7, Type: models.ChatTypePrivate},
+		}}
+		got := capture(update, errors.New("boom"))
+		if got["level"] != "ERROR" {
+			t.Errorf("level = %v, want ERROR", got["level"])
+		}
+		if got["err"] != "boom" {
+			t.Errorf("err = %v, want boom", got["err"])
+		}
+		if _, hasTitle := got["chat_title"]; hasTitle {
+			t.Error("DM should not log chat_title")
+		}
+		if _, hasUser := got["username"]; hasUser {
+			t.Error("missing username should be omitted")
+		}
+	})
 }
 
 func TestAuth_ZeroDeniesAllGated(t *testing.T) {
