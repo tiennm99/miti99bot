@@ -74,13 +74,44 @@ func Install(b *bot.Bot, reg *Registry, auth Auth) {
 					defer cancel()
 					reg.RunCommandHooks(hookCtx, cmdCopy.Name, update)
 				}()
-				if err := cmdCopy.Handler(ctx, b, update); err != nil {
+				err := cmdCopy.Handler(ctx, b, update)
+				if err != nil {
 					metrics.IncError("handler-error")
-					log.Error("command failed", "command", cmdCopy.Name, "err", err)
 				}
+				logCommand(cmdCopy.Name, update, err)
 			},
 		)
 	}
+}
+
+// logCommand emits one structured line per authorized command invocation: what
+// was typed (input), who sent it (user id + @username), where (DM vs group, with
+// chat id and — for groups — the title), and the outcome. The result is kept
+// simple — "ok" via INFO, or the handler error via ERROR — because handler
+// return values can be arbitrarily complex; the error plus context is the useful
+// part. msg is non-nil here: matchCommand only matches updates with a Message.
+func logCommand(name string, update *models.Update, err error) {
+	msg := update.Message
+	fields := []any{
+		"command", name,
+		"input", msg.Text,
+		"chat_type", string(msg.Chat.Type),
+		"chat_id", msg.Chat.ID,
+	}
+	if msg.Chat.Title != "" {
+		fields = append(fields, "chat_title", msg.Chat.Title)
+	}
+	if from := msg.From; from != nil {
+		fields = append(fields, "user_id", from.ID)
+		if from.Username != "" {
+			fields = append(fields, "username", from.Username)
+		}
+	}
+	if err != nil {
+		log.Error("command", append(fields, "err", err)...)
+		return
+	}
+	log.Info("command", fields...)
 }
 
 // matchCommand reports whether update is a text message whose bot_command
