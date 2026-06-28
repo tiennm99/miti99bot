@@ -1,6 +1,9 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/tiennm99/miti99bot/internal/modules"
@@ -26,6 +29,22 @@ func TestResolveCommitSHA(t *testing.T) {
 	gitSHA = ""
 	if got := resolveCommitSHA("   "); got != "unknown" {
 		t.Errorf("both empty: got %q, want unknown", got)
+	}
+}
+
+func TestComposeDoesNotOverrideSourceCommit(t *testing.T) {
+	b, err := os.ReadFile(filepath.Join("..", "..", "compose.yml"))
+	if err != nil {
+		t.Fatalf("read compose.yml: %v", err)
+	}
+	for _, line := range strings.Split(string(b), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		if strings.HasPrefix(trimmed, "SOURCE_COMMIT:") || strings.HasPrefix(trimmed, "- SOURCE_COMMIT") {
+			t.Fatalf("compose.yml must not declare SOURCE_COMMIT; Coolify supplies it at runtime and an explicit Compose value can override it with empty")
+		}
 	}
 }
 

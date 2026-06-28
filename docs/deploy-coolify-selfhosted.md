@@ -82,13 +82,13 @@ Copy [`.env.example`](../.env.example) → `.env` (gitignored) and fill in.
    double-fires crons. Prefer **stop-first redeploys** so two containers never
    overlap near a cron time.
 5. **deploynotify commit SHA:** `SOURCE_COMMIT` is a Coolify predefined
-   variable. For Docker Compose, Coolify passes predefined vars via `--env-file`
-   for interpolation only, so the value reaches the container **only because
-   `compose.yml` references it** (`SOURCE_COMMIT: ${SOURCE_COMMIT:-}`).
-   The bot reads it at startup and DMs the owner on every boot; outside Coolify
-   (local `docker compose up`) it is unset and the DM shows `unknown`. The
-   "Include Source Commit in Build" Coolify setting affects build args only and
-   is **not** needed for this runtime path.
+   variable. The bot reads it at startup and DMs the owner on every boot;
+   outside Coolify (local `docker compose up`) it is unset and the DM shows
+   `unknown`. Keep "Include Source Commit in Build" disabled: that setting
+   affects build args only, is not needed for this runtime path, and would
+   invalidate Docker cache on every commit. Do not add `SOURCE_COMMIT` to
+   `compose.yml`; an interpolated empty value can override Coolify's runtime
+   env-file value.
 6. **Health check:** use Coolify's HTTP monitor against `GET /` (returns
    `text/plain` `miti99bot ok`). Do **not** use a compose `healthcheck` — the
    distroless image has no shell/curl and `cmd/server` has no `-healthcheck`
