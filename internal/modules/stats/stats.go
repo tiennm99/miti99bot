@@ -57,7 +57,7 @@ func pairKey(cmd string, id int64) string {
 // username, also increments user:<id> (refreshing the cached username) and
 // pair:<cmd>:<id>. Errors are logged and swallowed; concurrent invocations of
 // the same (cmd, user) may lose updates — stats are best-effort. A future
-// atomic increment (e.g. DynamoDB UpdateItem ADD) would close the race.
+// backend atomic increment would close the race.
 func (c *counter) Inc(ctx context.Context, name string, update *models.Update) {
 	var (
 		userID   int64

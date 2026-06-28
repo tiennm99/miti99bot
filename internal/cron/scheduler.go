@@ -1,7 +1,6 @@
-// Package cron runs module crons in-process for the self-hosted (long-lived
-// container) deployment. On AWS, EventBridge Scheduler hit /cron/{name}; off
-// AWS there is no external trigger, so this scheduler reads each registered
-// cron's Schedule field and fires its handler on time, in UTC.
+// Package cron runs module crons in-process for the self-hosted long-lived
+// container. It reads each registered cron's Schedule field and fires its
+// handler on time, in UTC.
 package cron
 
 import (

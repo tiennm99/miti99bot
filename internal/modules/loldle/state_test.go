@@ -20,13 +20,6 @@ func newLoldleConfig() ConfigStore {
 	return storage.Typed[roundConfig](storage.NewMemoryProvider().Collection("loldle"))
 }
 
-// newLoldleStores returns all three stores backed by the same collection
-// (disjoint key prefixes: "game:", "stats:", "config:").
-func newLoldleStores() (GameStore, StatsStore, ConfigStore) {
-	c := storage.NewMemoryProvider().Collection("loldle")
-	return storage.Typed[gameState](c), storage.Typed[stats](c), storage.Typed[roundConfig](c)
-}
-
 func TestGameState_StartedAtNullByDefault(t *testing.T) {
 	g := gameState{Target: "Aatrox", Guesses: []string{}}
 	b, err := json.Marshal(g)

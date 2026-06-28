@@ -1,16 +1,9 @@
-// Package metrics is a tiny in-memory counter store with periodic flush
-// to CloudWatch Logs via the project's structured logger.
+// Package metrics is a tiny in-memory counter store with periodic flush to the
+// project's structured logger.
 //
-// Why not Prometheus / OpenTelemetry: the project runs on Lambda free
-// tier with scale-to-zero. A pull-based exporter would be scraped from
-// outside the instance and routinely hit a cold pod, defeating the point.
-// Push-based exporters (StatsD, OTLP) require a paid sink.
-//
-// CloudWatch Logs is already free up to a generous quota and supports
-// log-based metrics (count over `jsonPayload.msg=metrics`) for dashboards
-// and alerts. Per-instance counters are reset on flush so the log line
-// represents a delta, which CloudWatch Logs's count aggregation can sum
-// across instances and time windows.
+// The project intentionally avoids running a metrics sidecar or external
+// exporter. Per-instance counters are reset on flush so each log line
+// represents a delta that can be aggregated by the hosting log sink.
 package metrics
 
 import (
@@ -24,7 +17,7 @@ import (
 
 // DefaultFlushInterval is how often Run flushes counters to the log. 60s
 // keeps log volume modest (1 metrics line per minute per active instance)
-// while still surfacing minute-scale traffic shifts in CloudWatch.
+// while still surfacing minute-scale traffic shifts.
 const DefaultFlushInterval = 60 * time.Second
 
 // Registry holds named counters across three categories: command
@@ -32,7 +25,7 @@ const DefaultFlushInterval = 60 * time.Second
 //
 // Counters use atomic.Int64 so increments don't lock; the per-name map
 // itself is guarded by an RWMutex for the rare add path. Names should be
-// short and stable — they become CloudWatch Logs label values.
+// short and stable — they become log label values.
 type Registry struct {
 	mu       sync.RWMutex
 	commands map[string]*atomic.Int64

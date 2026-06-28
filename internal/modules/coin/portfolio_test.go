@@ -80,7 +80,7 @@ func (s *conflictOnceStore) PutVersioned(ctx context.Context, key string, expect
 		s.conflicted = true
 		competing := NewPortfolio(1)
 		competing.AddUSD(10)
-		if err := s.Store.Put(ctx, key, competing); err != nil {
+		if err := s.Put(ctx, key, competing); err != nil {
 			return err
 		}
 		return storage.ErrConflict

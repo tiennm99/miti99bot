@@ -78,7 +78,7 @@ func Typed[T any](c Collection) DocStore[T] {
 	case *memoryCollection:
 		return &memoryDocStore[T]{c: h}
 	case invalidCollection:
-		return invalidDocStore[T]{name: h.name}
+		return invalidDocStore[T](h)
 	default:
 		panic(fmt.Sprintf("storage: unknown collection type %T", c))
 	}

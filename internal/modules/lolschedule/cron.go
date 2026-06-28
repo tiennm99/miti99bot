@@ -81,18 +81,15 @@ func classifyTerminal(err error) terminalKind {
 // Must match the regex in internal/server/router.go (^[a-z0-9_]{1,32}$).
 const dailyPushCronName = "lolschedule_daily_push"
 
-// dailyPushSchedule drives the in-process scheduler (internal/cron) on
-// self-host; it was also the documented EventBridge time on AWS. Cron
+// dailyPushSchedule drives the in-process scheduler (internal/cron). Cron
 // expression is UTC; 01:00 UTC == 08:00 ICT.
 const dailyPushSchedule = "0 1 * * *"
 
 // lastPushDateKey records the UTC date (YYYY-MM-DD) of the most recent
 // completed daily push. The handler claims this key before fanning out and
 // no-ops if it is already today's date, making the push idempotent per UTC
-// date. This defends against every double-fire window — cutover overlap
-// (EventBridge still live while the container's scheduler runs), rolling
-// deploys that briefly run two containers, and operator misconfiguration —
-// none of which a single trigger source can prevent.
+// date. This defends against double-fire windows from rolling deploys that
+// briefly run two containers or operator misconfiguration.
 const lastPushDateKey = "daily_push:last_date"
 
 // telegramRateLimitThreshold is the subscriber count above which we throttle

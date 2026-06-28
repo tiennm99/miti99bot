@@ -10,7 +10,7 @@ import (
 )
 
 // XAU/USD provider defaults. All three are free, keyless, and verified to
-// answer datacenter IPs (goldprice.org was dropped: it 403s AWS/cloud IPs).
+// answer datacenter IPs (goldprice.org was dropped: it 403s cloud/datacenter IPs).
 const (
 	goldAPIDefaultURL    = "https://api.gold-api.com/price/XAU"
 	swissquoteDefaultURL = "https://forex-data-feed.swissquote.com/public-quotes/bboquotes/instrument/XAU/USD"

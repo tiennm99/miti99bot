@@ -45,9 +45,8 @@ type VNAppMobClient struct {
 }
 
 // NewVNAppMobClientFromEnv creates a client reading GOLD_VNAPP_API_URL and
-// GOLD_VNAPP_API_KEY from the environment. The API key env var is intended
-// for local dev or SSM injection; when empty the client refreshes the key
-// automatically via the VNAppMob refresh endpoint.
+// GOLD_VNAPP_API_KEY from the environment. When the key is empty, the client
+// refreshes it automatically via the VNAppMob refresh endpoint.
 func NewVNAppMobClientFromEnv(coll storage.Collection) *VNAppMobClient {
 	return &VNAppMobClient{
 		BaseURL: strings.TrimSpace(os.Getenv("GOLD_VNAPP_API_URL")),
