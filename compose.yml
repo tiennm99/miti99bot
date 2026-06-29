@@ -14,8 +14,6 @@ services:
       MODULES: ${MODULES}                  # CSV; empty = all modules
       OWNER_ID: ${OWNER_ID}                # Telegram user id for owner-only commands
       ADMIN_IDS: ${ADMIN_IDS}              # CSV of admin Telegram user ids
-      # --- Optional ---
-      GEMINI_API_KEY: ${GEMINI_API_KEY}    # only the twentyq module needs it
       # SOURCE_COMMIT is intentionally not declared here. Coolify provides it
       # at runtime via its generated env file; declaring it here with Compose
       # interpolation can override the runtime value with an empty string.

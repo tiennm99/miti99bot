@@ -12,7 +12,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/tiennm99/miti99bot/internal/ai"
 	"github.com/tiennm99/miti99bot/internal/cron"
 	"github.com/tiennm99/miti99bot/internal/deploynotify"
 	"github.com/tiennm99/miti99bot/internal/log"
@@ -25,7 +24,6 @@ import (
 	"github.com/tiennm99/miti99bot/internal/modules/misc"
 	"github.com/tiennm99/miti99bot/internal/modules/stats"
 	"github.com/tiennm99/miti99bot/internal/modules/stock"
-	"github.com/tiennm99/miti99bot/internal/modules/twentyq"
 	"github.com/tiennm99/miti99bot/internal/modules/util"
 	"github.com/tiennm99/miti99bot/internal/modules/wc"
 	"github.com/tiennm99/miti99bot/internal/modules/wordle"
@@ -67,7 +65,6 @@ func factories() map[string]modules.Factory {
 		"wc":          wc.New,
 		"coin":        coin.New,
 		"gold":        gold.New,
-		"twentyq":     twentyq.New,
 		"stock":       stock.New,
 		"stats":       stats.New,
 	}
@@ -102,22 +99,8 @@ func main() {
 		log.Fatal("telegram bot init failed", "err", err)
 	}
 
-	// Gemini is optional: twentyq checks for nil and refuses the command at
-	// handler time. A blank GEMINI_API_KEY is therefore not fatal — the rest
-	// of the bot still runs.
-	aiClient, err := ai.NewClient(rootCtx, cfg.GeminiAPIKey)
-	if err != nil && !errors.Is(err, ai.ErrNotConfigured) {
-		log.Fatal("gemini init failed", "err", err)
-	}
-	if aiClient == nil {
-		log.Warn("GEMINI_API_KEY unset; AI-backed modules will refuse commands")
-	} else {
-		log.Info("gemini client initialised")
-	}
-
 	reg, err := modules.Build(cfg.Modules, factories(), provider, modules.BuildOptions{
-		Chatter: aiClient,
-		Bot:     b,
+		Bot: b,
 	})
 	if err != nil {
 		log.Fatal("module registry build failed", "err", err)
@@ -260,7 +243,6 @@ type config struct {
 	Port             string
 	TelegramBotToken string
 	SourceCommit     string // Coolify-injected commit SHA (runtime env) for deploynotify
-	GeminiAPIKey     string
 	Modules          []string
 	BotOwnerID       int64
 	AdminUserIDs     map[int64]bool
@@ -290,7 +272,6 @@ func loadConfig() config {
 		Port:             port,
 		TelegramBotToken: envMap["TELEGRAM_BOT_TOKEN"],
 		SourceCommit:     envMap["SOURCE_COMMIT"],
-		GeminiAPIKey:     envMap["GEMINI_API_KEY"],
 		Modules:          splitCSV(envMap["MODULES"]),
 		BotOwnerID:       parseInt64(envMap["OWNER_ID"]),
 		AdminUserIDs:     parseInt64Set(envMap["ADMIN_IDS"]),

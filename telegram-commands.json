@@ -81,18 +81,6 @@
       "description": "Stop the daily World Cup schedule digest"
     },
     {
-      "command": "twentyq",
-      "description": "20 questions; ask yes/no questions"
-    },
-    {
-      "command": "twentyq_giveup",
-      "description": "Reveal the current twentyq answer"
-    },
-    {
-      "command": "twentyq_stats",
-      "description": "Show your twentyq stats"
-    },
-    {
       "command": "stock_topup",
       "description": "Top up VND to your stock account"
     },

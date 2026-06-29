@@ -9,7 +9,6 @@ import (
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
 
-	"github.com/tiennm99/miti99bot/internal/ai"
 	"github.com/tiennm99/miti99bot/internal/storage"
 )
 
@@ -95,8 +94,7 @@ func (r *Registry) Crons() []Cron {
 // Factory's Deps. Adding new optional deps here keeps Build's signature
 // stable as the dep list grows.
 type BuildOptions struct {
-	Chatter ai.Chatter
-	Bot     *bot.Bot
+	Bot *bot.Bot
 }
 
 func Build(enabled []string, factories map[string]Factory, provider storage.Provider, opts BuildOptions) (*Registry, error) {
@@ -148,7 +146,6 @@ func Build(enabled []string, factories map[string]Factory, provider storage.Prov
 		moduleDeps := Deps{
 			Store:    provider.Collection(name),
 			Registry: reg,
-			Chatter:  opts.Chatter,
 			Bot:      opts.Bot,
 		}
 		mod := factory(moduleDeps)
