@@ -86,13 +86,6 @@ func main() {
 	if cfg.TelegramBotToken == "" {
 		log.Fatal("missing required env", "key", "TELEGRAM_BOT_TOKEN")
 	}
-	exportOptionalEnv("GOLD_PRICE_API_URL", cfg.GoldPriceAPIURL)
-	exportOptionalEnv("GOLD_FX_API_URL", cfg.GoldFXAPIURL)
-	exportOptionalEnv("GOLD_VNAPP_API_URL", cfg.GoldVNAppAPIURL)
-	exportOptionalEnv("GOLD_VNAPP_API_KEY", cfg.GoldVNAppAPIKey)
-	exportOptionalEnv("COIN_BINANCE_API_URL", cfg.CoinBinanceAPIURL)
-	exportOptionalEnv("COIN_COINBASE_API_URL", cfg.CoinCoinbaseAPIURL)
-	exportOptionalEnv("COIN_COINGECKO_API_URL", cfg.CoinCoinGeckoAPIURL)
 
 	// Periodic metrics flush. Cancels with rootCtx and emits one final
 	// flush on shutdown so the trailing window isn't lost.
@@ -264,23 +257,16 @@ func buildProvider(ctx context.Context, cfg config) (storage.Provider, func(), e
 }
 
 type config struct {
-	Port                string
-	TelegramBotToken    string
-	SourceCommit        string // Coolify-injected commit SHA (runtime env) for deploynotify
-	GeminiAPIKey        string
-	GoldPriceAPIURL     string
-	GoldFXAPIURL        string
-	GoldVNAppAPIURL     string
-	GoldVNAppAPIKey     string
-	CoinBinanceAPIURL   string
-	CoinCoinbaseAPIURL  string
-	CoinCoinGeckoAPIURL string
-	Modules             []string
-	BotOwnerID          int64
-	AdminUserIDs        map[int64]bool
-	KVProvider          string // empty = auto-detect; or "memory"|"mongodb"
-	MongoURL            string // required when KVProvider=mongodb (Atlas SRV connection string; SECRET — never log)
-	MongoDatabase       string // required when KVProvider=mongodb
+	Port             string
+	TelegramBotToken string
+	SourceCommit     string // Coolify-injected commit SHA (runtime env) for deploynotify
+	GeminiAPIKey     string
+	Modules          []string
+	BotOwnerID       int64
+	AdminUserIDs     map[int64]bool
+	KVProvider       string // empty = auto-detect; or "memory"|"mongodb"
+	MongoURL         string // required when KVProvider=mongodb (Atlas SRV connection string; SECRET — never log)
+	MongoDatabase    string // required when KVProvider=mongodb
 }
 
 func loadConfig() config {
@@ -301,32 +287,16 @@ func loadConfig() config {
 		log.Fatal("invalid PORT", "value", port)
 	}
 	return config{
-		Port:                port,
-		TelegramBotToken:    envMap["TELEGRAM_BOT_TOKEN"],
-		SourceCommit:        envMap["SOURCE_COMMIT"],
-		GeminiAPIKey:        envMap["GEMINI_API_KEY"],
-		GoldPriceAPIURL:     envMap["GOLD_PRICE_API_URL"],
-		GoldFXAPIURL:        envMap["GOLD_FX_API_URL"],
-		GoldVNAppAPIURL:     envMap["GOLD_VNAPP_API_URL"],
-		GoldVNAppAPIKey:     envMap["GOLD_VNAPP_API_KEY"],
-		CoinBinanceAPIURL:   envMap["COIN_BINANCE_API_URL"],
-		CoinCoinbaseAPIURL:  envMap["COIN_COINBASE_API_URL"],
-		CoinCoinGeckoAPIURL: envMap["COIN_COINGECKO_API_URL"],
-		Modules:             splitCSV(envMap["MODULES"]),
-		BotOwnerID:          parseInt64(envMap["OWNER_ID"]),
-		AdminUserIDs:        parseInt64Set(envMap["ADMIN_IDS"]),
-		KVProvider:          envMap["KV_PROVIDER"],
-		MongoURL:            envMap["MONGO_URL"],
-		MongoDatabase:       envMap["MONGO_DATABASE"],
-	}
-}
-
-func exportOptionalEnv(key, value string) {
-	if strings.TrimSpace(value) == "" {
-		return
-	}
-	if err := os.Setenv(key, value); err != nil {
-		log.Warn("could not export optional env", "key", key, "err", err)
+		Port:             port,
+		TelegramBotToken: envMap["TELEGRAM_BOT_TOKEN"],
+		SourceCommit:     envMap["SOURCE_COMMIT"],
+		GeminiAPIKey:     envMap["GEMINI_API_KEY"],
+		Modules:          splitCSV(envMap["MODULES"]),
+		BotOwnerID:       parseInt64(envMap["OWNER_ID"]),
+		AdminUserIDs:     parseInt64Set(envMap["ADMIN_IDS"]),
+		KVProvider:       envMap["KV_PROVIDER"],
+		MongoURL:         envMap["MONGO_URL"],
+		MongoDatabase:    envMap["MONGO_DATABASE"],
 	}
 }
 

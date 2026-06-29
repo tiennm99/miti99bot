@@ -18,9 +18,9 @@ type compositePriceFetcher struct {
 	vnappmob sjcPriceFetcher
 }
 
-// NewCompositePriceFetcherFromEnv builds the production price fetcher using
-// only the env-driven VNAppMob client.
-func NewCompositePriceFetcherFromEnv(coll storage.Collection) priceFetcher {
+// NewCompositePriceFetcher builds the production price fetcher using the coded
+// VNAppMob endpoint.
+func NewCompositePriceFetcher(coll storage.Collection) priceFetcher {
 	return &compositePriceFetcher{
 		vnappmob: NewVNAppMobClientFromEnv(coll),
 	}
