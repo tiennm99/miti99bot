@@ -13,7 +13,6 @@ Atlas via long polling and an in-process cron scheduler.
 | `loldle` | League-of-Legends "guess the champion" |
 | `lolschedule` | Pro-match schedule + daily push |
 | `wc` | World Cup schedule + daily push |
-| `twentyq` | 20-questions game (requires Gemini API key) |
 | `stock` | VN-stocks paper trading |
 | `gold` | Gold paper trading (opt-in; primary VNAppMob SJC buy/sell VND/luong, fallback spot XAU) |
 | `coin` | Crypto paper trading in USD (Binance -> Coinbase -> CoinGecko price fallback) |
@@ -30,7 +29,6 @@ internal/telegram/           Telegram long-polling bot wrapper
 internal/cron/               in-process cron scheduler
 internal/modules/            Module framework, registry, dispatchers, modules
 internal/storage/            typed DocStore[T] (Provider + Typed); mongodb runtime + memory (tests). Values persist as flattened native BSON root documents
-internal/ai/                 Gemini client (used by twentyq)
 compose.yml                  Coolify self-host stack (single bot service)
 telegram-commands.json       Manual Telegram command menu source
 docs/deploy-coolify-selfhosted.md    Self-host deploy and operations guide
