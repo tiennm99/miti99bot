@@ -28,7 +28,7 @@ type state struct {
 }
 
 func newState(store Store) *state {
-	return &state{store: store, prices: NewPriceClientFromEnv()}
+	return &state{store: store, prices: NewPriceClient()}
 }
 
 func (s *state) now() time.Time {

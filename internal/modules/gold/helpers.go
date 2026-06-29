@@ -33,7 +33,7 @@ type state struct {
 func newState(coll storage.Collection) *state {
 	return &state{
 		store:  storage.Typed[Portfolio](coll),
-		prices: NewCompositePriceFetcherFromEnv(coll),
+		prices: NewCompositePriceFetcher(coll),
 	}
 }
 

@@ -36,7 +36,7 @@ type apiKeyCache struct {
 // refreshing it before expiry or when the SJC endpoint returns 403.
 type VNAppMobClient struct {
 	HTTP    *http.Client
-	BaseURL string                        // optional override; default https://api.vnappmob.com
+	BaseURL string                        // explicit test override; production uses https://api.vnappmob.com
 	Token   string                        // optional env override (GOLD_VNAPP_API_KEY)
 	cache   storage.DocStore[apiKeyCache] // module-scoped typed cache store
 
@@ -44,14 +44,13 @@ type VNAppMobClient struct {
 	mu    sync.Mutex
 }
 
-// NewVNAppMobClientFromEnv creates a client reading GOLD_VNAPP_API_URL and
-// GOLD_VNAPP_API_KEY from the environment. When the key is empty, the client
-// refreshes it automatically via the VNAppMob refresh endpoint.
+// NewVNAppMobClientFromEnv creates a client reading only GOLD_VNAPP_API_KEY
+// from the environment. When the key is empty, the client refreshes it
+// automatically via the coded VNAppMob endpoint.
 func NewVNAppMobClientFromEnv(coll storage.Collection) *VNAppMobClient {
 	return &VNAppMobClient{
-		BaseURL: strings.TrimSpace(os.Getenv("GOLD_VNAPP_API_URL")),
-		Token:   strings.TrimSpace(os.Getenv("GOLD_VNAPP_API_KEY")),
-		cache:   storage.Typed[apiKeyCache](coll),
+		Token: strings.TrimSpace(os.Getenv("GOLD_VNAPP_API_KEY")),
+		cache: storage.Typed[apiKeyCache](coll),
 	}
 }
 

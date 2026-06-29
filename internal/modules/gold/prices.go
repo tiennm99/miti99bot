@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"math"
 	"net/http"
-	"os"
 	"strings"
 	"sync"
 	"time"
@@ -42,7 +41,8 @@ type SJCPrice struct {
 type GoldPriceClient struct {
 	HTTP *http.Client
 
-	// Per-provider URL overrides; empty means the provider default.
+	// URL fields are explicit injection points for tests; production uses the
+	// provider defaults.
 	GoldURL       string // primary: gold-api.com
 	SwissquoteURL string
 	NBPURL        string
@@ -55,13 +55,6 @@ type GoldPriceClient struct {
 	mu       sync.Mutex
 	fxRates  map[string]float64
 	fxExpiry time.Time
-}
-
-func NewGoldPriceClientFromEnv() *GoldPriceClient {
-	return &GoldPriceClient{
-		GoldURL: strings.TrimSpace(os.Getenv("GOLD_PRICE_API_URL")),
-		FXURL:   strings.TrimSpace(os.Getenv("GOLD_FX_API_URL")),
-	}
 }
 
 func (c *GoldPriceClient) FetchPrice(ctx context.Context) (GoldPrice, error) {

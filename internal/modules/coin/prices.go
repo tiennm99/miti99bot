@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"os"
 	"sync"
 	"time"
 )
@@ -47,13 +46,13 @@ type cachedPrice struct {
 	expiry time.Time
 }
 
-func NewPriceClientFromEnv() *PriceClient {
+func NewPriceClient() *PriceClient {
 	httpClient := &http.Client{Timeout: coinHTTPTimeout}
 	return &PriceClient{
 		Providers: []PriceProvider{
-			&BinanceProvider{HTTP: httpClient, URL: os.Getenv("COIN_BINANCE_API_URL")},
-			&CoinbaseProvider{HTTP: httpClient, URL: os.Getenv("COIN_COINBASE_API_URL")},
-			&CoinGeckoProvider{HTTP: httpClient, URL: os.Getenv("COIN_COINGECKO_API_URL")},
+			&BinanceProvider{HTTP: httpClient},
+			&CoinbaseProvider{HTTP: httpClient},
+			&CoinGeckoProvider{HTTP: httpClient},
 		},
 		CacheTTL: coinPriceCacheTTL,
 	}
