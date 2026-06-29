@@ -37,8 +37,8 @@ Copy [`.env.example`](../.env.example) → `.env` (gitignored) and fill in.
 | `WC_FOOTBALL_DATA_TOKEN` | optional | football-data.org token for the `wc` module |
 
 **Leave UNSET on self-host:** `KV_PROVIDER`, `PORT`,
-`TELEGRAM_WEBHOOK_SECRET`, `GOLD_VNAPP_API_KEY`, and the `STOCK/COIN/GOLD
-*_API_URL` overrides (modules use coded defaults).
+`TELEGRAM_WEBHOOK_SECRET`, and `GOLD_VNAPP_API_KEY`. Stock, coin, and gold URL
+overrides are not supported in runtime env; modules use coded defaults.
 
 > Cron runs in-process (`internal/cron`) — there is no `/cron` HTTP route and no
 > `CRON_SHARED_SECRET`. The scheduler is the sole trigger; nothing inbound.

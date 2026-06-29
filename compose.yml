@@ -24,9 +24,10 @@ services:
       # PORT defaults to 8080 (internal health server) — omit unless overriding.
       # Long polling = no TELEGRAM_WEBHOOK_SECRET, no /webhook, no public domain.
       # Cron is in-process only — there is no /cron HTTP route and no secret.
-      # No stock/coin/gold *_API_URL overrides — modules use their coded default
-      # providers (stock: SSI/VCI/KBS; coin: Binance→Coinbase→CoinGecko;
-      # gold: VNAppMob→spot). GOLD_VNAPP_API_KEY auto-fetches + caches to Mongo.
+      # No stock/coin/gold URL env overrides — modules use their coded default
+      # providers (stock: SSI/VCI/KBS; coin: Binance->Coinbase->CoinGecko;
+      # gold: VNAppMob). If GOLD_VNAPP_API_KEY is unset, the bot auto-fetches
+      # and caches a key to Mongo.
     # Long polling is outbound-only: nothing inbound to route, so no published
     # ports and no public domain. `expose` keeps :8080 reachable inside the
     # Coolify network for the container health monitor against GET / only.
