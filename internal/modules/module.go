@@ -6,7 +6,6 @@ import (
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
 
-	"github.com/tiennm99/miti99bot/internal/ai"
 	"github.com/tiennm99/miti99bot/internal/storage"
 )
 
@@ -73,7 +72,6 @@ type Module struct {
 type Deps struct {
 	Store    storage.Collection // the module's own collection; build typed views with storage.Typed[T]
 	Registry *Registry          // populated by Build; safe to capture but read-only at module use
-	Chatter  ai.Chatter         // nil if GEMINI_API_KEY unset; twentyq must check
 	Bot      *bot.Bot           // nil-safe: only crons that fan-out (lolschedule daily push) need it
 }
 

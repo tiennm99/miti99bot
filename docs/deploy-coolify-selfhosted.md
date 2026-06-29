@@ -33,7 +33,6 @@ Copy [`.env.example`](../.env.example) → `.env` (gitignored) and fill in.
 | `MODULES` | optional | CSV; empty = all modules |
 | `OWNER_ID` | optional | owner-only commands (renamed from `BOT_OWNER_ID`) |
 | `ADMIN_IDS` | optional | CSV of admin ids (renamed from `ADMIN_USER_IDS`) |
-| `GEMINI_API_KEY` | optional | only the `twentyq` module needs it |
 | `WC_FOOTBALL_DATA_TOKEN` | optional | football-data.org token for the `wc` module |
 
 **Leave UNSET on self-host:** `KV_PROVIDER`, `PORT`,
