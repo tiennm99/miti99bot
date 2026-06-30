@@ -18,7 +18,7 @@ func TestNewRegistersExpectedCommandsAndCron(t *testing.T) {
 			t.Fatalf("missing command %s", name)
 		}
 	}
-	if len(mod.Crons) != 1 || mod.Crons[0].Name != dailyPushCronName {
-		t.Fatalf("crons = %+v, want %s", mod.Crons, dailyPushCronName)
+	if len(mod.Crons) != 1 || mod.Crons[0].Name != dailyPushCronName || mod.Crons[0].Schedule != "0 17 * * *" {
+		t.Fatalf("crons = %+v, want %s at 00:00 UTC+7", mod.Crons, dailyPushCronName)
 	}
 }

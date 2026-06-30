@@ -81,8 +81,8 @@ func TestRunDailyPush_SendsAndIsIdempotent(t *testing.T) {
 		t.Fatalf("calls = %d, want 1", len(sender.calls))
 	}
 	call := sender.calls[0]
-	if call.MessageThreadID != 7 || call.ParseMode != models.ParseModeHTML {
-		t.Fatalf("call = %+v, want thread 7 HTML", call)
+	if call.MessageThreadID != 7 || call.ParseMode != models.ParseModeHTML || !call.DisableNotification {
+		t.Fatalf("call = %+v, want thread 7 HTML silent notification", call)
 	}
 }
 
@@ -107,7 +107,7 @@ func TestRunDailyPush_PrunesDeadChat(t *testing.T) {
 func TestDailyPushCronRegistrationAndNilBot(t *testing.T) {
 	s := newTestState()
 	c := s.dailyPushCron()
-	if c.Name != dailyPushCronName || c.Schedule != dailyPushSchedule || c.Handler == nil {
+	if c.Name != dailyPushCronName || c.Schedule != "0 17 * * *" || c.Handler == nil {
 		t.Fatalf("cron = %+v", c)
 	}
 	err := s.dailyPushHandler(context.Background(), modules.Deps{Store: storage.NewMemoryProvider().Collection("wc")})

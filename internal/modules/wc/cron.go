@@ -16,8 +16,8 @@ import (
 
 const dailyPushCronName = "wc_daily_push"
 
-// 01:00 UTC is 08:00 ICT.
-const dailyPushSchedule = "0 1 * * *"
+// 17:00 UTC is 00:00 UTC+7 (ICT).
+const dailyPushSchedule = "0 17 * * *"
 
 const lastPushDateKey = "daily_push:last_date"
 
@@ -114,10 +114,11 @@ func runDailyPush(ctx context.Context, s *state, sender messageSender) error {
 			}
 		}
 		if _, err := sender.SendMessage(ctx, &bot.SendMessageParams{
-			ChatID:          sub.ChatID,
-			MessageThreadID: sub.ThreadID,
-			Text:            text,
-			ParseMode:       models.ParseModeHTML,
+			ChatID:              sub.ChatID,
+			MessageThreadID:     sub.ThreadID,
+			Text:                text,
+			ParseMode:           models.ParseModeHTML,
+			DisableNotification: true,
 		}); err != nil {
 			log.Warn("wc daily push send failed", "chat", sub.ChatID, "thread", sub.ThreadID, "err", err)
 			failed++
