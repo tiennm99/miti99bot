@@ -188,6 +188,7 @@ func runDailyPush(ctx context.Context, s *state, sender messageSender) error {
 	}
 	filtered := FilterMajor(events)
 	text := RenderToday(filtered, from)
+	disableNotification := len(filtered) == 0
 
 	// Idempotency gate: claim today's push before sending. A lost claim means
 	// another trigger already pushed (or is pushing) for this UTC date, so we
@@ -216,10 +217,11 @@ func runDailyPush(ctx context.Context, s *state, sender messageSender) error {
 			}
 		}
 		if _, err := sender.SendMessage(ctx, &bot.SendMessageParams{
-			ChatID:          sub.ChatID,
-			MessageThreadID: sub.ThreadID,
-			Text:            text,
-			ParseMode:       models.ParseModeHTML,
+			ChatID:              sub.ChatID,
+			MessageThreadID:     sub.ThreadID,
+			Text:                text,
+			ParseMode:           models.ParseModeHTML,
+			DisableNotification: disableNotification,
 		}); err != nil {
 			log.Warn("lolschedule daily push send failed",
 				"chat", sub.ChatID, "thread", sub.ThreadID, "err", err)

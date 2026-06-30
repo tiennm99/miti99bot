@@ -106,7 +106,7 @@ func TestRunDailyPush_NoSubscribers(t *testing.T) {
 	}
 }
 
-func TestRunDailyPush_SendsToAllSubscribers(t *testing.T) {
+func TestRunDailyPush_SendsEmptyScheduleSilently(t *testing.T) {
 	s := newTestState(t)
 	seedFreshCache(t, s.cache, nil) // empty schedule still produces a "no matches" message
 
@@ -142,6 +142,37 @@ func TestRunDailyPush_SendsToAllSubscribers(t *testing.T) {
 		if call.MessageThreadID != 0 {
 			t.Errorf("send %d: thread got %d, want 0 (no topic)", i, call.MessageThreadID)
 		}
+		if !call.DisableNotification {
+			t.Errorf("send %d: DisableNotification got false, want true for empty schedule", i)
+		}
+	}
+}
+
+func TestRunDailyPush_SendsMatchScheduleWithNotification(t *testing.T) {
+	s := newTestState(t)
+	seedFreshCache(t, s.cache, []ScheduleEvent{{
+		StartTime: "2026-05-10T06:00:00Z",
+		State:     "unstarted",
+		League:    League{Name: "LCK", Slug: "lck"},
+		Match: Match{
+			Teams:    []Team{{Code: "T1"}, {Code: "GEN"}},
+			Strategy: Strategy{Count: 3},
+		},
+	}})
+
+	if _, err := addSubscriber(context.Background(), s.subscribers, 100, 0); err != nil {
+		t.Fatalf("addSubscriber: %v", err)
+	}
+
+	sender := &fakeSender{}
+	if err := runDailyPush(context.Background(), s, sender); err != nil {
+		t.Fatalf("runDailyPush: %v", err)
+	}
+	if len(sender.calls) != 1 {
+		t.Fatalf("expected 1 send, got %d", len(sender.calls))
+	}
+	if sender.calls[0].DisableNotification {
+		t.Fatalf("DisableNotification got true, want false when today's match list is non-empty")
 	}
 }
 
