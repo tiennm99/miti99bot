@@ -79,8 +79,8 @@ func TestHandleSchedule_BadDateInput(t *testing.T) {
 func TestHandleSubscribe_AddsAndIsIdempotent(t *testing.T) {
 	rb, store := installWC(t, sampleMatchesBody, fakeNow)
 	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(7, "/wc_subscribe"))
-	if got := rb.LastSent().Text(); !strings.Contains(got, "Subscribed") {
-		t.Fatalf("first reply = %q, want subscribed", got)
+	if got := rb.LastSent().Text(); !strings.Contains(got, "Subscribed") || !strings.Contains(got, "00:00 UTC+7") {
+		t.Fatalf("first reply = %q, want subscribed with 00:00 UTC+7", got)
 	}
 	rb.Reset()
 	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(7, "/wc_subscribe"))

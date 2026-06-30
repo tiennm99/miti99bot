@@ -97,7 +97,7 @@ func (s *state) handleSubscribe(ctx context.Context, b *bot.Bot, update *models.
 	}
 	if added {
 		return chathelper.Reply(ctx, b, msg,
-			"Subscribed. You'll get today's World Cup schedule at 08:00 ICT.\n"+
+			"Subscribed. You'll get today's World Cup schedule at 00:00 UTC+7.\n"+
 				"If you block the bot, you'll be auto-unsubscribed on the next push.")
 	}
 	return chathelper.Reply(ctx, b, msg, "Already subscribed.")

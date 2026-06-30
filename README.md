@@ -12,7 +12,7 @@ Atlas via long polling and an in-process cron scheduler.
 | `wordle` | Daily Wordle game |
 | `loldle` | League-of-Legends "guess the champion" |
 | `lolschedule` | Pro-match schedule + daily push |
-| `wc` | World Cup schedule + daily push |
+| `wc` | World Cup schedule + silent daily push |
 | `stock` | VN-stocks paper trading |
 | `gold` | Gold paper trading (opt-in; primary VNAppMob SJC buy/sell VND/luong, fallback spot XAU) |
 | `coin` | Crypto paper trading in USD (Binance -> Coinbase -> CoinGecko price fallback) |
