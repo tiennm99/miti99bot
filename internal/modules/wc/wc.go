@@ -36,7 +36,7 @@ func New(deps modules.Deps) modules.Module {
 			{
 				Name:        "wc_subscribe",
 				Visibility:  modules.VisibilityPublic,
-				Description: "Get the daily World Cup schedule digest at 08:00 ICT",
+				Description: "Get the daily World Cup schedule digest at 00:00 UTC+7",
 				Handler:     s.handleSubscribe,
 			},
 			{
