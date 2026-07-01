@@ -77,6 +77,19 @@ func TestGetEventsCached_FirstHitFetchesUpstream(t *testing.T) {
 	if atomic.LoadInt32(count) != 1 {
 		t.Errorf("upstream calls = %d, want 1", *count)
 	}
+	cached, _, err := cache.Get(context.Background(), cacheKey(from, to))
+	if err != nil {
+		t.Fatalf("load cached record: %v", err)
+	}
+	if cached.Ts <= 0 {
+		t.Fatalf("cached ts = %d, want positive", cached.Ts)
+	}
+	if cached.FetchedAt == nil {
+		t.Fatal("cached fetchedAt is nil")
+	}
+	if cached.FetchedAt.UnixMilli() != cached.Ts {
+		t.Fatalf("cached fetchedAt = %d, want ts %d", cached.FetchedAt.UnixMilli(), cached.Ts)
+	}
 }
 
 func TestGetEventsCached_SecondHitUsesCache(t *testing.T) {
