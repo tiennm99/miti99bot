@@ -318,15 +318,34 @@ func TestInitStore_MigratesCommandHistoryAndMarksDeleted(t *testing.T) {
 	statsColl := provider.Collection("stats")
 	systemColl := provider.Collection(systemstate.CollectionName)
 	usageDocs := storage.Typed[usageEntry](statsColl)
+	sys := systemstate.New(systemColl)
+
+	if err := sys.Put(ctx, "migration:stats-command-history-v1", systemstate.Record{
+		Kind:      "migration",
+		Name:      "stats-command-history-v1",
+		Status:    "done",
+		Count:     5,
+		UpdatedAt: 1,
+	}); err != nil {
+		t.Fatalf("seed v1 marker: %v", err)
+	}
 
 	seed := map[string]usageEntry{
 		usageKey("gold_stats", 0):            {Cmd: "gold_stats", N: 2},
 		usageKey("gold_portfolio", 0):        {Cmd: "gold_portfolio", N: 5},
+		usageKey("trade_topup", 0):           {Cmd: "trade_topup", N: 6},
+		usageKey("trade_stats", 0):           {Cmd: "trade_stats", N: 9},
+		usageKey("stock_portfolio", 0):       {Cmd: "stock_portfolio", N: 1},
+		usageKey("trade_income_stock", 7):    {Cmd: "trade_income_stock", UserID: 7, Username: "alice", N: 5},
 		usageKey("stock_income_stock", 7):    {Cmd: "stock_income_stock", UserID: 7, Username: "alice", N: 3},
 		usageKey("stock_bonus", 7):           {Cmd: "stock_bonus", UserID: 7, Username: "alice", N: 4},
 		usageKey("lolschedule_week", 8):      {Cmd: "lolschedule_week", UserID: 8, Username: "bob", N: 1},
 		usageKey("lolschedule_today", 0):     {Cmd: "lolschedule_today", N: 9},
+		usageKey("trade_income_events", 8):   {Cmd: "trade_income_events", UserID: 8, Username: "bob", N: 3},
+		usageKey("trade_convert", 7):         {Cmd: "trade_convert", UserID: 7, Username: "alice", N: 4},
+		usageKey("stock_income_events", 0):   {Cmd: "stock_income_events", N: 5},
 		usageKey("stock_convert", 7):         {Cmd: "stock_convert", UserID: 7, Username: "alice", N: 2},
+		usageKey("trade_stats_extra", 7):     {Cmd: "trade_stats_extra", UserID: 7, Username: "alice", N: 99},
 		usageKey("stock_convert_extra", 7):   {Cmd: "stock_convert_extra", UserID: 7, Username: "alice", N: 99},
 		usageKey("lolschedule_weekly", 10):   {Cmd: "lolschedule_weekly", UserID: 10, Username: "carol", N: 99},
 		usageKey("stock_income_stocked", 11): {Cmd: "stock_income_stocked", UserID: 11, Username: "dan", N: 99},
@@ -342,16 +361,25 @@ func TestInitStore_MigratesCommandHistoryAndMarksDeleted(t *testing.T) {
 	}
 
 	assertUsageEntry(t, usageDocs, usageKey("gold_portfolio", 0), usageEntry{Cmd: "gold_portfolio", N: 7})
-	assertUsageEntry(t, usageDocs, usageKey("stock_bonus", 7), usageEntry{Cmd: "stock_bonus", UserID: 7, Username: "alice", N: 7})
+	assertUsageEntry(t, usageDocs, usageKey("stock_topup", 0), usageEntry{Cmd: "stock_topup", N: 6})
+	assertUsageEntry(t, usageDocs, usageKey("stock_portfolio", 0), usageEntry{Cmd: "stock_portfolio", N: 10})
+	assertUsageEntry(t, usageDocs, usageKey("stock_bonus", 7), usageEntry{Cmd: "stock_bonus", UserID: 7, Username: "alice", N: 12})
 	assertUsageEntry(t, usageDocs, usageKey("lol_this_week", 8), usageEntry{Cmd: "lol_this_week", UserID: 8, Username: "bob", N: 1})
 	assertUsageEntry(t, usageDocs, usageKey("lolschedule_today", 0), usageEntry{Cmd: "lolschedule_today", N: 9, Deleted: true})
+	assertUsageEntry(t, usageDocs, usageKey("trade_income_events", 8), usageEntry{Cmd: "trade_income_events", UserID: 8, Username: "bob", N: 3, Deleted: true})
+	assertUsageEntry(t, usageDocs, usageKey("trade_convert", 7), usageEntry{Cmd: "trade_convert", UserID: 7, Username: "alice", N: 4, Deleted: true})
+	assertUsageEntry(t, usageDocs, usageKey("stock_income_events", 0), usageEntry{Cmd: "stock_income_events", N: 5, Deleted: true})
 	assertUsageEntry(t, usageDocs, usageKey("stock_convert", 7), usageEntry{Cmd: "stock_convert", UserID: 7, Username: "alice", N: 2, Deleted: true})
+	assertUsageEntry(t, usageDocs, usageKey("trade_stats_extra", 7), usageEntry{Cmd: "trade_stats_extra", UserID: 7, Username: "alice", N: 99})
 	assertUsageEntry(t, usageDocs, usageKey("stock_convert_extra", 7), usageEntry{Cmd: "stock_convert_extra", UserID: 7, Username: "alice", N: 99})
 	assertUsageEntry(t, usageDocs, usageKey("lolschedule_weekly", 10), usageEntry{Cmd: "lolschedule_weekly", UserID: 10, Username: "carol", N: 99})
 	assertUsageEntry(t, usageDocs, usageKey("stock_income_stocked", 11), usageEntry{Cmd: "stock_income_stocked", UserID: 11, Username: "dan", N: 99})
 
 	for _, key := range []string{
 		usageKey("gold_stats", 0),
+		usageKey("trade_topup", 0),
+		usageKey("trade_stats", 0),
+		usageKey("trade_income_stock", 7),
 		usageKey("stock_income_stock", 7),
 		usageKey("lolschedule_week", 8),
 	} {
@@ -360,19 +388,19 @@ func TestInitStore_MigratesCommandHistoryAndMarksDeleted(t *testing.T) {
 		}
 	}
 
-	sys := systemstate.New(systemColl)
 	rec, ok, err := sys.Get(ctx, commandHistoryMigrationKey)
 	if err != nil || !ok {
 		t.Fatalf("command history marker ok=%v err=%v", ok, err)
 	}
-	if rec.Status != "done" || rec.Count != 5 {
-		t.Fatalf("command history marker = %+v, want done count 5", rec)
+	if rec.Status != "done" || rec.Count != 11 {
+		t.Fatalf("command history marker = %+v, want done count 11", rec)
 	}
 
 	if err := InitStore(ctx, statsColl, systemColl); err != nil {
 		t.Fatalf("InitStore second run: %v", err)
 	}
 	assertUsageEntry(t, usageDocs, usageKey("gold_portfolio", 0), usageEntry{Cmd: "gold_portfolio", N: 7})
+	assertUsageEntry(t, usageDocs, usageKey("stock_portfolio", 0), usageEntry{Cmd: "stock_portfolio", N: 10})
 }
 
 func TestStatsViewsFilterDeletedLegacyRows(t *testing.T) {
