@@ -1,4 +1,4 @@
-package lolschedule
+package lol
 
 import (
 	"context"
@@ -13,7 +13,7 @@ import (
 	"github.com/tiennm99/miti99bot/internal/testutil"
 )
 
-// installSchedule wires the lolschedule module to a recording bot, with a
+// installSchedule wires the lol module to a recording bot, with a
 // custom upstream HTTP server returning bodyJSON for every request. nowMs
 // fixes the clock so date-based handlers are deterministic.
 // Returns the recording bot and the subscriber store for inspection in tests.
@@ -26,7 +26,7 @@ func installSchedule(t *testing.T, bodyJSON string, nowMs int64) (*testutil.Reco
 	t.Cleanup(upstream.Close)
 
 	rb := testutil.NewRecordingBot(t)
-	col := storage.NewMemoryProvider().Collection("lolschedule")
+	col := storage.NewMemoryProvider().Collection("lol")
 
 	s := &state{
 		subscribers: storage.Typed[subscribersDoc](col),
@@ -36,13 +36,12 @@ func installSchedule(t *testing.T, bodyJSON string, nowMs int64) (*testutil.Reco
 		nowFn:       func() time.Time { return time.UnixMilli(nowMs).UTC() },
 	}
 	mod := modules.Module{
-		Name: "lolschedule",
+		Name: "lol",
 		Commands: []modules.Command{
-			{Name: "lolschedule", Visibility: modules.VisibilityPublic, Description: "x", Handler: s.handleSchedule},
-			{Name: "lolschedule_today", Visibility: modules.VisibilityPublic, Description: "x", Handler: s.handleToday},
-			{Name: "lolschedule_week", Visibility: modules.VisibilityPublic, Description: "x", Handler: s.handleWeek},
-			{Name: "lolschedule_subscribe", Visibility: modules.VisibilityPublic, Description: "x", Handler: s.handleSubscribe},
-			{Name: "lolschedule_unsubscribe", Visibility: modules.VisibilityPublic, Description: "x", Handler: s.handleUnsubscribe},
+			{Name: "lol", Visibility: modules.VisibilityPublic, Description: "x", Handler: s.handleSchedule},
+			{Name: "lol_this_week", Visibility: modules.VisibilityPublic, Description: "x", Handler: s.handleWeek},
+			{Name: "lol_subscribe", Visibility: modules.VisibilityPublic, Description: "x", Handler: s.handleSubscribe},
+			{Name: "lol_unsubscribe", Visibility: modules.VisibilityPublic, Description: "x", Handler: s.handleUnsubscribe},
 		},
 	}
 	reg := &modules.Registry{
@@ -76,9 +75,9 @@ const todayBody = `{
   }
 }`
 
-func TestHandleToday_RendersHTMLAndFiltersMajor(t *testing.T) {
+func TestHandleSchedule_DefaultsToToday(t *testing.T) {
 	rb, _ := installSchedule(t, todayBody, fakeNowMs)
-	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(1, "/lolschedule_today"))
+	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(1, "/lol"))
 
 	got := rb.LastSent()
 	if got.Method != "sendMessage" {
@@ -96,7 +95,7 @@ func TestHandleToday_RendersHTMLAndFiltersMajor(t *testing.T) {
 
 func TestHandleSchedule_BadDateInput(t *testing.T) {
 	rb, _ := installSchedule(t, todayBody, fakeNowMs)
-	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(1, "/lolschedule notadate"))
+	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(1, "/lol notadate"))
 
 	got := rb.LastSent().Text()
 	if !strings.Contains(got, "Invalid date") {
@@ -106,7 +105,7 @@ func TestHandleSchedule_BadDateInput(t *testing.T) {
 
 func TestHandleWeek_RendersWeek(t *testing.T) {
 	rb, _ := installSchedule(t, todayBody, fakeNowMs)
-	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(1, "/lolschedule_week"))
+	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(1, "/lol_this_week"))
 
 	got := rb.LastSent().Text()
 	if !strings.Contains(got, "→") {
@@ -122,12 +121,12 @@ func TestHandleWeek_RendersWeek(t *testing.T) {
 
 func TestHandleSubscribe_AddsAndIsIdempotent(t *testing.T) {
 	rb, subsStore := installSchedule(t, todayBody, fakeNowMs)
-	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(7, "/lolschedule_subscribe"))
+	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(7, "/lol_subscribe"))
 	if got := rb.LastSent().Text(); !strings.HasPrefix(got, "✅") {
 		t.Errorf("first subscribe should confirm; got %q", got)
 	}
 	rb.Reset()
-	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(7, "/lolschedule_subscribe"))
+	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(7, "/lol_subscribe"))
 	if got := rb.LastSent().Text(); !strings.Contains(got, "Already subscribed") {
 		t.Errorf("duplicate subscribe should report Already; got %q", got)
 	}
@@ -143,7 +142,7 @@ func TestHandleSubscribe_AddsAndIsIdempotent(t *testing.T) {
 // originating topic instead of General.
 func TestHandleSubscribe_ForumTopic_CapturesThreadID(t *testing.T) {
 	rb, subsStore := installSchedule(t, todayBody, fakeNowMs)
-	upd := testutil.NewSupergroupMessage(555, 999, "/lolschedule_subscribe")
+	upd := testutil.NewSupergroupMessage(555, 999, "/lol_subscribe")
 	upd.Message.MessageThreadID = 42
 	rb.Bot.ProcessUpdate(context.Background(), upd)
 
@@ -162,13 +161,13 @@ func TestHandleUnsubscribe_ForumTopic_RemovesOnlyThatTopic(t *testing.T) {
 
 	// Subscribe in two topics of the same supergroup.
 	for _, tid := range []int{42, 99} {
-		upd := testutil.NewSupergroupMessage(555, 999, "/lolschedule_subscribe")
+		upd := testutil.NewSupergroupMessage(555, 999, "/lol_subscribe")
 		upd.Message.MessageThreadID = tid
 		rb.Bot.ProcessUpdate(context.Background(), upd)
 	}
 
 	// Unsubscribe in topic 42 only.
-	upd := testutil.NewSupergroupMessage(555, 999, "/lolschedule_unsubscribe")
+	upd := testutil.NewSupergroupMessage(555, 999, "/lol_unsubscribe")
 	upd.Message.MessageThreadID = 42
 	rb.Bot.ProcessUpdate(context.Background(), upd)
 
@@ -181,14 +180,14 @@ func TestHandleUnsubscribe_ForumTopic_RemovesOnlyThatTopic(t *testing.T) {
 
 func TestHandleUnsubscribe(t *testing.T) {
 	rb, _ := installSchedule(t, todayBody, fakeNowMs)
-	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(7, "/lolschedule_subscribe"))
+	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(7, "/lol_subscribe"))
 	rb.Reset()
-	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(7, "/lolschedule_unsubscribe"))
+	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(7, "/lol_unsubscribe"))
 	if got := rb.LastSent().Text(); got != "Unsubscribed." {
 		t.Errorf("unsubscribe reply = %q, want 'Unsubscribed.'", got)
 	}
 	rb.Reset()
-	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(7, "/lolschedule_unsubscribe"))
+	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(7, "/lol_unsubscribe"))
 	if got := rb.LastSent().Text(); !strings.Contains(got, "weren't subscribed") {
 		t.Errorf("idempotent unsubscribe reply = %q", got)
 	}
@@ -201,7 +200,7 @@ func TestHandleSchedule_UpstreamFailureGivesFriendlyError(t *testing.T) {
 	defer upstream.Close()
 
 	rb := testutil.NewRecordingBot(t)
-	col := storage.NewMemoryProvider().Collection("lolschedule")
+	col := storage.NewMemoryProvider().Collection("lol")
 	s := &state{
 		subscribers: storage.Typed[subscribersDoc](col),
 		pushDate:    storage.Typed[lastPushDoc](col),
@@ -209,14 +208,14 @@ func TestHandleSchedule_UpstreamFailureGivesFriendlyError(t *testing.T) {
 		client:      &Client{HTTP: upstream.Client(), URL: upstream.URL},
 		nowFn:       func() time.Time { return time.UnixMilli(fakeNowMs).UTC() },
 	}
-	cmd := modules.Command{Name: "lolschedule_today", Visibility: modules.VisibilityPublic, Description: "x", Handler: s.handleToday}
+	cmd := modules.Command{Name: "lol", Visibility: modules.VisibilityPublic, Description: "x", Handler: s.handleSchedule}
 	reg := &modules.Registry{
-		Modules:     []modules.Module{{Name: "lolschedule", Commands: []modules.Command{cmd}}},
+		Modules:     []modules.Module{{Name: "lol", Commands: []modules.Command{cmd}}},
 		AllCommands: map[string]modules.Command{cmd.Name: cmd},
 	}
 	modules.Install(rb.Bot, reg, modules.Auth{})
 
-	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(1, "/lolschedule_today"))
+	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(1, "/lol"))
 	if got := rb.LastSent().Text(); !strings.Contains(got, "Could not fetch") {
 		t.Errorf("expected friendly fetch-error reply; got %q", got)
 	}

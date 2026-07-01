@@ -41,23 +41,19 @@
       "description": "Show your loldle stats"
     },
     {
-      "command": "lolschedule",
+      "command": "lol",
       "description": "LoL matches for a date"
     },
     {
-      "command": "lolschedule_today",
-      "description": "Today's LoL esports matches"
+      "command": "lol_this_week",
+      "description": "LoL matches for this week"
     },
     {
-      "command": "lolschedule_week",
-      "description": "LoL matches for the next 7 days"
-    },
-    {
-      "command": "lolschedule_subscribe",
+      "command": "lol_subscribe",
       "description": "Get the daily LoL schedule digest"
     },
     {
-      "command": "lolschedule_unsubscribe",
+      "command": "lol_unsubscribe",
       "description": "Stop the daily LoL schedule digest"
     },
     {

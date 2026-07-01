@@ -1,4 +1,4 @@
-package lolschedule
+package lol
 
 import (
 	"context"
@@ -51,7 +51,7 @@ func listSubscribers(ctx context.Context, store SubscriberStore) ([]Subscriber, 
 	case errors.Is(err, storage.ErrNotFound):
 		return nil, nil
 	case err != nil:
-		return nil, fmt.Errorf("lolschedule listSubscribers: %w", err)
+		return nil, fmt.Errorf("lol listSubscribers: %w", err)
 	}
 	if doc.Subscribers != nil {
 		return doc.Subscribers, nil
@@ -69,7 +69,7 @@ func listSubscribersLegacy(raw []byte) ([]Subscriber, error) {
 	}
 	var legacy []int64
 	if err := json.Unmarshal(raw, &legacy); err != nil {
-		return nil, fmt.Errorf("lolschedule listSubscribers decode: %w", err)
+		return nil, fmt.Errorf("lol listSubscribers decode: %w", err)
 	}
 	out := make([]Subscriber, len(legacy))
 	for i, id := range legacy {
@@ -97,7 +97,7 @@ func addSubscriber(ctx context.Context, store SubscriberStore, chatID int64, thr
 	}
 	subs = append(subs, Subscriber{ChatID: chatID, ThreadID: threadID})
 	if err := store.Put(ctx, subscribersKey, subscribersDoc{Subscribers: subs}); err != nil {
-		return false, fmt.Errorf("lolschedule addSubscriber: %w", err)
+		return false, fmt.Errorf("lol addSubscriber: %w", err)
 	}
 	return true, nil
 }
@@ -125,7 +125,7 @@ func removeSubscriber(ctx context.Context, store SubscriberStore, chatID int64, 
 		return false, nil
 	}
 	if err := store.Put(ctx, subscribersKey, subscribersDoc{Subscribers: out}); err != nil {
-		return false, fmt.Errorf("lolschedule removeSubscriber: %w", err)
+		return false, fmt.Errorf("lol removeSubscriber: %w", err)
 	}
 	return true, nil
 }
@@ -155,7 +155,7 @@ func removeAllForChat(ctx context.Context, store SubscriberStore, chatID int64) 
 		return 0, nil
 	}
 	if err := store.Put(ctx, subscribersKey, subscribersDoc{Subscribers: out}); err != nil {
-		return 0, fmt.Errorf("lolschedule removeAllForChat: %w", err)
+		return 0, fmt.Errorf("lol removeAllForChat: %w", err)
 	}
 	return removed, nil
 }

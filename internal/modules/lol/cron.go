@@ -1,4 +1,4 @@
-package lolschedule
+package lol
 
 import (
 	"context"
@@ -79,7 +79,7 @@ func classifyTerminal(err error) terminalKind {
 
 // dailyPushCronName is the cron route segment + in-process scheduler key.
 // Must match the regex in internal/server/router.go (^[a-z0-9_]{1,32}$).
-const dailyPushCronName = "lolschedule_daily_push"
+const dailyPushCronName = "lol_daily_push"
 
 // dailyPushSchedule drives the in-process scheduler (internal/cron). Cron
 // expression is UTC; 01:00 UTC == 08:00 ICT.
@@ -130,7 +130,7 @@ func (s *state) dailyPushCron() modules.Cron {
 // core logic is testable without an actual *bot.Bot.
 func (s *state) dailyPushHandler(ctx context.Context, deps modules.Deps) error {
 	if deps.Bot == nil {
-		return errors.New("lolschedule daily push: deps.Bot is nil (BuildOptions.Bot not wired)")
+		return errors.New("lol daily push: deps.Bot is nil (BuildOptions.Bot not wired)")
 	}
 	return runDailyPush(ctx, s, deps.Bot)
 }
@@ -174,10 +174,10 @@ func claimDailyPush(ctx context.Context, store PushDateStore, pushDay string) (b
 func runDailyPush(ctx context.Context, s *state, sender messageSender) error {
 	subs, err := listSubscribers(ctx, s.subscribers)
 	if err != nil {
-		return fmt.Errorf("lolschedule daily push: list subscribers: %w", err)
+		return fmt.Errorf("lol daily push: list subscribers: %w", err)
 	}
 	if len(subs) == 0 {
-		log.Info("lolschedule daily push: no subscribers, skipping")
+		log.Info("lol daily push: no subscribers, skipping")
 		return nil
 	}
 
@@ -185,7 +185,7 @@ func runDailyPush(ctx context.Context, s *state, sender messageSender) error {
 	to := addDays(from, 1)
 	events, err := s.client.GetEventsCached(ctx, s.cache, from, to)
 	if err != nil {
-		return fmt.Errorf("lolschedule daily push: fetch matches: %w", err)
+		return fmt.Errorf("lol daily push: fetch matches: %w", err)
 	}
 	filtered := FilterMajor(events)
 	text := RenderToday(filtered, from)
@@ -198,10 +198,10 @@ func runDailyPush(ctx context.Context, s *state, sender messageSender) error {
 	pushDay := ictDayKey(from)
 	won, err := claimDailyPush(ctx, s.pushDate, pushDay)
 	if err != nil {
-		return fmt.Errorf("lolschedule daily push: claim date: %w", err)
+		return fmt.Errorf("lol daily push: claim date: %w", err)
 	}
 	if !won {
-		log.Info("lolschedule daily push: already pushed today, skipping", "date", pushDay)
+		log.Info("lol daily push: already pushed today, skipping", "date", pushDay)
 		return nil
 	}
 
@@ -224,7 +224,7 @@ func runDailyPush(ctx context.Context, s *state, sender messageSender) error {
 			ParseMode:           models.ParseModeHTML,
 			DisableNotification: disableNotification,
 		}); err != nil {
-			log.Warn("lolschedule daily push send failed",
+			log.Warn("lol daily push send failed",
 				"chat", sub.ChatID, "thread", sub.ThreadID, "err", err)
 			failed++
 			switch classifyTerminal(err) {
@@ -243,7 +243,7 @@ func runDailyPush(ctx context.Context, s *state, sender messageSender) error {
 	// strictly an improvement even when the writes fail.
 	pruned := pruneDeadSubscribers(ctx, s, deadChats, deadTopics)
 
-	log.Info("lolschedule daily push complete",
+	log.Info("lol daily push complete",
 		"subscribers", len(subs),
 		"sent", sent,
 		"failed", failed,
@@ -266,7 +266,7 @@ func pruneDeadSubscribers(ctx context.Context, s *state, chatWide map[int64]stru
 	for chatID := range chatWide {
 		n, err := removeAllForChat(ctx, s.subscribers, chatID)
 		if err != nil {
-			log.Warn("lolschedule prune dead chat failed", "chat", chatID, "err", err)
+			log.Warn("lol prune dead chat failed", "chat", chatID, "err", err)
 			continue
 		}
 		removed += n
@@ -279,7 +279,7 @@ func pruneDeadSubscribers(ctx context.Context, s *state, chatWide map[int64]stru
 		}
 		ok, err := removeSubscriber(ctx, s.subscribers, sub.ChatID, sub.ThreadID)
 		if err != nil {
-			log.Warn("lolschedule prune dead topic failed",
+			log.Warn("lol prune dead topic failed",
 				"chat", sub.ChatID, "thread", sub.ThreadID, "err", err)
 			continue
 		}
