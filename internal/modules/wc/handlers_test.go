@@ -34,8 +34,7 @@ func installWC(t *testing.T, bodyJSON string, now time.Time) (*testutil.Recordin
 		Name: "wc",
 		Commands: []modules.Command{
 			{Name: "wc", Visibility: modules.VisibilityPublic, Description: "x", Handler: s.handleSchedule},
-			{Name: "wc_today", Visibility: modules.VisibilityPublic, Description: "x", Handler: s.handleToday},
-			{Name: "wc_week", Visibility: modules.VisibilityPublic, Description: "x", Handler: s.handleWeek},
+			{Name: "wc_this_week", Visibility: modules.VisibilityPublic, Description: "x", Handler: s.handleWeek},
 			{Name: "wc_subscribe", Visibility: modules.VisibilityPublic, Description: "x", Handler: s.handleSubscribe},
 			{Name: "wc_unsubscribe", Visibility: modules.VisibilityPublic, Description: "x", Handler: s.handleUnsubscribe},
 		},
@@ -50,9 +49,9 @@ func installWC(t *testing.T, bodyJSON string, now time.Time) (*testutil.Recordin
 
 var fakeNow = time.Date(2026, 6, 12, 5, 0, 0, 0, time.UTC)
 
-func TestHandleToday_RendersHTML(t *testing.T) {
+func TestHandleSchedule_DefaultsToToday(t *testing.T) {
 	rb, _ := installWC(t, sampleMatchesBody, fakeNow)
-	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(1, "/wc_today"))
+	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(1, "/wc"))
 
 	got := rb.LastSent()
 	if got.Method != "sendMessage" {
@@ -73,6 +72,18 @@ func TestHandleSchedule_BadDateInput(t *testing.T) {
 	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(1, "/wc notadate"))
 	if got := rb.LastSent().Text(); !strings.Contains(got, "Invalid date") {
 		t.Fatalf("reply = %q, want invalid date", got)
+	}
+}
+
+func TestHandleWeek_RendersThisWeek(t *testing.T) {
+	rb, _ := installWC(t, sampleMatchesBody, fakeNow)
+	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(1, "/wc_this_week"))
+
+	got := rb.LastSent().Text()
+	for _, want := range []string{"Mon Jun 8", "Sun Jun 14", "MEX vs RSA", "CAN vs SUI"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("missing %q in:\n%s", want, got)
+		}
 	}
 }
 
@@ -105,7 +116,7 @@ func TestHandleSubscribe_ForumTopic(t *testing.T) {
 	}
 }
 
-func TestHandleToday_MissingToken(t *testing.T) {
+func TestHandleSchedule_MissingToken(t *testing.T) {
 	rb := testutil.NewRecordingBot(t)
 	col := storage.NewMemoryProvider().Collection("wc")
 	s := &state{
@@ -115,14 +126,14 @@ func TestHandleToday_MissingToken(t *testing.T) {
 		client:      &Client{},
 		nowFn:       func() time.Time { return fakeNow },
 	}
-	cmd := modules.Command{Name: "wc_today", Visibility: modules.VisibilityPublic, Description: "x", Handler: s.handleToday}
+	cmd := modules.Command{Name: "wc", Visibility: modules.VisibilityPublic, Description: "x", Handler: s.handleSchedule}
 	reg := &modules.Registry{
 		Modules:     []modules.Module{{Name: "wc", Commands: []modules.Command{cmd}}},
 		AllCommands: map[string]modules.Command{cmd.Name: cmd},
 	}
 	modules.Install(rb.Bot, reg, modules.Auth{})
 
-	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(1, "/wc_today"))
+	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(1, "/wc"))
 	if got := rb.LastSent().Text(); !strings.Contains(got, "WC_FOOTBALL_DATA_TOKEN") {
 		t.Fatalf("reply = %q, want missing token hint", got)
 	}

@@ -61,11 +61,7 @@
       "description": "World Cup matches for a date"
     },
     {
-      "command": "wc_today",
-      "description": "Today's World Cup matches"
-    },
-    {
-      "command": "wc_week",
+      "command": "wc_this_week",
       "description": "World Cup matches for this week"
     },
     {
