@@ -1,0 +1,61 @@
+# AGENTS.md
+
+## Project Context
+
+`miti99bot` is a Go Telegram bot with pluggable modules under
+`internal/modules`. Runtime storage is MongoDB when `MONGO_URL` is set and
+in-memory storage in tests. Read `README.md` before implementation work.
+
+## Development Rules
+
+- Keep changes scoped to the requested module or shared contract.
+- Follow existing module patterns before adding abstractions.
+- Use `rg` for code search.
+- Use `gofmt` on changed Go files.
+- Run focused tests for touched packages, then `go test ./...` and `go vet ./...`
+  for command, storage, migration, or shared behavior changes.
+- Do not commit secrets, tokens, dotenv files, private keys, or production data.
+
+## Command Changes
+
+Telegram command names are user-facing contracts. When adding, renaming, or
+deleting commands, update all related surfaces:
+
+- module command registration in `internal/modules/<module>/`
+- handler usage text and user-facing error text
+- `telegram-commands.json`
+- tests for registration, handlers, and command menu behavior
+- README/docs when behavior changes are user-visible
+
+## Stats Compatibility
+
+The `stats` module persists command usage in the `stats` collection. Command
+name changes must preserve stats history.
+
+- When renaming a command, add a one-time startup migration that moves stats
+  from the old command name to the new command name. Cover anonymous command
+  totals and per-user command rows. Guard the migration with the shared
+  `system` collection so it is idempotent.
+- When deleting a command, do not delete its stats rows. Keep them as legacy
+  records and mark them with `deleted: true` in the stats document.
+- Stats queries must filter legacy deleted rows from visible results. Apply the
+  filter consistently to top commands, top users, commands by user, users by
+  command, and username lookup paths for both MongoDB and in-memory stores.
+- If adding a deleted marker or migration fields, update indexes if query
+  performance needs it and add tests for both startup migration and stats views.
+- Legacy stats records are retained until the project owner decides to remove
+  them.
+
+## Startup Migrations
+
+Startup migrations should be safe to run every boot:
+
+- create MongoDB indexes idempotently
+- use `internal/systemstate` records in the shared `system` collection for
+  one-time migrations
+- write tests for migration idempotency and legacy data handling
+
+## Git
+
+Use conventional commit messages without AI attribution. Keep commits focused;
+split unrelated code, test, docs, and config changes when useful.
