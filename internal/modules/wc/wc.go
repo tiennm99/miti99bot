@@ -18,7 +18,7 @@ func New(deps modules.Deps) modules.Module {
 			{
 				Name:        "wc",
 				Visibility:  modules.VisibilityPublic,
-				Description: "World Cup matches for a date (dd-mm-yyyy, dd/mm/yyyy, ddmmyyyy; default today)",
+				Description: "World Cup matches for a date (dd, dd-mm, dd/mm, ddmm, or full date; default today)",
 				Handler:     s.handleSchedule,
 			},
 			{

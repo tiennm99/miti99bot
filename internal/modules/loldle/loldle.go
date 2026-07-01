@@ -25,7 +25,7 @@ func New(deps modules.Deps) modules.Module {
 			{
 				Name:        "loldle_giveup",
 				Visibility:  modules.VisibilityPublic,
-				Description: "Reveal the current loldle answer (auto-starts a fresh round)",
+				Description: "Reveal the current loldle answer",
 				Handler:     s.handleGiveup,
 			},
 			{

@@ -90,7 +90,7 @@ func TestHandleWeek_RendersThisWeek(t *testing.T) {
 func TestHandleSubscribe_AddsAndIsIdempotent(t *testing.T) {
 	rb, store := installWC(t, sampleMatchesBody, fakeNow)
 	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(7, "/wc_subscribe"))
-	if got := rb.LastSent().Text(); !strings.Contains(got, "Subscribed") || !strings.Contains(got, "00:00 UTC+7") {
+	if got := rb.LastSent().Text(); !strings.Contains(got, "Subscribed this chat") || !strings.Contains(got, "00:00 UTC+7") {
 		t.Fatalf("first reply = %q, want subscribed with 00:00 UTC+7", got)
 	}
 	rb.Reset()
@@ -110,6 +110,9 @@ func TestHandleSubscribe_ForumTopic(t *testing.T) {
 	upd.Message.MessageThreadID = 42
 	rb.Bot.ProcessUpdate(context.Background(), upd)
 
+	if got := rb.LastSent().Text(); !strings.Contains(got, "Subscribed this topic") {
+		t.Fatalf("topic subscribe reply = %q", got)
+	}
 	subs, _ := listSubscribers(context.Background(), store)
 	if len(subs) != 1 || subs[0] != (Subscriber{ChatID: 555, ThreadID: 42}) {
 		t.Fatalf("subs = %v, want topic subscription", subs)

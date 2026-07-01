@@ -13,7 +13,7 @@ import (
 const ictOffset = 7 * time.Hour
 
 // formatHint is the user-facing usage line appended to parse errors.
-const formatHint = "Use dd-mm-yyyy, dd/mm/yyyy, or ddmmyyyy."
+const formatHint = "Use dd, dd-mm, dd/mm, ddmm, dd-mm-yyyy, dd/mm/yyyy, or ddmmyyyy."
 
 // IctLocation is the fixed-offset UTC+7 timezone.
 var IctLocation = time.FixedZone("ICT", int(ictOffset/time.Second))

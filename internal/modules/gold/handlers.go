@@ -38,9 +38,9 @@ func (s *state) handlePrice(ctx context.Context, b *bot.Bot, update *models.Upda
 
 func goldPriceLines(p GoldPrice) []string {
 	return []string{
-		"Gold Spot Price (SJC)",
-		"Buy: " + FormatVND(p.SJC.Buy) + "/luong",
-		"Sell: " + FormatVND(p.SJC.Sell) + "/luong",
+		"SJC gold price",
+		"SJC buy (you sell): " + FormatVND(p.SJC.Buy) + "/luong",
+		"SJC sell (you buy): " + FormatVND(p.SJC.Sell) + "/luong",
 	}
 }
 
@@ -116,7 +116,7 @@ func (s *state) handleBuy(ctx context.Context, b *bot.Bot, update *models.Update
 		return chathelper.Reply(ctx, b, update.Message, "Could not save gold portfolio. Try again later.")
 	}
 	return chathelper.Reply(ctx, b, update.Message,
-		"Bought "+FormatLuong(qty)+" luong gold @ "+FormatVND(sellPrice)+"/luong\nCost: "+FormatVND(cost)+
+		"Bought "+FormatLuong(qty)+" luong gold @ "+FormatVND(sellPrice)+"/luong (SJC sell)\nCost: "+FormatVND(cost)+
 			"\nRemaining: "+FormatVND(p.VND))
 }
 
@@ -163,7 +163,7 @@ func (s *state) handleSell(ctx context.Context, b *bot.Bot, update *models.Updat
 		return chathelper.Reply(ctx, b, update.Message, "Could not save gold portfolio. Try again later.")
 	}
 	return chathelper.Reply(ctx, b, update.Message,
-		"Sold "+FormatLuong(qty)+" luong gold @ "+FormatVND(buyPrice)+"/luong\nRevenue: "+FormatVND(revenue)+
+		"Sold "+FormatLuong(qty)+" luong gold @ "+FormatVND(buyPrice)+"/luong (SJC buy)\nRevenue: "+FormatVND(revenue)+
 			"\nRemaining: "+FormatVND(p.VND))
 }
 

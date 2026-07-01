@@ -26,11 +26,11 @@ func TestFindChampion(t *testing.T) {
 		{"aatrox", "Aatrox"},
 		{"kaisa", "Kai'Sa"},
 		{"KAI SA", "Kai'Sa"},
-		{"Aat", "Aatrox"},  // unique prefix
-		{"A", ""},          // ambiguous prefix
-		{"", ""},           // empty
-		{"!!!", ""},        // no alphanumerics
-		{"zed", ""},        // no match
+		{"Aat", "Aatrox"}, // unique prefix
+		{"A", ""},         // ambiguous prefix
+		{"", ""},          // empty
+		{"!!!", ""},       // no alphanumerics
+		{"zed", ""},       // no match
 	}
 	for _, tc := range cases {
 		got := findChampion(pool, tc.input)
@@ -43,5 +43,18 @@ func TestFindChampion(t *testing.T) {
 		if got == nil || got.ChampionName != tc.want {
 			t.Errorf("findChampion(%q) = %+v, want %q", tc.input, got, tc.want)
 		}
+	}
+}
+
+func TestFindChampionMatchReportsAmbiguousPrefix(t *testing.T) {
+	pool := []Champion{{ChampionName: "Aatrox"}, {ChampionName: "Ahri"}, {ChampionName: "Kai'Sa"}}
+	got, ambiguous := findChampionMatch(pool, "A")
+	if got != nil || !ambiguous {
+		t.Fatalf("findChampionMatch ambiguous = (%+v, %v), want (nil, true)", got, ambiguous)
+	}
+
+	got, ambiguous = findChampionMatch(pool, "zed")
+	if got != nil || ambiguous {
+		t.Fatalf("findChampionMatch unknown = (%+v, %v), want (nil, false)", got, ambiguous)
 	}
 }

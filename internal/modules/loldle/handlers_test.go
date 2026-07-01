@@ -71,6 +71,16 @@ func TestLoldle_UnknownChampion(t *testing.T) {
 	}
 }
 
+func TestLoldle_AmbiguousChampionPrefix(t *testing.T) {
+	rb, _, _ := installLoldle(t, 0, "1", "Aatrox")
+	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(1, "/loldle A"))
+
+	got := rb.LastSent().Text()
+	if !strings.Contains(got, "Ambiguous champion") || !strings.Contains(got, "full champion name") {
+		t.Errorf("ambiguous champion reject: %q", got)
+	}
+}
+
 func TestLoldle_DuplicateGuessRejected(t *testing.T) {
 	rb, _, _ := installLoldle(t, 0, "1", "Aatrox")
 	// First guess: Ahri (not the target — round continues).
@@ -131,6 +141,25 @@ func TestLoldleSetMax_OwnerSucceeds(t *testing.T) {
 	}
 	if c.MaxGuesses != 5 {
 		t.Errorf("MaxGuesses persisted = %d, want 5", c.MaxGuesses)
+	}
+}
+
+func TestLoldleSetMax_AppliesNextRoundOnly(t *testing.T) {
+	rb, _, _ := installLoldle(t, 999, "999", "Aatrox")
+	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(999, "/loldle_setmax 1"))
+
+	rb.Reset()
+	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(999, "/loldle"))
+	if got := rb.LastSent().Text(); !strings.Contains(got, "Guess 0/8") {
+		t.Fatalf("active round should keep default max after setmax: %q", got)
+	}
+
+	rb.Reset()
+	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(999, "/loldle_giveup"))
+	rb.Reset()
+	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(999, "/loldle"))
+	if got := rb.LastSent().Text(); !strings.Contains(got, "Guess 0/1") {
+		t.Fatalf("new round should use changed max: %q", got)
 	}
 }
 

@@ -82,6 +82,20 @@ func (s *state) replyForRange(ctx context.Context, b *bot.Bot, msg *models.Messa
 	return chathelper.ReplyHTML(ctx, b, msg, text)
 }
 
+func subscriptionScope(msg *models.Message) string {
+	if msg != nil && msg.MessageThreadID != 0 {
+		return "this topic"
+	}
+	return "this chat"
+}
+
+func subscriptionScopeSentenceSubject(msg *models.Message) string {
+	if msg != nil && msg.MessageThreadID != 0 {
+		return "This topic"
+	}
+	return "This chat"
+}
+
 // handleSubscribe is /lol_subscribe — opt the chat into the daily
 // digest delivered by the in-process cron handler.
 func (s *state) handleSubscribe(ctx context.Context, b *bot.Bot, update *models.Update) error {
@@ -95,12 +109,13 @@ func (s *state) handleSubscribe(ctx context.Context, b *bot.Bot, update *models.
 	if err != nil {
 		return err
 	}
+	scope := subscriptionScope(msg)
 	if added {
 		return chathelper.Reply(ctx, b, msg,
-			"✅ Subscribed. You'll get today's LoL schedule at 08:00 ICT.\n"+
+			"✅ Subscribed "+scope+" to the daily LoL schedule at 08:00 ICT.\n"+
 				"If you block the bot, you'll be auto-unsubscribed on the next push.")
 	}
-	return chathelper.Reply(ctx, b, msg, "Already subscribed.")
+	return chathelper.Reply(ctx, b, msg, "Already subscribed in "+scope+".")
 }
 
 // handleUnsubscribe is /lol_unsubscribe — opt out.
@@ -115,8 +130,9 @@ func (s *state) handleUnsubscribe(ctx context.Context, b *bot.Bot, update *model
 	if err != nil {
 		return err
 	}
+	scope := subscriptionScope(msg)
 	if removed {
-		return chathelper.Reply(ctx, b, msg, "Unsubscribed.")
+		return chathelper.Reply(ctx, b, msg, "Unsubscribed "+scope+".")
 	}
-	return chathelper.Reply(ctx, b, msg, "You weren't subscribed.")
+	return chathelper.Reply(ctx, b, msg, subscriptionScopeSentenceSubject(msg)+" wasn't subscribed.")
 }

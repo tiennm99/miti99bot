@@ -57,12 +57,13 @@ func (s *state) rehydrateGuesses(g *gameState) []boardEntry {
 }
 
 // startFreshGame writes a new round with no startedAt clock yet.
-func (s *state) startFreshGame(ctx context.Context, subject string) (*gameState, error) {
+func (s *state) startFreshGame(ctx context.Context, subject string, maxGuesses int) (*gameState, error) {
 	target := s.pickRandomChampion()
 	g := &gameState{
-		Target:    target.ChampionName,
-		Guesses:   []string{},
-		StartedAt: nil,
+		Target:     target.ChampionName,
+		Guesses:    []string{},
+		StartedAt:  nil,
+		MaxGuesses: normalizeMaxGuesses(maxGuesses),
 	}
 	if err := saveGame(ctx, s.games, subject, g); err != nil {
 		return nil, err
@@ -77,10 +78,19 @@ func (s *state) getOrInitGame(ctx context.Context, subject string, maxGuesses in
 	if err != nil {
 		return nil, err
 	}
-	if existing != nil && len(existing.Guesses) < maxGuesses {
-		return existing, nil
+	if existing != nil {
+		roundMax := existing.roundMaxGuesses()
+		if len(existing.Guesses) < roundMax {
+			if existing.MaxGuesses != roundMax {
+				existing.MaxGuesses = roundMax
+				if err := saveGame(ctx, s.games, subject, existing); err != nil {
+					return nil, err
+				}
+			}
+			return existing, nil
+		}
 	}
-	return s.startFreshGame(ctx, subject)
+	return s.startFreshGame(ctx, subject, maxGuesses)
 }
 
 // trySendSticker sends a sticker, swallowing errors. A bad/expired file_id
@@ -122,15 +132,19 @@ func (s *state) handleLoldle(ctx context.Context, b *bot.Bot, update *models.Upd
 	if err != nil {
 		return err
 	}
+	roundMax := game.roundMaxGuesses()
 
 	if arg == "" {
 		header := fmt.Sprintf("Guess %d/%d. Use <code>/loldle &lt;champion&gt;</code>.",
-			len(game.Guesses), maxGuesses)
+			len(game.Guesses), roundMax)
 		board := renderBoard(s.rehydrateGuesses(game))
 		return chathelper.ReplyHTML(ctx, b, msg, header+"\n\n"+board)
 	}
 
-	guess := findChampion(s.champions, arg)
+	guess, ambiguous := findChampionMatch(s.champions, arg)
+	if ambiguous {
+		return chathelper.Reply(ctx, b, msg, fmt.Sprintf("Ambiguous champion %q. Type the full champion name.", arg))
+	}
 	if guess == nil {
 		return chathelper.Reply(ctx, b, msg, fmt.Sprintf("Champion not found: %q.", arg))
 	}
@@ -176,12 +190,12 @@ func (s *state) handleLoldle(ctx context.Context, b *bot.Bot, update *models.Upd
 			return err
 		}
 		trySendSticker(ctx, b, msg, winStickers)
-		flavor := attemptFlavor(len(game.Guesses), maxGuesses)
+		flavor := attemptFlavor(len(game.Guesses), roundMax)
 		return chathelper.ReplyHTML(ctx, b, msg, fmt.Sprintf(
 			"%s\n\n🎉 %s %s\n⏱ %s · 🔥 Streak: %d (%d/%d)\n%s",
-			rendered, flavor, champ, elapsed, st.Streak, len(game.Guesses), maxGuesses, newRoundHint))
+			rendered, flavor, champ, elapsed, st.Streak, len(game.Guesses), roundMax, newRoundHint))
 
-	case len(game.Guesses) >= maxGuesses:
+	case len(game.Guesses) >= roundMax:
 		if _, err := recordResult(ctx, s.stats, subject, false); err != nil {
 			return err
 		}
@@ -197,7 +211,7 @@ func (s *state) handleLoldle(ctx context.Context, b *bot.Bot, update *models.Upd
 			return err
 		}
 		return chathelper.ReplyHTML(ctx, b, msg, fmt.Sprintf(
-			"%s\n\nGuess %d/%d.", rendered, len(game.Guesses), maxGuesses))
+			"%s\n\nGuess %d/%d.", rendered, len(game.Guesses), roundMax))
 	}
 }
 

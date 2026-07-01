@@ -180,9 +180,12 @@ func (s *state) handleGiveup(ctx context.Context, b *bot.Bot, update *models.Upd
 		return chathelper.Reply(ctx, b, msg, "Cannot identify chat.")
 	}
 	defer s.locks.Acquire(subject)()
-	g, err := s.getOrInit(ctx, subject)
+	g, err := loadGame(ctx, s.games, subject)
 	if err != nil {
 		return err
+	}
+	if g == nil {
+		return chathelper.Reply(ctx, b, msg, "No active round. /wordle_new to start one.")
 	}
 	if g.Solved {
 		return chathelper.Reply(ctx, b, msg, fmt.Sprintf("Already solved — %s.", strings.ToUpper(g.Target)))

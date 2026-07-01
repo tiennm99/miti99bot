@@ -10,7 +10,7 @@ import (
 
 const ictOffset = 7 * time.Hour
 
-const formatHint = "Use dd-mm-yyyy, dd/mm/yyyy, or ddmmyyyy."
+const formatHint = "Use dd, dd-mm, dd/mm, ddmm, dd-mm-yyyy, dd/mm/yyyy, or ddmmyyyy."
 
 // IctLocation is the fixed-offset UTC+7 timezone for schedule display.
 var IctLocation = time.FixedZone("ICT", int(ictOffset/time.Second))
