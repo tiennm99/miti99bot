@@ -11,7 +11,7 @@ import (
 
 // blockingPriceFetcher simulates an upstream that never responds: it blocks
 // until the fetch context is cancelled, then returns its error. This is the
-// exact failure that made /coin_stats (and /stock_stats) time out — the fetch
+// exact failure that made /coin_portfolio (and /stock_portfolio) time out — the fetch
 // must not be allowed to consume the budget the reply needs.
 type blockingPriceFetcher struct{}
 
@@ -44,7 +44,7 @@ func TestHandleStatsDeliversReplyWhenUpstreamHangs(t *testing.T) {
 	statsCtx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
 	defer cancel()
 	start := time.Now()
-	if err := s.handleStats(statsCtx, rb.Bot, testutil.NewPrivateMessage(7, "/coin_stats")); err != nil {
+	if err := s.handleStats(statsCtx, rb.Bot, testutil.NewPrivateMessage(7, "/coin_portfolio")); err != nil {
 		t.Fatalf("handleStats returned error (reply not delivered): %v", err)
 	}
 	elapsed := time.Since(start)

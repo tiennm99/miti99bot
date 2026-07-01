@@ -73,6 +73,10 @@
       "description": "Stop the daily World Cup schedule digest"
     },
     {
+      "command": "stock_price",
+      "description": "Show current VN stock price"
+    },
+    {
       "command": "stock_topup",
       "description": "Top up VND to your stock account"
     },
@@ -85,24 +89,20 @@
       "description": "Sell VN stock back to VND"
     },
     {
-      "command": "stock_income_stock",
-      "description": "Record stock dividend bonus shares"
+      "command": "stock_bonus",
+      "description": "Record bonus shares"
     },
     {
-      "command": "stock_income_vnd",
+      "command": "stock_dividend",
       "description": "Record cash dividend per share"
     },
     {
-      "command": "stock_convert",
-      "description": "Currency exchange"
-    },
-    {
-      "command": "stock_stats",
-      "description": "Show portfolio summary with P&L"
+      "command": "stock_portfolio",
+      "description": "Show stock portfolio with P&L"
     },
     {
       "command": "gold_price",
-      "description": "Show current gold spot price (USD & VND)"
+      "description": "Show current SJC gold buy/sell price"
     },
     {
       "command": "gold_topup",
@@ -117,8 +117,8 @@
       "description": "Sell gold back to VND (luong)"
     },
     {
-      "command": "gold_stats",
-      "description": "Show gold account summary with P&L"
+      "command": "gold_portfolio",
+      "description": "Show gold portfolio with P&L"
     },
     {
       "command": "coin_price",
@@ -134,11 +134,11 @@
     },
     {
       "command": "coin_sell",
-      "description": "Sell coin back to USD amount"
+      "description": "Sell coin for a USD amount"
     },
     {
-      "command": "coin_stats",
-      "description": "Show coin account summary with P&L"
+      "command": "coin_portfolio",
+      "description": "Show coin portfolio with P&L"
     },
     {
       "command": "stats",

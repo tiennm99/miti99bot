@@ -32,13 +32,13 @@ func New(deps modules.Deps) modules.Module {
 			{
 				Name:        "coin_sell",
 				Visibility:  modules.VisibilityPublic,
-				Description: "Sell coin back to USD amount",
+				Description: "Sell coin for a USD amount",
 				Handler:     s.handleSell,
 			},
 			{
-				Name:        "coin_stats",
+				Name:        "coin_portfolio",
 				Visibility:  modules.VisibilityPublic,
-				Description: "Show coin account summary with P&L",
+				Description: "Show coin portfolio with P&L",
 				Handler:     s.handleStats,
 			},
 		},

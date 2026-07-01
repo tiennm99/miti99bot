@@ -72,7 +72,7 @@ func TestModuleRegistersExpectedCommands(t *testing.T) {
 	for _, cmd := range mod.Commands {
 		got[cmd.Name] = true
 	}
-	for _, name := range []string{"coin_price", "coin_topup", "coin_buy", "coin_sell", "coin_stats"} {
+	for _, name := range []string{"coin_price", "coin_topup", "coin_buy", "coin_sell", "coin_portfolio"} {
 		if !got[name] {
 			t.Fatalf("missing command %s", name)
 		}
@@ -297,7 +297,7 @@ func TestStatsWithAndWithoutPrice(t *testing.T) {
 	_ = s.handleTopup(ctx, rb.Bot, testutil.NewPrivateMessage(7, "/coin_topup 1000"))
 	_ = s.handleBuy(ctx, rb.Bot, testutil.NewPrivateMessage(7, "/coin_buy 500 BTC"))
 	rb.Reset()
-	if err := s.handleStats(ctx, rb.Bot, testutil.NewPrivateMessage(7, "/coin_stats")); err != nil {
+	if err := s.handleStats(ctx, rb.Bot, testutil.NewPrivateMessage(7, "/coin_portfolio")); err != nil {
 		t.Fatalf("handleStats: %v", err)
 	}
 	text := rb.LastSent().Text()
@@ -308,7 +308,7 @@ func TestStatsWithAndWithoutPrice(t *testing.T) {
 	}
 	s.prices = fakePriceFetcher{err: ErrNoCoinPrice}
 	rb.Reset()
-	if err := s.handleStats(ctx, rb.Bot, testutil.NewPrivateMessage(7, "/coin_stats")); err != nil {
+	if err := s.handleStats(ctx, rb.Bot, testutil.NewPrivateMessage(7, "/coin_portfolio")); err != nil {
 		t.Fatalf("handleStats no price: %v", err)
 	}
 	rb.AssertSentText(t, "price unavailable")
