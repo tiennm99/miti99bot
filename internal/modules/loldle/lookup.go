@@ -27,25 +27,30 @@ func normalizeName(s string) string {
 // prevents "Ka" silently routing to whichever Ka- champion happens to be
 // first in the data file.
 func findChampion(pool []Champion, input string) *Champion {
+	champion, _ := findChampionMatch(pool, input)
+	return champion
+}
+
+func findChampionMatch(pool []Champion, input string) (*Champion, bool) {
 	q := normalizeName(input)
 	if q == "" {
-		return nil
+		return nil, false
 	}
 	for i := range pool {
 		if normalizeName(pool[i].ChampionName) == q {
-			return &pool[i]
+			return &pool[i], false
 		}
 	}
 	var hit *Champion
 	for i := range pool {
 		if strings.HasPrefix(normalizeName(pool[i].ChampionName), q) {
 			if hit != nil {
-				return nil // ambiguous
+				return nil, true
 			}
 			hit = &pool[i]
 		}
 	}
-	return hit
+	return hit, false
 }
 
 // findChampionByExactName looks up a champion by literal display name (no

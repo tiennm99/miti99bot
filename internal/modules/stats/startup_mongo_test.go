@@ -34,8 +34,9 @@ func TestInitStore_MongoCreatesIndexes(t *testing.T) {
 
 	provider := storage.NewMongoProvider(db)
 	statsColl := provider.Collection("stats")
+	systemColl := provider.Collection("system")
 
-	if err := InitStore(ctx, statsColl); err != nil {
+	if err := InitStore(ctx, statsColl, systemColl); err != nil {
 		t.Fatalf("InitStore: %v", err)
 	}
 

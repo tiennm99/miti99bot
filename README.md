@@ -8,15 +8,15 @@ Atlas via long polling and an in-process cron scheduler.
 | Module | What it does |
 |---|---|
 | `util` | `/help`, `/info`, `/stickerid` |
-| `misc` | `/ping`, `/mstats`, `/trongtruonghop` disclaimer |
+| `misc` | `/ping`, `/ping_stats`, `/the_answer`, `/trongtruonghop` + `/tth` disclaimer |
 | `wordle` | Daily Wordle game |
 | `loldle` | League-of-Legends "guess the champion" |
 | `lol` | Pro-match schedule + daily push |
 | `wc` | World Cup schedule + silent daily push |
 | `stock` | VN-stocks paper trading |
-| `gold` | Gold paper trading (opt-in; primary VNAppMob SJC buy/sell VND/luong, fallback spot XAU) |
+| `gold` | Gold paper trading (opt-in; VNAppMob SJC buy/sell VND/luong) |
 | `coin` | Crypto paper trading in USD (Binance -> Coinbase -> CoinGecko price fallback) |
-| `stats` | `/stats` (top commands), `/stats users`, `/stats user <name>`, `/stats cmd <name>` |
+| `stats` | `/stats` (top commands), `/stats users`, `/stats user <username>`, `/stats cmd <command>` |
 
 Disable modules with the `MODULES` environment variable.
 

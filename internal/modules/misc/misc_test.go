@@ -23,9 +23,10 @@ func TestNew_RegistersExpectedCommands(t *testing.T) {
 
 	want := map[string]modules.Visibility{
 		"ping":           modules.VisibilityPublic,
-		"mstats":         modules.VisibilityProtected,
-		"fortytwo":       modules.VisibilityPrivate,
+		"ping_stats":     modules.VisibilityProtected,
+		"the_answer":     modules.VisibilityPrivate,
 		"trongtruonghop": modules.VisibilityPublic,
+		"tth":            modules.VisibilityPublic,
 	}
 	if len(mod.Commands) != len(want) {
 		t.Fatalf("commands count = %d, want %d", len(mod.Commands), len(want))
@@ -64,7 +65,7 @@ func TestPing_WritesLastPingStore(t *testing.T) {
 	}
 }
 
-func TestMstats_MissingKeyReturnsErrNotFound(t *testing.T) {
+func TestPingStats_MissingKeyReturnsErrNotFound(t *testing.T) {
 	ctx := context.Background()
 	store := newMiscStore()
 

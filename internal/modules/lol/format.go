@@ -202,7 +202,7 @@ func renderLeagueSection(g leagueGroup) string {
 func RenderToday(events []ScheduleEvent, day time.Time) string {
 	header := "<b>LoL — " + html.EscapeString(formatIctDayLabel(day)) + "</b> (ICT)"
 	if len(events) == 0 {
-		return header + "\nNo matches today."
+		return header + "\nNo major LoL matches today."
 	}
 	groups := groupByLeague(events)
 	sections := make([]string, len(groups))
@@ -220,7 +220,7 @@ func RenderWeek(events []ScheduleEvent, from, to time.Time) string {
 	toLbl := html.EscapeString(formatIctDayLabel(to.Add(-time.Millisecond)))
 	header := "<b>LoL — " + fromLbl + " → " + toLbl + "</b> (ICT)"
 	if len(events) == 0 {
-		return header + "\nNo matches this week."
+		return header + "\nNo major LoL matches this week."
 	}
 
 	leagueBlocks := make([]string, 0, len(events))

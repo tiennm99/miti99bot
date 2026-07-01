@@ -211,7 +211,7 @@ func TestHandlePrice(t *testing.T) {
 		t.Fatalf("handlePrice: %v", err)
 	}
 	text := rb.LastSent().Text()
-	for _, want := range []string{"Gold Spot Price (SJC)", "Buy:", "Sell:", "/luong"} {
+	for _, want := range []string{"SJC gold price", "SJC buy (you sell):", "SJC sell (you buy):", "/luong"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("price missing %q in %q", want, text)
 		}

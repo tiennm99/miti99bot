@@ -113,8 +113,8 @@ func TestRenderToday_GroupsByLeagueInOrder(t *testing.T) {
 func TestRenderToday_EmptyShowsNoMatches(t *testing.T) {
 	day := time.Date(2026, 5, 9, 0, 0, 0, 0, IctLocation)
 	got := RenderToday(nil, day)
-	if !strings.Contains(got, "No matches today.") {
-		t.Errorf("empty render missing 'No matches today.': %q", got)
+	if !strings.Contains(got, "No major LoL matches today.") {
+		t.Errorf("empty render missing major-match empty text: %q", got)
 	}
 }
 

@@ -116,6 +116,29 @@ func TestWordleGiveup_RevealsAnswer(t *testing.T) {
 	}
 }
 
+func TestWordleGiveup_NoActiveRoundDoesNotStartOrRecordLoss(t *testing.T) {
+	rb, games := installWordle(t, 0, "", "")
+	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(1, "/wordle_giveup"))
+
+	got := rb.LastSent().Text()
+	if !strings.Contains(got, "No active round") {
+		t.Fatalf("/wordle_giveup with no round: %q", got)
+	}
+	g, err := loadGame(context.Background(), games, "1")
+	if err != nil {
+		t.Fatalf("loadGame: %v", err)
+	}
+	if g != nil {
+		t.Fatalf("giveup created game: %+v", g)
+	}
+
+	rb.Reset()
+	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(1, "/wordle_stats"))
+	if got := rb.LastSent().Text(); !strings.Contains(got, "Played: 0") {
+		t.Fatalf("empty giveup recorded stats: %q", got)
+	}
+}
+
 func TestWordleStats_Empty(t *testing.T) {
 	rb, _ := installWordle(t, 0, "", "")
 	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(1, "/wordle_stats"))

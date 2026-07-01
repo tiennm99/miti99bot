@@ -1,6 +1,6 @@
 // Package misc is a small stub module that proves the framework end-to-end:
-// /ping (public, exercises KV write), /mstats (protected, exercises KV read),
-// /fortytwo (private easter egg).
+// /ping (public, exercises KV write), /ping_stats (protected, exercises KV
+// read), /the_answer (private easter egg).
 package misc
 
 import (
@@ -20,7 +20,7 @@ import (
 	"github.com/tiennm99/miti99bot/internal/storage"
 )
 
-// lastPingKey is the per-module store key /ping writes and /mstats reads.
+// lastPingKey is the per-module store key /ping writes and /ping_stats reads.
 const lastPingKey = "last_ping"
 
 // defaultTarget is the substituted "investigator" name when /trongtruonghop is
@@ -45,9 +45,10 @@ func New(deps modules.Deps) modules.Module {
 	return modules.Module{
 		Commands: []modules.Command{
 			pingCommand(store),
-			mstatsCommand(store),
-			fortytwoCommand(),
-			trongTruongHopCommand(),
+			pingStatsCommand(store),
+			theAnswerCommand(),
+			trongTruongHopCommand("trongtruonghop"),
+			trongTruongHopCommand("tth"),
 		},
 	}
 }
@@ -71,9 +72,9 @@ func pingCommand(store storage.DocStore[lastPing]) modules.Command {
 	}
 }
 
-func mstatsCommand(store storage.DocStore[lastPing]) modules.Command {
+func pingStatsCommand(store storage.DocStore[lastPing]) modules.Command {
 	return modules.Command{
-		Name:        "mstats",
+		Name:        "ping_stats",
 		Visibility:  modules.VisibilityProtected,
 		Description: "Show the timestamp of the last /ping",
 		Handler: func(ctx context.Context, b *bot.Bot, update *models.Update) error {
@@ -90,7 +91,7 @@ func mstatsCommand(store storage.DocStore[lastPing]) modules.Command {
 				// User-visible reply mirrors how stock/wordle/loldle handle
 				// transient store failures — returning the error here would leave
 				// the user with no reply at all.
-				log.Error("store get failed", "module", "misc", "command", "mstats", "key", lastPingKey, "err", err)
+				log.Error("store get failed", "module", "misc", "command", "ping_stats", "key", lastPingKey, "err", err)
 				text = "Could not load stats. Try again later."
 			}
 			return chathelper.Reply(ctx, b, update.Message, text)
@@ -117,9 +118,9 @@ func senderMention(u *models.User) string {
 	return fmt.Sprintf(`<a href="tg://user?id=%d">%s</a>`, u.ID, html.EscapeString(name))
 }
 
-func trongTruongHopCommand() modules.Command {
+func trongTruongHopCommand(name string) modules.Command {
 	return modules.Command{
-		Name:        "trongtruonghop",
+		Name:        name,
 		Visibility:  modules.VisibilityPublic,
 		Description: "Phát biểu disclaimer cho thành viên hiện tại",
 		Handler: func(ctx context.Context, b *bot.Bot, update *models.Update) error {
@@ -137,9 +138,9 @@ func trongTruongHopCommand() modules.Command {
 	}
 }
 
-func fortytwoCommand() modules.Command {
+func theAnswerCommand() modules.Command {
 	return modules.Command{
-		Name:        "fortytwo",
+		Name:        "the_answer",
 		Visibility:  modules.VisibilityPrivate,
 		Description: "Easter egg — the answer",
 		Handler: func(ctx context.Context, b *bot.Bot, update *models.Update) error {

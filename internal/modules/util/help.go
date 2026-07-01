@@ -19,10 +19,11 @@ var supportFooter = fmt.Sprintf(
 	repoURL, repoURL,
 )
 
-// RenderHelp produces the body of /help: each module's public + protected
-// commands grouped under a bold module name, followed by the support footer.
+// RenderHelp produces the body of /help: each module's public commands
+// grouped under a bold module name, followed by the support footer.
 // Modules in MODULES-env order. Modules with no visible commands are omitted.
-// Private commands are always skipped.
+// Protected and private commands are hidden; authorization-specific commands
+// stay discoverable only through operator knowledge, not the public help/menu.
 //
 // Exposed (capitalised) so tests can assert on the string without spinning up
 // a bot context.
@@ -34,18 +35,12 @@ func RenderHelp(reg *modules.Registry) string {
 	type entry struct {
 		name        string
 		description string
-		protected   bool
 	}
 	byModule := make(map[string][]entry, len(reg.Modules))
 
 	for _, c := range reg.PublicCommands() {
 		byModule[ownerOf(reg, c.Name)] = append(byModule[ownerOf(reg, c.Name)], entry{
-			name: c.Name, description: c.Description, protected: false,
-		})
-	}
-	for _, c := range reg.ProtectedCommands() {
-		byModule[ownerOf(reg, c.Name)] = append(byModule[ownerOf(reg, c.Name)], entry{
-			name: c.Name, description: c.Description, protected: true,
+			name: c.Name, description: c.Description,
 		})
 	}
 
@@ -58,11 +53,7 @@ func RenderHelp(reg *modules.Registry) string {
 		var sb strings.Builder
 		fmt.Fprintf(&sb, "<b>%s</b>", html.EscapeString(mod.Name))
 		for _, e := range es {
-			suffix := ""
-			if e.protected {
-				suffix = " (protected)"
-			}
-			fmt.Fprintf(&sb, "\n/%s — %s%s", e.name, html.EscapeString(e.description), suffix)
+			fmt.Fprintf(&sb, "\n/%s — %s", e.name, html.EscapeString(e.description))
 		}
 		sections = append(sections, sb.String())
 	}

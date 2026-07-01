@@ -70,7 +70,7 @@ func (s *state) handleBuy(ctx context.Context, b *bot.Bot, update *models.Update
 	}
 	args := argsAfterCommand(update.Message.Text)
 	if len(args) != 2 {
-		return chathelper.Reply(ctx, b, update.Message, "Usage: /coin_buy <COIN> <usd_amount>\nAlternative: /coin_buy <usd_amount> <COIN>\nExample: /coin_buy BTC 10")
+		return chathelper.Reply(ctx, b, update.Message, "Usage: /coin_buy <COIN> <usd_amount>\nSpend USD to buy coin.\nAlternative: /coin_buy <usd_amount> <COIN>\nExample: /coin_buy BTC 10")
 	}
 	parsed, err := parseCoinValueArgs(args, isSafeUSD, errInvalidUSDAmount)
 	if errors.Is(err, errInvalidUSDAmount) {
@@ -113,7 +113,7 @@ func (s *state) handleBuy(ctx context.Context, b *bot.Bot, update *models.Update
 	}
 	return chathelper.Reply(ctx, b, update.Message,
 		"Bought "+FormatCoinQty(qty)+" "+coin.Symbol+" @ "+FormatUSD(price.USD)+" ("+price.Source+")"+
-			"\nCost: "+FormatUSD(amount)+"\nRemaining: "+FormatUSD(p.USD))
+			"\nSpent: "+FormatUSD(amount)+"\nRemaining: "+FormatUSD(p.USD))
 }
 
 func (s *state) handleSell(ctx context.Context, b *bot.Bot, update *models.Update) error {
@@ -124,7 +124,7 @@ func (s *state) handleSell(ctx context.Context, b *bot.Bot, update *models.Updat
 	}
 	args := argsAfterCommand(update.Message.Text)
 	if len(args) != 2 {
-		return chathelper.Reply(ctx, b, update.Message, "Usage: /coin_sell <COIN> <usd_amount>\nAlternative: /coin_sell <usd_amount> <COIN>\nExample: /coin_sell BTC 10")
+		return chathelper.Reply(ctx, b, update.Message, "Usage: /coin_sell <COIN> <usd_amount>\nSell enough coin to receive USD.\nAlternative: /coin_sell <usd_amount> <COIN>\nExample: /coin_sell BTC 10")
 	}
 	parsed, err := parseCoinValueArgs(args, isSafeUSD, errInvalidUSDAmount)
 	if errors.Is(err, errInvalidUSDAmount) {
@@ -168,7 +168,7 @@ func (s *state) handleSell(ctx context.Context, b *bot.Bot, update *models.Updat
 	}
 	return chathelper.Reply(ctx, b, update.Message,
 		"Sold "+FormatCoinQty(qty)+" "+coin.Symbol+" @ "+FormatUSD(price.USD)+" ("+price.Source+")"+
-			"\nProceeds: "+FormatUSD(amount)+"\nRemaining: "+FormatUSD(p.USD))
+			"\nReceived: "+FormatUSD(amount)+"\nRemaining: "+FormatUSD(p.USD))
 }
 
 func formatInsufficientSellMessage(coin CoinSymbol, requestedUSD, heldQty, priceUSD float64) string {

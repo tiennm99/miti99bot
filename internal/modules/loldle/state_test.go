@@ -42,6 +42,17 @@ func TestGameState_StartedAtAsNumber(t *testing.T) {
 	}
 }
 
+func TestGameState_MaxGuessesOmittedWhenUnset(t *testing.T) {
+	g := gameState{Target: "Aatrox", Guesses: []string{}, MaxGuesses: 0}
+	b, err := json.Marshal(g)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(b) != `{"target":"Aatrox","guesses":[],"startedAt":null}` {
+		t.Errorf("marshal:\ngot  %s", b)
+	}
+}
+
 func TestStats_NoLastResultAtField(t *testing.T) {
 	// loldle's stats schema deliberately differs from wordle's — no
 	// lastResultAt field. Lock that, since adding the field would silently
@@ -120,6 +131,54 @@ func TestGetMaxGuesses_OutOfRangeIgnored(t *testing.T) {
 	}
 	if n, _ := getMaxGuesses(ctx, cfg, "u1"); n != MaxGuesses {
 		t.Errorf("out-of-range config → %d, want %d (default)", n, MaxGuesses)
+	}
+}
+
+func TestGetOrInitGame_ExistingRoundKeepsStoredMaxGuesses(t *testing.T) {
+	ctx := context.Background()
+	games := newLoldleGames()
+	s := &state{games: games}
+	if err := saveGame(ctx, games, "u1", &gameState{
+		Target:     "Aatrox",
+		Guesses:    []string{"Ahri"},
+		MaxGuesses: 8,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := s.getOrInitGame(ctx, "u1", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.MaxGuesses != 8 || len(got.Guesses) != 1 {
+		t.Fatalf("existing round changed by new config: %+v", got)
+	}
+}
+
+func TestGetOrInitGame_LegacyRoundLocksDefaultMaxGuesses(t *testing.T) {
+	ctx := context.Background()
+	games := newLoldleGames()
+	s := &state{games: games}
+	if err := saveGame(ctx, games, "u1", &gameState{
+		Target:  "Aatrox",
+		Guesses: []string{"Ahri"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := s.getOrInitGame(ctx, "u1", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.MaxGuesses != MaxGuesses {
+		t.Fatalf("legacy round MaxGuesses = %d, want default %d", got.MaxGuesses, MaxGuesses)
+	}
+	loaded, err := loadGame(ctx, games, "u1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded == nil || loaded.MaxGuesses != MaxGuesses {
+		t.Fatalf("legacy round was not persisted with default max: %+v", loaded)
 	}
 }
 
