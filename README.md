@@ -29,6 +29,7 @@ internal/telegram/           Telegram long-polling bot wrapper
 internal/cron/               in-process cron scheduler
 internal/modules/            Module framework, registry, dispatchers, modules
 internal/storage/            typed DocStore[T] (Provider + Typed); mongodb runtime + memory (tests). Values persist as flattened native BSON root documents
+internal/systemstate/        shared `system` collection metadata for startup migrations
 compose.yml                  Coolify self-host stack (single bot service)
 telegram-commands.json       Manual Telegram command menu source
 docs/deploy-coolify-selfhosted.md    Self-host deploy and operations guide
@@ -61,7 +62,7 @@ go run ./cmd/server
 For integration tests (each skips when its emulator env var is unset):
 ```sh
 make mongo-local         # docker run mongo:7 on :27017
-make test-mongo          # internal/storage typed-store tests against local MongoDB
+make test-mongo          # MongoDB integration tests against local MongoDB
 ```
 
 ## Test
@@ -69,7 +70,7 @@ make test-mongo          # internal/storage typed-store tests against local Mong
 ```sh
 make vet              # go vet
 make test             # full unit suite (no emulator)
-make test-mongo       # typed-store integration tests against local Mongo (requires Docker)
+make test-mongo       # MongoDB integration tests against local Mongo (requires Docker)
 ```
 
 ## Deploy

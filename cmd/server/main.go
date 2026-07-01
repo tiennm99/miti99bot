@@ -29,6 +29,7 @@ import (
 	"github.com/tiennm99/miti99bot/internal/modules/wordle"
 	"github.com/tiennm99/miti99bot/internal/server"
 	"github.com/tiennm99/miti99bot/internal/storage"
+	"github.com/tiennm99/miti99bot/internal/systemstate"
 	"github.com/tiennm99/miti99bot/internal/telegram"
 )
 
@@ -93,6 +94,11 @@ func main() {
 		log.Fatal("storage init failed", "err", err)
 	}
 	defer closeProvider()
+	systemColl := provider.Collection(systemstate.CollectionName)
+
+	if err := stats.InitStore(rootCtx, provider.Collection("stats"), systemColl); err != nil {
+		log.Fatal("stats storage init failed", "err", err)
+	}
 
 	b, err := telegram.NewBot(cfg.TelegramBotToken)
 	if err != nil {
