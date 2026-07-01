@@ -22,13 +22,7 @@ func New(deps modules.Deps) modules.Module {
 				Handler:     s.handleSchedule,
 			},
 			{
-				Name:        "wc_today",
-				Visibility:  modules.VisibilityPublic,
-				Description: "Today's World Cup matches (scores if available)",
-				Handler:     s.handleToday,
-			},
-			{
-				Name:        "wc_week",
+				Name:        "wc_this_week",
 				Visibility:  modules.VisibilityPublic,
 				Description: "World Cup matches for this week (Mon-Sun, ICT)",
 				Handler:     s.handleWeek,

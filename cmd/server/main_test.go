@@ -62,7 +62,7 @@ func TestFactoriesIncludesExpectedModules(t *testing.T) {
 	for _, name := range []string{
 		"gold_price", "gold_topup", "gold_buy", "gold_sell", "gold_stats",
 		"coin_price", "coin_topup", "coin_buy", "coin_sell", "coin_stats",
-		"wc", "wc_today", "wc_week", "wc_subscribe", "wc_unsubscribe",
+		"wc", "wc_this_week", "wc_subscribe", "wc_unsubscribe",
 	} {
 		if _, ok := reg.AllCommands[name]; !ok {
 			t.Fatalf("missing command %s", name)

@@ -44,15 +44,6 @@ func (s *state) handleSchedule(ctx context.Context, b *bot.Bot, update *models.U
 	return s.replyForRange(ctx, b, msg, parsed.Date, addDays(parsed.Date, 1), false)
 }
 
-func (s *state) handleToday(ctx context.Context, b *bot.Bot, update *models.Update) error {
-	msg := update.Message
-	if msg == nil {
-		return nil
-	}
-	from := ictDayStartOf(s.now())
-	return s.replyForRange(ctx, b, msg, from, addDays(from, 1), false)
-}
-
 func (s *state) handleWeek(ctx context.Context, b *bot.Bot, update *models.Update) error {
 	msg := update.Message
 	if msg == nil {

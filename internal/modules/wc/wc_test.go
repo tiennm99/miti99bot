@@ -13,7 +13,7 @@ func TestNewRegistersExpectedCommandsAndCron(t *testing.T) {
 	for _, cmd := range mod.Commands {
 		got[cmd.Name] = true
 	}
-	for _, name := range []string{"wc", "wc_today", "wc_week", "wc_subscribe", "wc_unsubscribe"} {
+	for _, name := range []string{"wc", "wc_this_week", "wc_subscribe", "wc_unsubscribe"} {
 		if !got[name] {
 			t.Fatalf("missing command %s", name)
 		}
