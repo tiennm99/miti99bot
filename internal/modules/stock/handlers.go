@@ -3,6 +3,7 @@ package stock
 import (
 	"context"
 	"errors"
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -67,6 +68,14 @@ func argsAfterCommand(text string) []string {
 	return parts[1:]
 }
 
+func parsePositiveFinite(raw string) (float64, bool) {
+	n, err := strconv.ParseFloat(raw, 64)
+	if err != nil || n <= 0 || math.IsNaN(n) || math.IsInf(n, 0) {
+		return 0, false
+	}
+	return n, true
+}
+
 func (s *state) handlePrice(ctx context.Context, b *bot.Bot, update *models.Update) error {
 	args := argsAfterCommand(update.Message.Text)
 	if len(args) != 1 {
@@ -99,12 +108,12 @@ func (s *state) handleTopup(ctx context.Context, b *bot.Bot, update *models.Upda
 			"Cannot identify user — stock only works in private/group chats with a sender.")
 	}
 	args := argsAfterCommand(update.Message.Text)
-	if len(args) < 1 {
+	if len(args) != 1 {
 		return chathelper.Reply(ctx, b, update.Message, "Usage: /stock_topup <amount>\nExample: /stock_topup 5000000")
 	}
-	amount, err := strconv.ParseFloat(args[0], 64)
-	if err != nil || amount <= 0 {
-		return chathelper.Reply(ctx, b, update.Message, "Amount must be a positive number.")
+	amount, ok := parsePositiveFinite(args[0])
+	if !ok {
+		return chathelper.Reply(ctx, b, update.Message, "Amount must be a positive finite number.")
 	}
 
 	defer s.locks.Acquire(strconv.FormatInt(userID, 10))()
@@ -131,7 +140,7 @@ func (s *state) handleBuy(ctx context.Context, b *bot.Bot, update *models.Update
 			"Cannot identify user — stock only works in private/group chats with a sender.")
 	}
 	args := argsAfterCommand(update.Message.Text)
-	if len(args) < 2 {
+	if len(args) != 2 {
 		return chathelper.Reply(ctx, b, update.Message, "Usage: /stock_buy <qty> <TICKER>\nExample: /stock_buy 100 TCB")
 	}
 	qty, err := strconv.ParseInt(args[0], 10, 64)
@@ -188,7 +197,7 @@ func (s *state) handleSell(ctx context.Context, b *bot.Bot, update *models.Updat
 			"Cannot identify user — stock only works in private/group chats with a sender.")
 	}
 	args := argsAfterCommand(update.Message.Text)
-	if len(args) < 2 {
+	if len(args) != 2 {
 		return chathelper.Reply(ctx, b, update.Message, "Usage: /stock_sell <qty> <TICKER>\nExample: /stock_sell 100 TCB")
 	}
 	qty, err := strconv.ParseInt(args[0], 10, 64)
@@ -247,9 +256,9 @@ func (s *state) handleBonus(ctx context.Context, b *bot.Bot, update *models.Upda
 			"Cannot identify user — stock only works in private/group chats with a sender.")
 	}
 	args := argsAfterCommand(update.Message.Text)
-	if len(args) < 2 {
+	if len(args) != 2 {
 		return chathelper.Reply(ctx, b, update.Message,
-			"Usage: /stock_bonus <qty> <TICKER>\nExample: /stock_bonus 200 TCX")
+			"Usage: /stock_bonus <qty> <TICKER>\nExample: /stock_bonus 200 TCB")
 	}
 	qty, err := strconv.ParseInt(args[0], 10, 64)
 	if err != nil || qty <= 0 {
@@ -294,13 +303,13 @@ func (s *state) handleDividend(ctx context.Context, b *bot.Bot, update *models.U
 			"Cannot identify user — stock only works in private/group chats with a sender.")
 	}
 	args := argsAfterCommand(update.Message.Text)
-	if len(args) < 2 {
+	if len(args) != 2 {
 		return chathelper.Reply(ctx, b, update.Message,
-			"Usage: /stock_dividend <amount_per_share> <TICKER>\nExample: /stock_dividend 1500 TCX")
+			"Usage: /stock_dividend <amount_per_share> <TICKER>\nExample: /stock_dividend 1500 TCB")
 	}
-	amountPerShare, err := strconv.ParseFloat(args[0], 64)
-	if err != nil || amountPerShare <= 0 {
-		return chathelper.Reply(ctx, b, update.Message, "Amount per share must be a positive number.")
+	amountPerShare, ok := parsePositiveFinite(args[0])
+	if !ok {
+		return chathelper.Reply(ctx, b, update.Message, "Amount per share must be a positive finite number.")
 	}
 
 	symbol, err := normalizeStockSymbol(args[1])

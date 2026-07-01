@@ -25,9 +25,10 @@ const (
 // time against current champions.json so a weekly data refresh updates
 // historical board displays without migrating saved rounds.
 type gameState struct {
-	Target    string   `json:"target" bson:"target"`
-	Guesses   []string `json:"guesses" bson:"guesses"`
-	StartedAt *int64   `json:"startedAt" bson:"startedAt"` // ms-since-epoch | null
+	Target     string   `json:"target" bson:"target"`
+	Guesses    []string `json:"guesses" bson:"guesses"`
+	StartedAt  *int64   `json:"startedAt" bson:"startedAt"`                       // ms-since-epoch | null
+	MaxGuesses int      `json:"maxGuesses,omitempty" bson:"maxGuesses,omitempty"` // frozen round budget
 }
 
 // stats lifetime score. No LastResultAt field by design (differs from
@@ -58,6 +59,24 @@ type ConfigStore = storage.DocStore[roundConfig]
 func gameKey(subject string) string   { return "game:" + subject }
 func statsKey(subject string) string  { return "stats:" + subject }
 func configKey(subject string) string { return "config:" + subject }
+
+func validMaxGuesses(n int) bool {
+	return n >= 1 && n <= MaxGuessesCap
+}
+
+func normalizeMaxGuesses(n int) int {
+	if validMaxGuesses(n) {
+		return n
+	}
+	return MaxGuesses
+}
+
+func (g *gameState) roundMaxGuesses() int {
+	if g == nil {
+		return MaxGuesses
+	}
+	return normalizeMaxGuesses(g.MaxGuesses)
+}
 
 // loadGame returns the active round, or (nil, nil) if none exists.
 func loadGame(ctx context.Context, games GameStore, subject string) (*gameState, error) {

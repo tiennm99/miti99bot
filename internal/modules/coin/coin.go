@@ -26,13 +26,13 @@ func New(deps modules.Deps) modules.Module {
 			{
 				Name:        "coin_buy",
 				Visibility:  modules.VisibilityPublic,
-				Description: "Buy coin with USD amount",
+				Description: "Spend a USD amount to buy coin",
 				Handler:     s.handleBuy,
 			},
 			{
 				Name:        "coin_sell",
 				Visibility:  modules.VisibilityPublic,
-				Description: "Sell coin for a USD amount",
+				Description: "Sell enough coin to receive a USD amount",
 				Handler:     s.handleSell,
 			},
 			{

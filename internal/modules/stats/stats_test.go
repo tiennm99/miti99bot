@@ -421,6 +421,19 @@ func TestRenderStats_CmdUsers(t *testing.T) {
 	}
 }
 
+func TestRenderStats_CmdUsersAcceptsLeadingSlash(t *testing.T) {
+	c := newStatsCounter()
+	seedFixture(t, c)
+
+	got := renderStats(context.Background(), c, "cmd /wordle")
+	if !strings.HasPrefix(got, "Users of /wordle:\n") {
+		t.Errorf("missing normalized header: %q", got)
+	}
+	if strings.Contains(got, "//wordle") {
+		t.Errorf("command header kept duplicate slash: %q", got)
+	}
+}
+
 func TestRenderStats_CmdNotFound(t *testing.T) {
 	c := newStatsCounter()
 	seedFixture(t, c)

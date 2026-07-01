@@ -80,7 +80,7 @@ func TestGoldPriceLines(t *testing.T) {
 		Source:      "vnappmob-sjc",
 		SJC:         &SJCPrice{Buy: 90_000_000, Sell: 91_000_000},
 	})
-	want := []string{"Gold Spot Price (SJC)", "Buy:", "Sell:"}
+	want := []string{"SJC gold price", "SJC buy (you sell):", "SJC sell (you buy):"}
 	if len(lines) != len(want) {
 		t.Fatalf("got %d lines, want %d: %v", len(lines), len(want), lines)
 	}

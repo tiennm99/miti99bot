@@ -122,7 +122,7 @@ func TestHandleWeek_RendersWeek(t *testing.T) {
 func TestHandleSubscribe_AddsAndIsIdempotent(t *testing.T) {
 	rb, subsStore := installSchedule(t, todayBody, fakeNowMs)
 	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(7, "/lol_subscribe"))
-	if got := rb.LastSent().Text(); !strings.HasPrefix(got, "✅") {
+	if got := rb.LastSent().Text(); !strings.Contains(got, "Subscribed this chat") || !strings.Contains(got, "daily LoL schedule") {
 		t.Errorf("first subscribe should confirm; got %q", got)
 	}
 	rb.Reset()
@@ -146,6 +146,9 @@ func TestHandleSubscribe_ForumTopic_CapturesThreadID(t *testing.T) {
 	upd.Message.MessageThreadID = 42
 	rb.Bot.ProcessUpdate(context.Background(), upd)
 
+	if got := rb.LastSent().Text(); !strings.Contains(got, "Subscribed this topic") {
+		t.Errorf("topic subscribe reply = %q", got)
+	}
 	subs, _ := listSubscribers(context.Background(), subsStore)
 	want := Subscriber{ChatID: 555, ThreadID: 42}
 	if len(subs) != 1 || subs[0] != want {
@@ -183,12 +186,12 @@ func TestHandleUnsubscribe(t *testing.T) {
 	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(7, "/lol_subscribe"))
 	rb.Reset()
 	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(7, "/lol_unsubscribe"))
-	if got := rb.LastSent().Text(); got != "Unsubscribed." {
-		t.Errorf("unsubscribe reply = %q, want 'Unsubscribed.'", got)
+	if got := rb.LastSent().Text(); got != "Unsubscribed this chat." {
+		t.Errorf("unsubscribe reply = %q, want 'Unsubscribed this chat.'", got)
 	}
 	rb.Reset()
 	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(7, "/lol_unsubscribe"))
-	if got := rb.LastSent().Text(); !strings.Contains(got, "weren't subscribed") {
+	if got := rb.LastSent().Text(); !strings.Contains(got, "This chat wasn't subscribed") {
 		t.Errorf("idempotent unsubscribe reply = %q", got)
 	}
 }

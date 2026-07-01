@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-telegram/bot/models"
+
 	"github.com/tiennm99/miti99bot/internal/modules"
 	"github.com/tiennm99/miti99bot/internal/storage"
 	"github.com/tiennm99/miti99bot/internal/testutil"
@@ -69,6 +71,100 @@ func TestHandlePriceUsage(t *testing.T) {
 		t.Fatalf("handlePrice: %v", err)
 	}
 	rb.AssertSentText(t, "Usage: /stock_price <TICKER>")
+}
+
+func TestMutableHandlersRejectExtraArgs(t *testing.T) {
+	ctx := context.Background()
+	s := &state{
+		store:  newStockStore(),
+		prices: &PriceClient{},
+		nowFn:  func() time.Time { return time.UnixMilli(123) },
+	}
+	cases := []struct {
+		name string
+		text string
+		run  func(context.Context, *testutil.RecordingBot, *models.Update) error
+		want string
+	}{
+		{
+			name: "topup",
+			text: "/stock_topup 1000000 extra",
+			run: func(ctx context.Context, rb *testutil.RecordingBot, upd *models.Update) error {
+				return s.handleTopup(ctx, rb.Bot, upd)
+			},
+			want: "Usage: /stock_topup <amount>",
+		},
+		{
+			name: "buy",
+			text: "/stock_buy 100 TCB extra",
+			run: func(ctx context.Context, rb *testutil.RecordingBot, upd *models.Update) error {
+				return s.handleBuy(ctx, rb.Bot, upd)
+			},
+			want: "Usage: /stock_buy <qty> <TICKER>",
+		},
+		{
+			name: "sell",
+			text: "/stock_sell 100 TCB extra",
+			run: func(ctx context.Context, rb *testutil.RecordingBot, upd *models.Update) error {
+				return s.handleSell(ctx, rb.Bot, upd)
+			},
+			want: "Usage: /stock_sell <qty> <TICKER>",
+		},
+		{
+			name: "bonus",
+			text: "/stock_bonus 100 TCB extra",
+			run: func(ctx context.Context, rb *testutil.RecordingBot, upd *models.Update) error {
+				return s.handleBonus(ctx, rb.Bot, upd)
+			},
+			want: "Usage: /stock_bonus <qty> <TICKER>",
+		},
+		{
+			name: "dividend",
+			text: "/stock_dividend 1500 TCB extra",
+			run: func(ctx context.Context, rb *testutil.RecordingBot, upd *models.Update) error {
+				return s.handleDividend(ctx, rb.Bot, upd)
+			},
+			want: "Usage: /stock_dividend <amount_per_share> <TICKER>",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			rb := testutil.NewRecordingBot(t)
+			if err := tc.run(ctx, rb, testutil.NewPrivateMessage(7, tc.text)); err != nil {
+				t.Fatalf("%s: %v", tc.name, err)
+			}
+			rb.AssertSentText(t, tc.want)
+		})
+	}
+
+	p, err := LoadPortfolio(ctx, s.store, 7, 999)
+	if err != nil {
+		t.Fatalf("LoadPortfolio: %v", err)
+	}
+	if p.Currency["VND"] != 0 || len(p.Assets) != 0 {
+		t.Fatalf("invalid commands mutated portfolio: %+v", p)
+	}
+}
+
+func TestMutableHandlersRejectNonFiniteVND(t *testing.T) {
+	ctx := context.Background()
+	s := &state{
+		store:  newStockStore(),
+		prices: &PriceClient{},
+		nowFn:  func() time.Time { return time.UnixMilli(123) },
+	}
+
+	rb := testutil.NewRecordingBot(t)
+	if err := s.handleTopup(ctx, rb.Bot, testutil.NewPrivateMessage(7, "/stock_topup NaN")); err != nil {
+		t.Fatalf("topup: %v", err)
+	}
+	rb.AssertSentText(t, "positive finite")
+
+	rb.Reset()
+	if err := s.handleDividend(ctx, rb.Bot, testutil.NewPrivateMessage(7, "/stock_dividend Inf TCB")); err != nil {
+		t.Fatalf("dividend: %v", err)
+	}
+	rb.AssertSentText(t, "positive finite")
 }
 
 func modDepsForTest() modules.Deps {

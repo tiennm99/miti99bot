@@ -61,7 +61,11 @@ func renderStats(ctx context.Context, c *counter, args string) string {
 		if len(fields) < 2 {
 			return statsUsage
 		}
-		return viewCmdUsers(ctx, c, fields[1])
+		cmd := strings.TrimPrefix(fields[1], "/")
+		if cmd == "" {
+			return statsUsage
+		}
+		return viewCmdUsers(ctx, c, cmd)
 	default:
 		return statsUsage
 	}

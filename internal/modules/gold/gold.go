@@ -25,13 +25,13 @@ func New(deps modules.Deps) modules.Module {
 			{
 				Name:        "gold_buy",
 				Visibility:  modules.VisibilityPublic,
-				Description: "Buy gold at spot price (luong)",
+				Description: "Buy gold at SJC sell price (luong)",
 				Handler:     s.handleBuy,
 			},
 			{
 				Name:        "gold_sell",
 				Visibility:  modules.VisibilityPublic,
-				Description: "Sell gold back to VND (luong)",
+				Description: "Sell gold at SJC buy price (luong)",
 				Handler:     s.handleSell,
 			},
 			{

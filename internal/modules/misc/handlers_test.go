@@ -15,7 +15,7 @@ import (
 
 // installMisc wires the misc module to a recording bot with a fresh
 // in-memory store. Returns the bot and the typed store (so tests can pre-seed
-// or read), plus an Auth that permits Owner + Admin so /mstats /fortytwo dispatch.
+// or read), plus an Auth that permits Owner + Admin so /ping_stats /the_answer dispatch.
 func installMisc(t *testing.T, ownerID int64) (*testutil.RecordingBot, storage.DocStore[lastPing]) {
 	t.Helper()
 	rb := testutil.NewRecordingBot(t)
@@ -56,36 +56,36 @@ func TestPing_RepliesPongAndWritesStore(t *testing.T) {
 	}
 }
 
-func TestMstats_NeverWhenStoreEmpty(t *testing.T) {
+func TestPingStats_NeverWhenStoreEmpty(t *testing.T) {
 	rb, _ := installMisc(t, 999)
-	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(999, "/mstats"))
+	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(999, "/ping_stats"))
 
 	if got := rb.LastSent().Text(); got != "last ping: never" {
-		t.Errorf("mstats reply = %q, want 'last ping: never'", got)
+		t.Errorf("ping_stats reply = %q, want 'last ping: never'", got)
 	}
 }
 
-func TestMstats_AfterPing(t *testing.T) {
+func TestPingStats_AfterPing(t *testing.T) {
 	rb, _ := installMisc(t, 999)
 	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(999, "/ping"))
 	rb.Reset()
-	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(999, "/mstats"))
+	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(999, "/ping_stats"))
 
 	got := rb.LastSent().Text()
 	if !strings.HasPrefix(got, "last ping: ") {
-		t.Errorf("mstats reply = %q, want 'last ping: ...'", got)
+		t.Errorf("ping_stats reply = %q, want 'last ping: ...'", got)
 	}
 	if strings.Contains(got, "never") {
-		t.Errorf("mstats still says 'never' after /ping: %q", got)
+		t.Errorf("ping_stats still says 'never' after /ping: %q", got)
 	}
 }
 
-func TestMstats_DeniedToNonAdmin(t *testing.T) {
+func TestPingStats_DeniedToNonAdmin(t *testing.T) {
 	rb, _ := installMisc(t, 999) // owner = 999
-	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(7, "/mstats"))
+	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(7, "/ping_stats"))
 
 	if calls := rb.Sent(); len(calls) != 0 {
-		t.Errorf("non-admin /mstats produced replies: %+v", calls)
+		t.Errorf("non-admin /ping_stats produced replies: %+v", calls)
 	}
 }
 
@@ -128,6 +128,20 @@ func TestTrongTruongHop_CustomArg(t *testing.T) {
 	}
 }
 
+func TestTTHAlias_CustomArg(t *testing.T) {
+	rb, _ := installMisc(t, 999)
+	rb.Bot.ProcessUpdate(context.Background(), trongTruongHopUpdate(t, "/tth Acme Corp",
+		&models.User{ID: 7, Username: "boss", FirstName: "Boss"}))
+
+	got := rb.LastSent().Text()
+	if !strings.Contains(got, "Acme Corp") {
+		t.Errorf("reply missing custom arg Acme Corp: %q", got)
+	}
+	if n := strings.Count(got, "@boss"); n != 2 {
+		t.Errorf("reply mentions @boss %d times, want 2: %q", n, got)
+	}
+}
+
 func TestTrongTruongHop_HTMLEscapesArg(t *testing.T) {
 	rb, _ := installMisc(t, 999)
 	rb.Bot.ProcessUpdate(context.Background(), trongTruongHopUpdate(t, "/trongtruonghop <script>",
@@ -166,18 +180,18 @@ func TestTrongTruongHop_EmptyDisplayNameFallsBackToThanhVien(t *testing.T) {
 	}
 }
 
-func TestFortytwo_OwnerOnly(t *testing.T) {
+func TestTheAnswer_OwnerOnly(t *testing.T) {
 	rb, _ := installMisc(t, 999)
 
 	// Non-owner: silent denial
-	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(7, "/fortytwo"))
+	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(7, "/the_answer"))
 	if calls := rb.Sent(); len(calls) != 0 {
-		t.Errorf("non-owner /fortytwo replied: %+v", calls)
+		t.Errorf("non-owner /the_answer replied: %+v", calls)
 	}
 
 	// Owner: reply
-	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(999, "/fortytwo"))
+	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(999, "/the_answer"))
 	if got := rb.LastSent().Text(); got != "The answer." {
-		t.Errorf("owner /fortytwo reply = %q, want 'The answer.'", got)
+		t.Errorf("owner /the_answer reply = %q, want 'The answer.'", got)
 	}
 }

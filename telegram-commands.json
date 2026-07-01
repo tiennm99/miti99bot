@@ -5,12 +5,16 @@
       "description": "Show all available commands"
     },
     {
-      "command": "info",
-      "description": "Show chat, thread, and sender IDs"
-    },
-    {
       "command": "ping",
       "description": "Health check; replies pong"
+    },
+    {
+      "command": "trongtruonghop",
+      "description": "Phát biểu disclaimer cho thành viên hiện tại"
+    },
+    {
+      "command": "tth",
+      "description": "Alias for /trongtruonghop"
     },
     {
       "command": "wordle",
@@ -18,7 +22,7 @@
     },
     {
       "command": "wordle_new",
-      "description": "Start a new wordle round"
+      "description": "Start a new wordle round; active round counts as give-up"
     },
     {
       "command": "wordle_giveup",
@@ -42,7 +46,7 @@
     },
     {
       "command": "lol",
-      "description": "LoL matches for a date"
+      "description": "LoL matches for a date; supports dd, dd-mm, dd/mm, ddmm"
     },
     {
       "command": "lol_this_week",
@@ -58,7 +62,7 @@
     },
     {
       "command": "wc",
-      "description": "World Cup matches for a date"
+      "description": "World Cup matches for a date; supports dd, dd-mm, dd/mm, ddmm"
     },
     {
       "command": "wc_this_week",
@@ -110,11 +114,11 @@
     },
     {
       "command": "gold_buy",
-      "description": "Buy gold at spot price (luong)"
+      "description": "Buy gold at SJC sell price (luong)"
     },
     {
       "command": "gold_sell",
-      "description": "Sell gold back to VND (luong)"
+      "description": "Sell gold at SJC buy price (luong)"
     },
     {
       "command": "gold_portfolio",
@@ -130,11 +134,11 @@
     },
     {
       "command": "coin_buy",
-      "description": "Buy coin with USD amount"
+      "description": "Spend a USD amount to buy coin"
     },
     {
       "command": "coin_sell",
-      "description": "Sell coin for a USD amount"
+      "description": "Sell enough coin to receive a USD amount"
     },
     {
       "command": "coin_portfolio",
@@ -142,7 +146,7 @@
     },
     {
       "command": "stats",
-      "description": "Stats. Try: /stats users, /stats user <name>, /stats cmd <name>"
+      "description": "Stats. Try: /stats users, /stats user <username>, /stats cmd <command>"
     }
   ]
 }

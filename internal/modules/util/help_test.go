@@ -26,7 +26,7 @@ func fakeFactory(name string, cmds []modules.Command) modules.Factory {
 	}
 }
 
-func TestRenderHelp_GroupsByModuleAndSkipsPrivate(t *testing.T) {
+func TestRenderHelp_GroupsByModuleAndSkipsNonPublic(t *testing.T) {
 	cmd := func(name string, vis modules.Visibility, desc string) modules.Command {
 		return modules.Command{Name: name, Visibility: vis, Description: desc, Handler: helpTestNoop}
 	}
@@ -52,7 +52,6 @@ func TestRenderHelp_GroupsByModuleAndSkipsPrivate(t *testing.T) {
 		"<b>alpha</b>",
 		"<b>beta</b>",
 		"/a_pub — alpha public",
-		"/a_prot — alpha protected (protected)",
 		// HTML in user descriptions must be escaped.
 		"beta &lt;i&gt;desc&lt;/i&gt;",
 		// Locks html.EscapeString contract: & → &amp;, " → &#34;.
@@ -66,6 +65,9 @@ func TestRenderHelp_GroupsByModuleAndSkipsPrivate(t *testing.T) {
 	}
 	if strings.Contains(out, "a_priv") {
 		t.Errorf("output leaked private command\n---output---\n%s", out)
+	}
+	if strings.Contains(out, "a_prot") {
+		t.Errorf("output leaked protected command\n---output---\n%s", out)
 	}
 }
 
@@ -100,7 +102,8 @@ func TestRenderHelp_OmitsModulesWithNoVisibleCommands(t *testing.T) {
 	}
 	factories := map[string]modules.Factory{
 		"shadow": fakeFactory("shadow", []modules.Command{
-			cmd("hidden", modules.VisibilityPrivate),
+			cmd("hidden_private", modules.VisibilityPrivate),
+			cmd("hidden_protected", modules.VisibilityProtected),
 		}),
 		"visible": fakeFactory("visible", []modules.Command{
 			cmd("seen", modules.VisibilityPublic),
@@ -112,7 +115,7 @@ func TestRenderHelp_OmitsModulesWithNoVisibleCommands(t *testing.T) {
 	}
 	out := util.RenderHelp(reg)
 	if strings.Contains(out, "<b>shadow</b>") {
-		t.Errorf("module with only private commands should not render a section\n%s", out)
+		t.Errorf("module with only non-public commands should not render a section\n%s", out)
 	}
 	if !strings.Contains(out, "<b>visible</b>") {
 		t.Errorf("visible module section missing\n%s", out)
