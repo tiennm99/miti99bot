@@ -45,11 +45,17 @@ func TestInitStore_MongoCreatesIndexesAndMigratesLegacy(t *testing.T) {
 	if err := legacyCounts.Put(ctx, legacyCountPrefix+"ping", legacyCountEntry{N: 2}); err != nil {
 		t.Fatalf("legacy count: %v", err)
 	}
+	if err := legacyCounts.Put(ctx, legacyCountPrefix+"gold_stats", legacyCountEntry{N: 4}); err != nil {
+		t.Fatalf("legacy renamed count: %v", err)
+	}
 	if err := legacyUsers.Put(ctx, legacyUserPrefix+"7", legacyUserEntry{Username: "alice", N: 1}); err != nil {
 		t.Fatalf("legacy user: %v", err)
 	}
 	if err := legacyCounts.Put(ctx, legacyPairPrefix+"ping:7", legacyCountEntry{N: 1}); err != nil {
 		t.Fatalf("legacy pair: %v", err)
+	}
+	if err := legacyCounts.Put(ctx, legacyPairPrefix+"stock_convert:7", legacyCountEntry{N: 3}); err != nil {
+		t.Fatalf("legacy deleted pair: %v", err)
 	}
 
 	if err := InitStore(ctx, statsColl, systemColl); err != nil {
@@ -59,6 +65,8 @@ func TestInitStore_MongoCreatesIndexesAndMigratesLegacy(t *testing.T) {
 	usageDocs := storage.Typed[usageEntry](statsColl)
 	assertUsageEntry(t, usageDocs, usageKey("ping", 7), usageEntry{Cmd: "ping", UserID: 7, Username: "alice", N: 1})
 	assertUsageEntry(t, usageDocs, usageKey("ping", 0), usageEntry{Cmd: "ping", N: 1})
+	assertUsageEntry(t, usageDocs, usageKey("gold_portfolio", 0), usageEntry{Cmd: "gold_portfolio", N: 4})
+	assertUsageEntry(t, usageDocs, usageKey("stock_convert", 7), usageEntry{Cmd: "stock_convert", UserID: 7, Username: "alice", N: 3, Deleted: true})
 
 	rawStatsColl, ok := storage.MongoCollection(statsColl)
 	if !ok {
@@ -87,6 +95,15 @@ func TestInitStore_MongoCreatesIndexesAndMigratesLegacy(t *testing.T) {
 		if !found[name] {
 			t.Fatalf("missing index %s; indexes=%v", name, found)
 		}
+	}
+
+	sys := systemstate.New(systemColl)
+	rec, ok, err := sys.Get(ctx, commandHistoryMigrationKey)
+	if err != nil || !ok {
+		t.Fatalf("command history marker ok=%v err=%v", ok, err)
+	}
+	if rec.Status != "done" || rec.Count != 2 {
+		t.Fatalf("command history marker = %+v, want done count 2", rec)
 	}
 
 	rawDoc := bson.M{}

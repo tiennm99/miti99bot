@@ -2,6 +2,7 @@ package stats
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -22,7 +23,34 @@ const (
 
 	usageMigrationName = "stats-usage-v2"
 	usageMigrationKey  = "migration:" + usageMigrationName
+
+	commandHistoryMigrationName = "stats-command-history-v1"
+	commandHistoryMigrationKey  = "migration:" + commandHistoryMigrationName
 )
+
+type commandRename struct {
+	Old string
+	New string
+}
+
+var commandRenames = []commandRename{
+	{Old: "lolschedule", New: "lol"},
+	{Old: "lolschedule_week", New: "lol_this_week"},
+	{Old: "lolschedule_subscribe", New: "lol_subscribe"},
+	{Old: "lolschedule_unsubscribe", New: "lol_unsubscribe"},
+	{Old: "wc_week", New: "wc_this_week"},
+	{Old: "gold_stats", New: "gold_portfolio"},
+	{Old: "coin_stats", New: "coin_portfolio"},
+	{Old: "stock_stats", New: "stock_portfolio"},
+	{Old: "stock_income_stock", New: "stock_bonus"},
+	{Old: "stock_income_vnd", New: "stock_dividend"},
+}
+
+var deletedCommandNames = []string{
+	"lolschedule_today",
+	"wc_today",
+	"stock_convert",
+}
 
 type legacyCountEntry struct {
 	N int64 `json:"n" bson:"n"`
@@ -42,7 +70,10 @@ func InitStore(ctx context.Context, statsColl, systemColl storage.Collection) er
 			return err
 		}
 	}
-	return migrateLegacyUsage(ctx, statsColl, systemColl)
+	if err := migrateLegacyUsage(ctx, statsColl, systemColl); err != nil {
+		return err
+	}
+	return migrateCommandHistory(ctx, statsColl, systemColl)
 }
 
 func ensureUsageIndexes(ctx context.Context, coll *mongo.Collection) error {
@@ -128,6 +159,130 @@ func migrateLegacyUsage(ctx context.Context, statsColl, systemColl storage.Colle
 		return fmt.Errorf("stats legacy migration marker put: %w", err)
 	}
 	return nil
+}
+
+func migrateCommandHistory(ctx context.Context, statsColl, systemColl storage.Collection) error {
+	sys := systemstate.New(systemColl)
+	if rec, ok, err := sys.Get(ctx, commandHistoryMigrationKey); err != nil {
+		return fmt.Errorf("stats command history migration marker get: %w", err)
+	} else if ok && rec.Status == "done" {
+		return nil
+	}
+
+	docs := storage.Typed[usageEntry](statsColl)
+	changed := int64(0)
+	for _, rename := range commandRenames {
+		n, err := migrateCommandRename(ctx, docs, rename)
+		if err != nil {
+			return err
+		}
+		changed += n
+	}
+	for _, cmd := range deletedCommandNames {
+		n, err := markCommandDeleted(ctx, docs, cmd)
+		if err != nil {
+			return err
+		}
+		changed += n
+	}
+
+	now := nowMillis()
+	if err := sys.Put(ctx, commandHistoryMigrationKey, systemstate.Record{
+		Kind:        "migration",
+		Name:        commandHistoryMigrationName,
+		Status:      "done",
+		Count:       changed,
+		CompletedAt: now,
+		UpdatedAt:   now,
+	}); err != nil {
+		return fmt.Errorf("stats command history migration marker put: %w", err)
+	}
+	return nil
+}
+
+func migrateCommandRename(ctx context.Context, docs storage.DocStore[usageEntry], rename commandRename) (int64, error) {
+	keys, err := docs.List(ctx, rename.Old)
+	if err != nil {
+		return 0, fmt.Errorf("stats command rename list %s: %w", rename.Old, err)
+	}
+	changed := int64(0)
+	for _, key := range keys {
+		if !usageKeyBelongsToCommand(key, rename.Old) {
+			continue
+		}
+		entry, _, err := docs.Get(ctx, key)
+		if err != nil {
+			return changed, fmt.Errorf("stats command rename get %s: %w", key, err)
+		}
+		if entry.Cmd != "" && entry.Cmd != rename.Old {
+			continue
+		}
+		entry.Cmd = rename.Old
+		targetKey := usageKey(rename.New, entry.UserID)
+		target, _, err := docs.Get(ctx, targetKey)
+		switch {
+		case errors.Is(err, storage.ErrNotFound):
+			target = usageEntry{
+				Cmd:      rename.New,
+				UserID:   entry.UserID,
+				Username: entry.Username,
+			}
+		case err != nil:
+			return changed, fmt.Errorf("stats command rename target get %s: %w", targetKey, err)
+		}
+
+		target.Cmd = rename.New
+		target.UserID = entry.UserID
+		if entry.UserID == 0 {
+			target.Username = ""
+		} else if entry.Username != "" {
+			target.Username = entry.Username
+		}
+		target.N += entry.N
+		target.Deleted = false
+		if err := docs.Put(ctx, targetKey, target); err != nil {
+			return changed, fmt.Errorf("stats command rename put %s: %w", targetKey, err)
+		}
+		if err := docs.Delete(ctx, key); err != nil {
+			return changed, fmt.Errorf("stats command rename delete %s: %w", key, err)
+		}
+		changed++
+	}
+	return changed, nil
+}
+
+func markCommandDeleted(ctx context.Context, docs storage.DocStore[usageEntry], cmd string) (int64, error) {
+	keys, err := docs.List(ctx, cmd)
+	if err != nil {
+		return 0, fmt.Errorf("stats command delete list %s: %w", cmd, err)
+	}
+	changed := int64(0)
+	for _, key := range keys {
+		if !usageKeyBelongsToCommand(key, cmd) {
+			continue
+		}
+		entry, _, err := docs.Get(ctx, key)
+		if err != nil {
+			return changed, fmt.Errorf("stats command delete get %s: %w", key, err)
+		}
+		if entry.Cmd != "" && entry.Cmd != cmd {
+			continue
+		}
+		entry.Cmd = cmd
+		if entry.Deleted {
+			continue
+		}
+		entry.Deleted = true
+		if err := docs.Put(ctx, key, entry); err != nil {
+			return changed, fmt.Errorf("stats command delete put %s: %w", key, err)
+		}
+		changed++
+	}
+	return changed, nil
+}
+
+func usageKeyBelongsToCommand(key, cmd string) bool {
+	return key == cmd || strings.HasPrefix(key, cmd+":")
 }
 
 func loadLegacyUsernames(ctx context.Context, users storage.DocStore[legacyUserEntry]) (map[int64]string, []string, error) {

@@ -25,6 +25,7 @@ type usageEntry struct {
 	UserID   int64  `json:"uid,omitempty" bson:"uid,omitempty"`
 	Username string `json:"user,omitempty" bson:"user,omitempty"`
 	N        int64  `json:"n" bson:"n"`
+	Deleted  bool   `json:"deleted,omitempty" bson:"deleted,omitempty"`
 }
 
 type usageUser struct {
@@ -78,6 +79,7 @@ func (s *docUsageStore) Increment(ctx context.Context, cmd string, user usageUse
 
 	entry.Cmd = cmd
 	entry.N++
+	entry.Deleted = false
 	if hasUser {
 		entry.UserID = user.ID
 		entry.Username = user.Username
@@ -121,6 +123,9 @@ func (s *docUsageStore) TopCommands(ctx context.Context, limit int) ([]row, erro
 	}
 	totals := make(map[string]int64)
 	for _, e := range entries {
+		if e.Deleted {
+			continue
+		}
 		totals[e.Cmd] += e.N
 	}
 	rows := make([]row, 0, len(totals))
@@ -145,7 +150,7 @@ func (s *docUsageStore) TopUsers(ctx context.Context, limit int) ([]row, error) 
 	}
 	totals := make(map[int64]total)
 	for _, e := range entries {
-		if e.UserID == 0 || e.Username == "" {
+		if e.Deleted || e.UserID == 0 || e.Username == "" {
 			continue
 		}
 		t := totals[e.UserID]
@@ -174,7 +179,7 @@ func (s *docUsageStore) CommandsByUser(ctx context.Context, username string, lim
 		found  bool
 	)
 	for _, e := range entries {
-		if e.UserID != 0 && e.Username == username {
+		if !e.Deleted && e.UserID != 0 && e.Username == username {
 			userID = e.UserID
 			found = true
 			break
@@ -186,7 +191,7 @@ func (s *docUsageStore) CommandsByUser(ctx context.Context, username string, lim
 
 	rows := make([]row, 0)
 	for _, e := range entries {
-		if e.UserID == userID {
+		if !e.Deleted && e.UserID == userID {
 			rows = append(rows, row{display: "/" + e.Cmd, n: e.N})
 		}
 	}
@@ -204,7 +209,7 @@ func (s *docUsageStore) UsersByCommand(ctx context.Context, cmd string, limit in
 	}
 	rows := make([]row, 0)
 	for _, e := range entries {
-		if e.Cmd == cmd && e.UserID != 0 && e.Username != "" {
+		if !e.Deleted && e.Cmd == cmd && e.UserID != 0 && e.Username != "" {
 			rows = append(rows, row{display: "@" + e.Username, n: e.N})
 		}
 	}
@@ -242,16 +247,19 @@ func (s *mongoUsageStore) Increment(ctx context.Context, cmd string, user usageU
 	}
 
 	set := bson.M{"cmd": cmd}
+	unset := bson.M{"deleted": ""}
 	update := bson.M{
 		"$set":         set,
 		"$inc":         bson.M{"n": int64(1), "version": int64(1)},
+		"$unset":       unset,
 		"$currentDate": bson.M{"updatedAt": true},
 	}
 	if hasUser {
 		set["uid"] = user.ID
 		set["user"] = user.Username
 	} else {
-		update["$unset"] = bson.M{"uid": "", "user": ""}
+		unset["uid"] = ""
+		unset["user"] = ""
 	}
 
 	key := usageKey(cmd, userID)
@@ -280,7 +288,10 @@ func (s *mongoUsageStore) Increment(ctx context.Context, cmd string, user usageU
 
 func (s *mongoUsageStore) TopCommands(ctx context.Context, limit int) ([]row, error) {
 	pipeline := mongo.Pipeline{
-		bson.D{bsonField("$match", bson.D{bsonField("cmd", bson.D{bsonField("$type", "string")})})},
+		bson.D{bsonField("$match", bson.D{
+			bsonField("cmd", bson.D{bsonField("$type", "string")}),
+			bsonField("deleted", bson.D{bsonField("$ne", true)}),
+		})},
 		bson.D{bsonField("$group", bson.D{bsonField("_id", "$cmd"), bsonField("n", bson.D{bsonField("$sum", "$n")})})},
 		bson.D{bsonField("$sort", bson.D{bsonField("n", -1), bsonField("_id", 1)})},
 	}
@@ -314,6 +325,7 @@ func (s *mongoUsageStore) TopUsers(ctx context.Context, limit int) ([]row, error
 		bson.D{bsonField("$match", bson.D{
 			bsonField("uid", bson.D{bsonField("$gt", int64(0))}),
 			bsonField("user", bson.D{bsonField("$type", "string"), bsonField("$ne", "")}),
+			bsonField("deleted", bson.D{bsonField("$ne", true)}),
 		})},
 		bson.D{bsonField("$sort", bson.D{bsonField("updatedAt", -1)})},
 		bson.D{bsonField("$group", bson.D{
@@ -361,8 +373,9 @@ func (s *mongoUsageStore) CommandsByUser(ctx context.Context, username string, l
 		opts.SetLimit(int64(limit))
 	}
 	cur, err := s.coll.Find(ctx, bson.M{
-		"uid": userID,
-		"cmd": bson.M{"$type": "string"},
+		"uid":     userID,
+		"cmd":     bson.M{"$type": "string"},
+		"deleted": bson.M{"$ne": true},
 	}, opts)
 	if err != nil {
 		return nil, true, fmt.Errorf("mongo stats commands by user %s: %w", username, err)
@@ -391,9 +404,10 @@ func (s *mongoUsageStore) UsersByCommand(ctx context.Context, cmd string, limit 
 		opts.SetLimit(int64(limit))
 	}
 	cur, err := s.coll.Find(ctx, bson.M{
-		"cmd":  cmd,
-		"uid":  bson.M{"$gt": int64(0)},
-		"user": bson.M{"$type": "string", "$ne": ""},
+		"cmd":     cmd,
+		"uid":     bson.M{"$gt": int64(0)},
+		"user":    bson.M{"$type": "string", "$ne": ""},
+		"deleted": bson.M{"$ne": true},
 	}, opts)
 	if err != nil {
 		return nil, fmt.Errorf("mongo stats users by command %s: %w", cmd, err)
@@ -420,8 +434,9 @@ func (s *mongoUsageStore) userIDByUsername(ctx context.Context, username string)
 	}
 	err := s.coll.FindOne(ctx,
 		bson.M{
-			"uid":  bson.M{"$gt": int64(0)},
-			"user": username,
+			"uid":     bson.M{"$gt": int64(0)},
+			"user":    username,
+			"deleted": bson.M{"$ne": true},
 		},
 		options.FindOne().
 			SetProjection(bson.M{"uid": 1}).
