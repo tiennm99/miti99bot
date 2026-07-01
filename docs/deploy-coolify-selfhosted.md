@@ -60,8 +60,7 @@ overrides are not supported in runtime env; modules use coded defaults.
 4. Copy the `mongodb+srv://…` connection string into `MONGO_URL` and put the
    db name in `MONGO_DATABASE`.
 
-> Storage layout: one collection per module plus a shared `system` collection
-> for startup metadata such as one-time migrations. Each document is a flattened native
+> Storage layout: one collection per module. Each document is a flattened native
 > document — `{ _id: <user key>, ...payload fields, version, updatedAt }` with no
 > `value` envelope. Payload fields are hoisted to the document root so they
 > expand and are queryable in Compass. The two non-object values are wrapped in a
@@ -69,17 +68,11 @@ overrides are not supported in runtime env; modules use coded defaults.
 > daily push date under `date`. Concurrency uses the `version` field (optimistic lock);
 > `updatedAt` is a BSON Date.
 >
-> The `lol` module uses the `lol` collection. First startup after the rename
-> copies documents from the legacy `lolschedule` collection, drops that legacy
-> collection, and records completion in `system`.
->
 > The `stats` collection uses queryable aggregate documents for command/user
-> counts and creates indexes on startup. First startup after the schema change
-> migrates legacy `count:`, `user:`, and `pair:` stats keys into the new shape,
-> deletes the legacy keys, and records completion in `system`. Startup also
-> migrates renamed command stats to the current command names and marks removed
-> command rows with `deleted: true`; `/stats` queries filter those retained
-> legacy rows.
+> counts and creates indexes on startup. Deleted legacy command rows are retained
+> with `deleted: true`; `/stats` queries filter those rows from visible results.
+> A historical `system` collection may remain in MongoDB with completed migration
+> records and can be reused if a future one-time startup migration is needed.
 
 ## 2. Coolify
 

@@ -11,7 +11,6 @@ import (
 
 	"github.com/tiennm99/miti99bot/internal/modules"
 	"github.com/tiennm99/miti99bot/internal/storage"
-	"github.com/tiennm99/miti99bot/internal/systemstate"
 	"github.com/tiennm99/miti99bot/internal/testutil"
 )
 
@@ -238,171 +237,6 @@ func TestCommandHook_FiredThroughModulesBuild(t *testing.T) {
 	}
 }
 
-func TestInitStore_MigratesLegacyStatsOnceAndDeletesOldKeys(t *testing.T) {
-	ctx := context.Background()
-	provider := storage.NewMemoryProvider()
-	statsColl := provider.Collection("stats")
-	systemColl := provider.Collection(systemstate.CollectionName)
-	legacyCounts := storage.Typed[legacyCountEntry](statsColl)
-	legacyUsers := storage.Typed[legacyUserEntry](statsColl)
-
-	if err := legacyCounts.Put(ctx, legacyCountPrefix+"ping", legacyCountEntry{N: 6}); err != nil {
-		t.Fatalf("legacy count ping: %v", err)
-	}
-	if err := legacyCounts.Put(ctx, legacyCountPrefix+"wordle", legacyCountEntry{N: 2}); err != nil {
-		t.Fatalf("legacy count wordle: %v", err)
-	}
-	if err := legacyUsers.Put(ctx, legacyUserPrefix+"1", legacyUserEntry{Username: "alice", N: 4}); err != nil {
-		t.Fatalf("legacy user alice: %v", err)
-	}
-	if err := legacyUsers.Put(ctx, legacyUserPrefix+"2", legacyUserEntry{Username: "bob", N: 3}); err != nil {
-		t.Fatalf("legacy user bob: %v", err)
-	}
-	if err := legacyCounts.Put(ctx, legacyPairPrefix+"ping:1", legacyCountEntry{N: 3}); err != nil {
-		t.Fatalf("legacy pair ping alice: %v", err)
-	}
-	if err := legacyCounts.Put(ctx, legacyPairPrefix+"ping:2", legacyCountEntry{N: 2}); err != nil {
-		t.Fatalf("legacy pair ping bob: %v", err)
-	}
-	if err := legacyCounts.Put(ctx, legacyPairPrefix+"wordle:2", legacyCountEntry{N: 2}); err != nil {
-		t.Fatalf("legacy pair wordle bob: %v", err)
-	}
-
-	if err := InitStore(ctx, statsColl, systemColl); err != nil {
-		t.Fatalf("InitStore: %v", err)
-	}
-
-	usageDocs := storage.Typed[usageEntry](statsColl)
-	assertUsageEntry(t, usageDocs, usageKey("ping", 1), usageEntry{Cmd: "ping", UserID: 1, Username: "alice", N: 3})
-	assertUsageEntry(t, usageDocs, usageKey("ping", 2), usageEntry{Cmd: "ping", UserID: 2, Username: "bob", N: 2})
-	assertUsageEntry(t, usageDocs, usageKey("wordle", 2), usageEntry{Cmd: "wordle", UserID: 2, Username: "bob", N: 2})
-	assertUsageEntry(t, usageDocs, usageKey("ping", 0), usageEntry{Cmd: "ping", N: 1})
-
-	for _, key := range []string{
-		legacyCountPrefix + "ping",
-		legacyCountPrefix + "wordle",
-		legacyPairPrefix + "ping:1",
-		legacyPairPrefix + "ping:2",
-		legacyPairPrefix + "wordle:2",
-		legacyUserPrefix + "1",
-		legacyUserPrefix + "2",
-	} {
-		if _, _, err := legacyCounts.Get(ctx, key); !errors.Is(err, storage.ErrNotFound) {
-			t.Fatalf("legacy key %s should be deleted, got err=%v", key, err)
-		}
-	}
-
-	sys := systemstate.New(systemColl)
-	rec, ok, err := sys.Get(ctx, usageMigrationKey)
-	if err != nil || !ok {
-		t.Fatalf("migration marker ok=%v err=%v", ok, err)
-	}
-	if rec.Status != "done" || rec.Count != 4 {
-		t.Fatalf("migration marker = %+v, want done count 4", rec)
-	}
-
-	if err := legacyCounts.Put(ctx, legacyCountPrefix+"coin", legacyCountEntry{N: 99}); err != nil {
-		t.Fatalf("legacy count after marker: %v", err)
-	}
-	if err := InitStore(ctx, statsColl, systemColl); err != nil {
-		t.Fatalf("InitStore second run: %v", err)
-	}
-	if _, _, err := usageDocs.Get(ctx, usageKey("coin", 0)); !errors.Is(err, storage.ErrNotFound) {
-		t.Fatalf("second InitStore should skip migration after marker, got err=%v", err)
-	}
-}
-
-func TestInitStore_MigratesCommandHistoryAndMarksDeleted(t *testing.T) {
-	ctx := context.Background()
-	provider := storage.NewMemoryProvider()
-	statsColl := provider.Collection("stats")
-	systemColl := provider.Collection(systemstate.CollectionName)
-	usageDocs := storage.Typed[usageEntry](statsColl)
-	sys := systemstate.New(systemColl)
-
-	if err := sys.Put(ctx, "migration:stats-command-history-v1", systemstate.Record{
-		Kind:      "migration",
-		Name:      "stats-command-history-v1",
-		Status:    "done",
-		Count:     5,
-		UpdatedAt: 1,
-	}); err != nil {
-		t.Fatalf("seed v1 marker: %v", err)
-	}
-
-	seed := map[string]usageEntry{
-		usageKey("gold_stats", 0):            {Cmd: "gold_stats", N: 2},
-		usageKey("gold_portfolio", 0):        {Cmd: "gold_portfolio", N: 5},
-		usageKey("trade_topup", 0):           {Cmd: "trade_topup", N: 6},
-		usageKey("trade_stats", 0):           {Cmd: "trade_stats", N: 9},
-		usageKey("stock_portfolio", 0):       {Cmd: "stock_portfolio", N: 1},
-		usageKey("trade_income_stock", 7):    {Cmd: "trade_income_stock", UserID: 7, Username: "alice", N: 5},
-		usageKey("stock_income_stock", 7):    {Cmd: "stock_income_stock", UserID: 7, Username: "alice", N: 3},
-		usageKey("stock_bonus", 7):           {Cmd: "stock_bonus", UserID: 7, Username: "alice", N: 4},
-		usageKey("lolschedule_week", 8):      {Cmd: "lolschedule_week", UserID: 8, Username: "bob", N: 1},
-		usageKey("lolschedule_today", 0):     {Cmd: "lolschedule_today", N: 9},
-		usageKey("trade_income_events", 8):   {Cmd: "trade_income_events", UserID: 8, Username: "bob", N: 3},
-		usageKey("trade_convert", 7):         {Cmd: "trade_convert", UserID: 7, Username: "alice", N: 4},
-		usageKey("stock_income_events", 0):   {Cmd: "stock_income_events", N: 5},
-		usageKey("stock_convert", 7):         {Cmd: "stock_convert", UserID: 7, Username: "alice", N: 2},
-		usageKey("trade_stats_extra", 7):     {Cmd: "trade_stats_extra", UserID: 7, Username: "alice", N: 99},
-		usageKey("stock_convert_extra", 7):   {Cmd: "stock_convert_extra", UserID: 7, Username: "alice", N: 99},
-		usageKey("lolschedule_weekly", 10):   {Cmd: "lolschedule_weekly", UserID: 10, Username: "carol", N: 99},
-		usageKey("stock_income_stocked", 11): {Cmd: "stock_income_stocked", UserID: 11, Username: "dan", N: 99},
-	}
-	for key, entry := range seed {
-		if err := usageDocs.Put(ctx, key, entry); err != nil {
-			t.Fatalf("seed %s: %v", key, err)
-		}
-	}
-
-	if err := InitStore(ctx, statsColl, systemColl); err != nil {
-		t.Fatalf("InitStore: %v", err)
-	}
-
-	assertUsageEntry(t, usageDocs, usageKey("gold_portfolio", 0), usageEntry{Cmd: "gold_portfolio", N: 7})
-	assertUsageEntry(t, usageDocs, usageKey("stock_topup", 0), usageEntry{Cmd: "stock_topup", N: 6})
-	assertUsageEntry(t, usageDocs, usageKey("stock_portfolio", 0), usageEntry{Cmd: "stock_portfolio", N: 10})
-	assertUsageEntry(t, usageDocs, usageKey("stock_bonus", 7), usageEntry{Cmd: "stock_bonus", UserID: 7, Username: "alice", N: 12})
-	assertUsageEntry(t, usageDocs, usageKey("lol_this_week", 8), usageEntry{Cmd: "lol_this_week", UserID: 8, Username: "bob", N: 1})
-	assertUsageEntry(t, usageDocs, usageKey("lolschedule_today", 0), usageEntry{Cmd: "lolschedule_today", N: 9, Deleted: true})
-	assertUsageEntry(t, usageDocs, usageKey("trade_income_events", 8), usageEntry{Cmd: "trade_income_events", UserID: 8, Username: "bob", N: 3, Deleted: true})
-	assertUsageEntry(t, usageDocs, usageKey("trade_convert", 7), usageEntry{Cmd: "trade_convert", UserID: 7, Username: "alice", N: 4, Deleted: true})
-	assertUsageEntry(t, usageDocs, usageKey("stock_income_events", 0), usageEntry{Cmd: "stock_income_events", N: 5, Deleted: true})
-	assertUsageEntry(t, usageDocs, usageKey("stock_convert", 7), usageEntry{Cmd: "stock_convert", UserID: 7, Username: "alice", N: 2, Deleted: true})
-	assertUsageEntry(t, usageDocs, usageKey("trade_stats_extra", 7), usageEntry{Cmd: "trade_stats_extra", UserID: 7, Username: "alice", N: 99})
-	assertUsageEntry(t, usageDocs, usageKey("stock_convert_extra", 7), usageEntry{Cmd: "stock_convert_extra", UserID: 7, Username: "alice", N: 99})
-	assertUsageEntry(t, usageDocs, usageKey("lolschedule_weekly", 10), usageEntry{Cmd: "lolschedule_weekly", UserID: 10, Username: "carol", N: 99})
-	assertUsageEntry(t, usageDocs, usageKey("stock_income_stocked", 11), usageEntry{Cmd: "stock_income_stocked", UserID: 11, Username: "dan", N: 99})
-
-	for _, key := range []string{
-		usageKey("gold_stats", 0),
-		usageKey("trade_topup", 0),
-		usageKey("trade_stats", 0),
-		usageKey("trade_income_stock", 7),
-		usageKey("stock_income_stock", 7),
-		usageKey("lolschedule_week", 8),
-	} {
-		if _, _, err := usageDocs.Get(ctx, key); !errors.Is(err, storage.ErrNotFound) {
-			t.Fatalf("renamed key %s should be deleted, got err=%v", key, err)
-		}
-	}
-
-	rec, ok, err := sys.Get(ctx, commandHistoryMigrationKey)
-	if err != nil || !ok {
-		t.Fatalf("command history marker ok=%v err=%v", ok, err)
-	}
-	if rec.Status != "done" || rec.Count != 11 {
-		t.Fatalf("command history marker = %+v, want done count 11", rec)
-	}
-
-	if err := InitStore(ctx, statsColl, systemColl); err != nil {
-		t.Fatalf("InitStore second run: %v", err)
-	}
-	assertUsageEntry(t, usageDocs, usageKey("gold_portfolio", 0), usageEntry{Cmd: "gold_portfolio", N: 7})
-	assertUsageEntry(t, usageDocs, usageKey("stock_portfolio", 0), usageEntry{Cmd: "stock_portfolio", N: 10})
-}
-
 func TestStatsViewsFilterDeletedLegacyRows(t *testing.T) {
 	ctx := context.Background()
 	provider := storage.NewMemoryProvider()
@@ -441,17 +275,6 @@ func TestStatsViewsFilterDeletedLegacyRows(t *testing.T) {
 	}
 	if got := renderStats(ctx, c, "user ghost"); got != "User @ghost not found." {
 		t.Fatalf("deleted-only user reply = %q", got)
-	}
-}
-
-func assertUsageEntry(t *testing.T, docs storage.DocStore[usageEntry], key string, want usageEntry) {
-	t.Helper()
-	got, _, err := docs.Get(context.Background(), key)
-	if err != nil {
-		t.Fatalf("usage entry %s: %v", key, err)
-	}
-	if got != want {
-		t.Fatalf("usage entry %s = %+v, want %+v", key, got, want)
 	}
 }
 

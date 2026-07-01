@@ -54,6 +54,10 @@ Startup migrations should be safe to run every boot:
 - use `internal/systemstate` records in the shared `system` collection for
   one-time migrations
 - write tests for migration idempotency and legacy data handling
+- after production data is verified migrated and the owner approves cleanup,
+  remove completed one-time migration runtime code and migration-only tests;
+  keep historical `system` marker records and legacy data unless the owner
+  explicitly asks to delete them
 
 ## Git
 
