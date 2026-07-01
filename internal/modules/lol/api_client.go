@@ -113,10 +113,11 @@ type schedulePage struct {
 	} `json:"data"`
 }
 
-// cacheRecord is the store value: fetch timestamp (ms-epoch) + events.
+// cacheRecord is the store value: fetch timestamp + events.
 type cacheRecord struct {
-	Ts     int64           `json:"ts" bson:"ts"` // ms-since-epoch when fetched
-	Events []ScheduleEvent `json:"events" bson:"events"`
+	Ts        int64           `json:"ts" bson:"ts"`                                   // ms-since-epoch when fetched
+	FetchedAt *time.Time      `json:"fetchedAt,omitempty" bson:"fetchedAt,omitempty"` // Mongo TTL anchor for matches:* cache docs
+	Events    []ScheduleEvent `json:"events" bson:"events"`
 }
 
 // CacheStore is the typed store for schedule cache records.
@@ -289,7 +290,8 @@ func cacheKey(from, to time.Time) string {
 // stale cache (within staleMaxAge), else propagates the error.
 func (c *Client) GetEventsCached(ctx context.Context, cache CacheStore, from, to time.Time) ([]ScheduleEvent, error) {
 	key := cacheKey(from, to)
-	now := time.Now().UTC().UnixMilli()
+	nowTime := time.Now().UTC()
+	now := nowTime.UnixMilli()
 
 	cached, _, cacheErr := cache.Get(ctx, key)
 	hasCached := cacheErr == nil
@@ -299,7 +301,7 @@ func (c *Client) GetEventsCached(ctx context.Context, cache CacheStore, from, to
 
 	events, fetchErr := c.fetchEventsInRange(ctx, from, to, 3)
 	if fetchErr == nil {
-		rec := cacheRecord{Ts: now, Events: events}
+		rec := cacheRecord{Ts: now, FetchedAt: &nowTime, Events: events}
 		if err := cache.Put(ctx, key, rec); err != nil {
 			log.Warn("lol_kv_put_fail", "err", err)
 		}
