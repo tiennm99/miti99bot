@@ -4,9 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
-	"strconv"
 	"strings"
-	"sync"
 
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
@@ -89,223 +87,54 @@ func parseSubargs(update *models.Update) string {
 }
 
 func viewTopCommands(ctx context.Context, c *counter) string {
-	keys, err := c.counts.List(ctx, countPrefix)
+	rows, err := c.store.TopCommands(ctx, topK)
 	if err != nil {
-		log.Error("stats: store list failed", "err", err)
+		log.Error("stats: top commands failed", "err", err)
 		return "Could not load stats. Try again later."
 	}
-	if len(keys) == 0 {
-		return "No command stats yet."
-	}
-	rows := fanOutCountRows(ctx, c, keys, func(k string) string {
-		return "/" + strings.TrimPrefix(k, countPrefix)
-	})
 	if len(rows) == 0 {
 		return "No command stats yet."
 	}
-	sortRows(rows)
 	return renderTopN("Command usage:", rows, topK)
 }
 
 func viewTopUsers(ctx context.Context, c *counter) string {
-	users := loadUserRowsWithID(ctx, c)
-	rows := make([]row, 0, len(users))
-	for _, u := range users {
-		if u.Username == "" {
-			continue
-		}
-		rows = append(rows, row{display: "@" + u.Username, n: u.N})
+	rows, err := c.store.TopUsers(ctx, topK)
+	if err != nil {
+		log.Error("stats: top users failed", "err", err)
+		return "Could not load stats. Try again later."
 	}
 	if len(rows) == 0 {
 		return "No user stats yet."
 	}
-	sortRows(rows)
 	return renderTopN("Top users:", rows, topK)
 }
 
 func viewUserCommands(ctx context.Context, c *counter, username string) string {
-	users := loadUserRowsWithID(ctx, c)
-	// Telegram allows username reuse after one user changes theirs, so two
-	// distinct user IDs may briefly share a username. First match wins; map
-	// iteration order is nondeterministic, so the choice is not stable across
-	// renders. Accepted limitation — disambiguating would need historical
-	// (timestamp, ID) data we don't store.
-	var (
-		foundID int64
-		ok      bool
-	)
-	for id, u := range users {
-		if u.Username == username {
-			foundID = id
-			ok = true
-			break
-		}
-	}
-	if !ok {
-		return fmt.Sprintf("User @%s not found.", username)
-	}
-
-	keys, err := c.counts.List(ctx, pairPrefix)
+	rows, found, err := c.store.CommandsByUser(ctx, username, topK)
 	if err != nil {
-		log.Error("stats: store list failed", "err", err)
+		log.Error("stats: commands by user failed", "username", username, "err", err)
 		return "Could not load stats. Try again later."
 	}
-	// Leading colon disambiguates: ":2" does not match a key ending in "12"
-	// because IDs are bare decimal integers with no internal punctuation.
-	suffix := ":" + strconv.FormatInt(foundID, 10)
-	var matching []string
-	for _, k := range keys {
-		if strings.HasSuffix(k, suffix) {
-			matching = append(matching, k)
-		}
+	if !found {
+		return fmt.Sprintf("User @%s not found.", username)
 	}
-	if len(matching) == 0 {
-		return fmt.Sprintf("No commands recorded for @%s.", username)
-	}
-
-	rows := fanOutCountRows(ctx, c, matching, func(k string) string {
-		// k looks like "pair:<cmd>:<id>" — drop the prefix and trailing :<id>.
-		rest := strings.TrimPrefix(k, pairPrefix)
-		idx := strings.LastIndexByte(rest, ':')
-		if idx < 0 {
-			return "/" + rest
-		}
-		return "/" + rest[:idx]
-	})
 	if len(rows) == 0 {
 		return fmt.Sprintf("No commands recorded for @%s.", username)
 	}
-	sortRows(rows)
 	return renderTopN(fmt.Sprintf("Commands by @%s:", username), rows, topK)
 }
 
 func viewCmdUsers(ctx context.Context, c *counter, cmd string) string {
-	prefix := pairPrefix + cmd + ":"
-	keys, err := c.counts.List(ctx, prefix)
+	rows, err := c.store.UsersByCommand(ctx, cmd, topK)
 	if err != nil {
-		log.Error("stats: store list failed", "err", err)
+		log.Error("stats: users by command failed", "command", cmd, "err", err)
 		return "Could not load stats. Try again later."
 	}
-	if len(keys) == 0 {
+	if len(rows) == 0 {
 		return fmt.Sprintf("Command /%s has no users yet.", cmd)
 	}
-
-	type result struct {
-		r  row
-		ok bool
-	}
-	results := make([]result, len(keys))
-	var wg sync.WaitGroup
-	for i, k := range keys {
-		wg.Add(1)
-		go func(i int, k string) {
-			defer wg.Done()
-			ce, _, err := c.counts.Get(ctx, k)
-			if err != nil {
-				log.Error("stats: store get failed", "key", k, "err", err)
-				return
-			}
-			idStr := strings.TrimPrefix(k, prefix)
-			id, err := strconv.ParseInt(idStr, 10, 64)
-			if err != nil {
-				return
-			}
-			ue, _, err := c.users.Get(ctx, userKey(id))
-			if err != nil || ue.Username == "" {
-				return
-			}
-			results[i] = result{r: row{display: "@" + ue.Username, n: ce.N}, ok: true}
-		}(i, k)
-	}
-	wg.Wait()
-
-	rows := make([]row, 0, len(results))
-	for _, r := range results {
-		if r.ok {
-			rows = append(rows, r.r)
-		}
-	}
-	if len(rows) == 0 {
-		return fmt.Sprintf("Command /%s has no named users yet.", cmd)
-	}
-	sortRows(rows)
 	return renderTopN(fmt.Sprintf("Users of /%s:", cmd), rows, topK)
-}
-
-// fanOutCountRows runs Get on each key in parallel. displayFor maps the
-// raw sort key to the human-readable label that gets rendered. Missing /
-// errored keys are skipped (logged at error level).
-func fanOutCountRows(ctx context.Context, c *counter, keys []string, displayFor func(k string) string) []row {
-	type result struct {
-		r  row
-		ok bool
-	}
-	results := make([]result, len(keys))
-	var wg sync.WaitGroup
-	for i, k := range keys {
-		wg.Add(1)
-		go func(i int, k string) {
-			defer wg.Done()
-			entry, _, err := c.counts.Get(ctx, k)
-			if err != nil {
-				log.Error("stats: store get failed during render", "key", k, "err", err)
-				return
-			}
-			results[i] = result{r: row{display: displayFor(k), n: entry.N}, ok: true}
-		}(i, k)
-	}
-	wg.Wait()
-
-	rows := make([]row, 0, len(results))
-	for _, r := range results {
-		if r.ok {
-			rows = append(rows, r.r)
-		}
-	}
-	return rows
-}
-
-// loadUserRowsWithID returns userID → userEntry for every user:* row. Used by
-// viewTopUsers (renders) and viewUserCommands (resolves a username to its ID).
-func loadUserRowsWithID(ctx context.Context, c *counter) map[int64]userEntry {
-	keys, err := c.users.List(ctx, userPrefix)
-	if err != nil {
-		log.Error("stats: store list failed", "err", err)
-		return nil
-	}
-	type pair struct {
-		id    int64
-		entry userEntry
-		ok    bool
-	}
-	results := make([]pair, len(keys))
-	var wg sync.WaitGroup
-	for i, k := range keys {
-		wg.Add(1)
-		go func(i int, k string) {
-			defer wg.Done()
-			idStr := strings.TrimPrefix(k, userPrefix)
-			id, err := strconv.ParseInt(idStr, 10, 64)
-			if err != nil {
-				return
-			}
-			entry, _, err := c.users.Get(ctx, k)
-			if err != nil {
-				log.Error("stats: store get failed", "key", k, "err", err)
-				return
-			}
-			results[i] = pair{id: id, entry: entry, ok: true}
-		}(i, k)
-	}
-	wg.Wait()
-
-	out := make(map[int64]userEntry, len(results))
-	for _, p := range results {
-		if p.ok {
-			out[p.id] = p.entry
-		}
-	}
-	return out
 }
 
 func sortRows(rows []row) {

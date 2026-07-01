@@ -11,16 +11,14 @@ import (
 
 	"github.com/tiennm99/miti99bot/internal/modules"
 	"github.com/tiennm99/miti99bot/internal/storage"
+	"github.com/tiennm99/miti99bot/internal/systemstate"
 	"github.com/tiennm99/miti99bot/internal/testutil"
 )
 
 // newStatsCounter returns a fresh counter backed by an in-memory collection.
 func newStatsCounter() *counter {
 	col := storage.NewMemoryProvider().Collection("stats")
-	return &counter{
-		counts: storage.Typed[countEntry](col),
-		users:  storage.Typed[userEntry](col),
-	}
+	return newCounter(col)
 }
 
 func TestNew_RegistersExpectedCommands(t *testing.T) {
@@ -57,99 +55,97 @@ func updateFrom(id int64, username string) *models.Update {
 
 func TestInc_PersistsCountInStore(t *testing.T) {
 	ctx := context.Background()
-	c := newStatsCounter()
+	provider := storage.NewMemoryProvider()
+	c := newCounter(provider.Collection("stats"))
+	docs := storage.Typed[usageEntry](provider.Collection("stats"))
 
 	c.Inc(ctx, "ping", nil)
 	c.Inc(ctx, "ping", nil)
 	c.Inc(ctx, "wordle", nil)
 
-	entry, _, err := c.counts.Get(ctx, countKey("ping"))
+	entry, _, err := docs.Get(ctx, usageKey("ping", 0))
 	if err != nil {
 		t.Fatalf("Get ping: %v", err)
 	}
-	if entry.N != 2 {
-		t.Errorf("ping count = %d, want 2", entry.N)
+	if entry.Cmd != "ping" || entry.N != 2 || entry.UserID != 0 || entry.Username != "" {
+		t.Errorf("ping entry = %+v, want anonymous ping count 2", entry)
 	}
 
-	entry2, _, err := c.counts.Get(ctx, countKey("wordle"))
+	entry2, _, err := docs.Get(ctx, usageKey("wordle", 0))
 	if err != nil {
 		t.Fatalf("Get wordle: %v", err)
 	}
-	if entry2.N != 1 {
-		t.Errorf("wordle count = %d, want 1", entry2.N)
+	if entry2.Cmd != "wordle" || entry2.N != 1 {
+		t.Errorf("wordle entry = %+v, want count 1", entry2)
 	}
 }
 
-func TestInc_WithUsernameWritesAllThreeKeys(t *testing.T) {
+func TestInc_WithUsernameWritesPairEntry(t *testing.T) {
 	ctx := context.Background()
-	c := newStatsCounter()
+	provider := storage.NewMemoryProvider()
+	c := newCounter(provider.Collection("stats"))
+	docs := storage.Typed[usageEntry](provider.Collection("stats"))
 
 	c.Inc(ctx, "ping", updateFrom(42, "alice"))
 	c.Inc(ctx, "ping", updateFrom(42, "alice"))
 
-	ce, _, err := c.counts.Get(ctx, countKey("ping"))
+	entry, _, err := docs.Get(ctx, usageKey("ping", 42))
 	if err != nil {
-		t.Fatalf("count:ping: %v", err)
+		t.Fatalf("ping:42: %v", err)
 	}
-	if ce.N != 2 {
-		t.Errorf("count:ping N = %d, want 2", ce.N)
+	if entry.Cmd != "ping" || entry.UserID != 42 || entry.Username != "alice" || entry.N != 2 {
+		t.Errorf("ping:42 = %+v, want alice pair count 2", entry)
 	}
 
-	ue, _, err := c.users.Get(ctx, userKey(42))
-	if err != nil {
-		t.Fatalf("user:42: %v", err)
-	}
-	if ue.N != 2 || ue.Username != "alice" {
-		t.Errorf("user:42 = {%q, %d}, want {alice, 2}", ue.Username, ue.N)
-	}
-
-	pe, _, err := c.counts.Get(ctx, pairKey("ping", 42))
-	if err != nil {
-		t.Fatalf("pair:ping:42: %v", err)
-	}
-	if pe.N != 2 {
-		t.Errorf("pair:ping:42 N = %d, want 2", pe.N)
+	if _, _, err := docs.Get(ctx, usageKey("ping", 0)); !errors.Is(err, storage.ErrNotFound) {
+		t.Errorf("named user should not create anonymous ping bucket, got err=%v", err)
 	}
 }
 
 func TestInc_EmptyUsernameSkipsUserAndPair(t *testing.T) {
 	ctx := context.Background()
-	c := newStatsCounter()
+	provider := storage.NewMemoryProvider()
+	c := newCounter(provider.Collection("stats"))
+	docs := storage.Typed[usageEntry](provider.Collection("stats"))
 
 	c.Inc(ctx, "ping", updateFrom(42, ""))
 
-	ce, _, err := c.counts.Get(ctx, countKey("ping"))
+	entry, _, err := docs.Get(ctx, usageKey("ping", 0))
 	if err != nil {
-		t.Fatalf("count:ping: %v", err)
+		t.Fatalf("ping: %v", err)
 	}
-	if ce.N != 1 {
-		t.Errorf("count:ping N = %d, want 1", ce.N)
+	if entry.N != 1 || entry.UserID != 0 || entry.Username != "" {
+		t.Errorf("anonymous ping entry = %+v, want count 1 without user", entry)
 	}
 
-	if _, _, err := c.users.Get(ctx, userKey(42)); !errors.Is(err, storage.ErrNotFound) {
-		t.Errorf("user:42 should be absent, got err=%v", err)
-	}
-	if _, _, err := c.counts.Get(ctx, pairKey("ping", 42)); !errors.Is(err, storage.ErrNotFound) {
-		t.Errorf("pair:ping:42 should be absent, got err=%v", err)
+	if _, _, err := docs.Get(ctx, usageKey("ping", 42)); !errors.Is(err, storage.ErrNotFound) {
+		t.Errorf("ping:42 should be absent, got err=%v", err)
 	}
 }
 
 func TestInc_RefreshesUsernameOnRename(t *testing.T) {
 	ctx := context.Background()
-	c := newStatsCounter()
+	provider := storage.NewMemoryProvider()
+	c := newCounter(provider.Collection("stats"))
+	docs := storage.Typed[usageEntry](provider.Collection("stats"))
 
 	c.Inc(ctx, "ping", updateFrom(42, "alice"))
+	c.Inc(ctx, "wordle", updateFrom(42, "alice"))
 	c.Inc(ctx, "ping", updateFrom(42, "alice2"))
 
-	ue, _, err := c.users.Get(ctx, userKey(42))
+	ping, _, err := docs.Get(ctx, usageKey("ping", 42))
 	if err != nil {
-		t.Fatalf("user:42: %v", err)
+		t.Fatalf("ping:42: %v", err)
 	}
-	if ue.Username != "alice2" {
-		t.Errorf("user:42 Username = %q, want %q", ue.Username, "alice2")
+	if ping.Username != "alice2" || ping.N != 2 {
+		t.Errorf("ping:42 = %+v, want alice2 count 2", ping)
 	}
-	if ue.N != 2 {
-		t.Errorf("user:42 N = %d, want 2", ue.N)
+	wordle, _, err := docs.Get(ctx, usageKey("wordle", 42))
+	if err != nil {
+		t.Fatalf("wordle:42: %v", err)
+	}
+	if wordle.Username != "alice2" || wordle.N != 1 {
+		t.Errorf("wordle:42 = %+v, want refreshed alice2 count 1", wordle)
 	}
 }
 
@@ -232,13 +228,98 @@ func TestCommandHook_FiredThroughModulesBuild(t *testing.T) {
 	reg.RunCommandHooks(ctx, "ping", nil)
 
 	// Verify by reading back via typed store (the same collection Build gave to stats).
-	statsStore := storage.Typed[countEntry](provider.Collection("stats"))
-	entry, _, err := statsStore.Get(ctx, countKey("ping"))
+	statsStore := storage.Typed[usageEntry](provider.Collection("stats"))
+	entry, _, err := statsStore.Get(ctx, usageKey("ping", 0))
 	if err != nil {
-		t.Fatalf("expected count:ping in store after hook: %v", err)
+		t.Fatalf("expected ping in store after hook: %v", err)
 	}
 	if entry.N != 1 {
-		t.Errorf("count:ping = %d, want 1", entry.N)
+		t.Errorf("ping = %d, want 1", entry.N)
+	}
+}
+
+func TestInitStore_MigratesLegacyStatsOnceAndDeletesOldKeys(t *testing.T) {
+	ctx := context.Background()
+	provider := storage.NewMemoryProvider()
+	statsColl := provider.Collection("stats")
+	systemColl := provider.Collection(systemstate.CollectionName)
+	legacyCounts := storage.Typed[legacyCountEntry](statsColl)
+	legacyUsers := storage.Typed[legacyUserEntry](statsColl)
+
+	if err := legacyCounts.Put(ctx, legacyCountPrefix+"ping", legacyCountEntry{N: 6}); err != nil {
+		t.Fatalf("legacy count ping: %v", err)
+	}
+	if err := legacyCounts.Put(ctx, legacyCountPrefix+"wordle", legacyCountEntry{N: 2}); err != nil {
+		t.Fatalf("legacy count wordle: %v", err)
+	}
+	if err := legacyUsers.Put(ctx, legacyUserPrefix+"1", legacyUserEntry{Username: "alice", N: 4}); err != nil {
+		t.Fatalf("legacy user alice: %v", err)
+	}
+	if err := legacyUsers.Put(ctx, legacyUserPrefix+"2", legacyUserEntry{Username: "bob", N: 3}); err != nil {
+		t.Fatalf("legacy user bob: %v", err)
+	}
+	if err := legacyCounts.Put(ctx, legacyPairPrefix+"ping:1", legacyCountEntry{N: 3}); err != nil {
+		t.Fatalf("legacy pair ping alice: %v", err)
+	}
+	if err := legacyCounts.Put(ctx, legacyPairPrefix+"ping:2", legacyCountEntry{N: 2}); err != nil {
+		t.Fatalf("legacy pair ping bob: %v", err)
+	}
+	if err := legacyCounts.Put(ctx, legacyPairPrefix+"wordle:2", legacyCountEntry{N: 2}); err != nil {
+		t.Fatalf("legacy pair wordle bob: %v", err)
+	}
+
+	if err := InitStore(ctx, statsColl, systemColl); err != nil {
+		t.Fatalf("InitStore: %v", err)
+	}
+
+	usageDocs := storage.Typed[usageEntry](statsColl)
+	assertUsageEntry(t, usageDocs, usageKey("ping", 1), usageEntry{Cmd: "ping", UserID: 1, Username: "alice", N: 3})
+	assertUsageEntry(t, usageDocs, usageKey("ping", 2), usageEntry{Cmd: "ping", UserID: 2, Username: "bob", N: 2})
+	assertUsageEntry(t, usageDocs, usageKey("wordle", 2), usageEntry{Cmd: "wordle", UserID: 2, Username: "bob", N: 2})
+	assertUsageEntry(t, usageDocs, usageKey("ping", 0), usageEntry{Cmd: "ping", N: 1})
+
+	for _, key := range []string{
+		legacyCountPrefix + "ping",
+		legacyCountPrefix + "wordle",
+		legacyPairPrefix + "ping:1",
+		legacyPairPrefix + "ping:2",
+		legacyPairPrefix + "wordle:2",
+		legacyUserPrefix + "1",
+		legacyUserPrefix + "2",
+	} {
+		if _, _, err := legacyCounts.Get(ctx, key); !errors.Is(err, storage.ErrNotFound) {
+			t.Fatalf("legacy key %s should be deleted, got err=%v", key, err)
+		}
+	}
+
+	sys := systemstate.New(systemColl)
+	rec, ok, err := sys.Get(ctx, usageMigrationKey)
+	if err != nil || !ok {
+		t.Fatalf("migration marker ok=%v err=%v", ok, err)
+	}
+	if rec.Status != "done" || rec.Count != 4 {
+		t.Fatalf("migration marker = %+v, want done count 4", rec)
+	}
+
+	if err := legacyCounts.Put(ctx, legacyCountPrefix+"coin", legacyCountEntry{N: 99}); err != nil {
+		t.Fatalf("legacy count after marker: %v", err)
+	}
+	if err := InitStore(ctx, statsColl, systemColl); err != nil {
+		t.Fatalf("InitStore second run: %v", err)
+	}
+	if _, _, err := usageDocs.Get(ctx, usageKey("coin", 0)); !errors.Is(err, storage.ErrNotFound) {
+		t.Fatalf("second InitStore should skip migration after marker, got err=%v", err)
+	}
+}
+
+func assertUsageEntry(t *testing.T, docs storage.DocStore[usageEntry], key string, want usageEntry) {
+	t.Helper()
+	got, _, err := docs.Get(context.Background(), key)
+	if err != nil {
+		t.Fatalf("usage entry %s: %v", key, err)
+	}
+	if got != want {
+		t.Fatalf("usage entry %s = %+v, want %+v", key, got, want)
 	}
 }
 

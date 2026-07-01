@@ -20,7 +20,7 @@ test: ## Unit tests (no emulator required)
 MONGO_PORT ?= 27017
 test-mongo: mongo-local ## Run MongoDB tests against a local Mongo container
 	MONGODB_TEST_URL=mongodb://127.0.0.1:$(MONGO_PORT) LOG_LEVEL=error \
-		go test -race -count=1 ./internal/storage/...
+		go test -race -count=1 ./internal/storage/... ./internal/modules/stats/...
 
 # ---- Lint / Vet ------------------------------------------------------------
 

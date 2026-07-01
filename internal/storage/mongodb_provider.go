@@ -27,3 +27,14 @@ func (p *MongoProvider) Collection(moduleName string) Collection {
 	}
 	return mongoCollection{coll: p.db.Collection(moduleName), module: moduleName}
 }
+
+// MongoCollection returns the native MongoDB collection behind c when the
+// active backend is MongoDB. Modules with query-shaped data can opt into Mongo
+// operators while still keeping the memory backend for tests/local runs.
+func MongoCollection(c Collection) (*mongo.Collection, bool) {
+	h, ok := c.(mongoCollection)
+	if !ok {
+		return nil, false
+	}
+	return h.coll, true
+}
