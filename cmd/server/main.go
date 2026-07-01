@@ -98,6 +98,9 @@ func main() {
 	if err := stats.InitStore(rootCtx, provider.Collection("stats"), provider.Collection(systemstate.CollectionName)); err != nil {
 		log.Fatal("stats storage init failed", "err", err)
 	}
+	if err := lol.InitStore(rootCtx, provider.Collection(lol.CollectionName)); err != nil {
+		log.Fatal("lol storage init failed", "err", err)
+	}
 
 	b, err := telegram.NewBot(cfg.TelegramBotToken)
 	if err != nil {
