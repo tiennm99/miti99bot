@@ -210,11 +210,11 @@ func TestRunDailyPush_ForwardsMessageThreadID(t *testing.T) {
 	}
 }
 
-// TestRunDailyPush_IdempotentPerDate locks in the double-fire guard: invoking
-// the handler twice on the same UTC date sends each subscriber exactly one
-// digest. Defends against rolling-deploy overlap and operator
+// TestRunDailyPush_IdempotentPerICTDay locks in the double-fire guard: invoking
+// the handler twice on the same ICT schedule day sends each subscriber exactly
+// one digest. Defends against rolling-deploy overlap and operator
 // misconfiguration (all double-fire windows the daily push must survive).
-func TestRunDailyPush_IdempotentPerDate(t *testing.T) {
+func TestRunDailyPush_IdempotentPerICTDay(t *testing.T) {
 	s := newTestState(t)
 	seedFreshCache(t, s.cache, nil)
 
@@ -232,8 +232,37 @@ func TestRunDailyPush_IdempotentPerDate(t *testing.T) {
 		}
 	}
 	if len(sender.calls) != len(chatIDs) {
-		t.Errorf("two same-date pushes sent %d messages, want %d (one per subscriber)",
+		t.Errorf("two same-ICT-day pushes sent %d messages, want %d (one per subscriber)",
 			len(sender.calls), len(chatIDs))
+	}
+}
+
+func TestRunDailyPush_ClaimsICTDayAtMidnight(t *testing.T) {
+	s := newTestState(t)
+	s.nowFn = func() time.Time {
+		return time.Date(2026, 5, 9, 17, 0, 0, 0, time.UTC) // 2026-05-10 00:00 ICT
+	}
+	seedFreshCache(t, s.cache, nil)
+	if _, err := addSubscriber(context.Background(), s.subscribers, 100, 0); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.pushDate.Put(context.Background(), lastPushDateKey, lastPushDoc{Date: "2026-05-09"}); err != nil {
+		t.Fatal(err)
+	}
+
+	sender := &fakeSender{}
+	if err := runDailyPush(context.Background(), s, sender); err != nil {
+		t.Fatal(err)
+	}
+	if len(sender.calls) != 1 {
+		t.Fatalf("calls = %d, want 1 midnight ICT push", len(sender.calls))
+	}
+	doc, _, err := s.pushDate.Get(context.Background(), lastPushDateKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if doc.Date != "2026-05-10" {
+		t.Fatalf("last push date = %q, want ICT day 2026-05-10", doc.Date)
 	}
 }
 

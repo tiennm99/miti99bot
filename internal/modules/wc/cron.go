@@ -51,11 +51,11 @@ func (s *state) dailyPushHandler(ctx context.Context, deps modules.Deps) error {
 	return runDailyPush(ctx, s, deps.Bot)
 }
 
-func claimDailyPush(ctx context.Context, store PushDateStore, today string) (bool, error) {
+func claimDailyPush(ctx context.Context, store PushDateStore, pushDay string) (bool, error) {
 	current, version, err := store.Get(ctx, lastPushDateKey)
 	switch {
 	case err == nil:
-		if current.Date == today {
+		if current.Date == pushDay {
 			return false, nil
 		}
 	case errors.Is(err, storage.ErrNotFound):
@@ -64,7 +64,7 @@ func claimDailyPush(ctx context.Context, store PushDateStore, today string) (boo
 		return false, err
 	}
 
-	if err := store.PutVersioned(ctx, lastPushDateKey, version, lastPushDoc{Date: today}); err != nil {
+	if err := store.PutVersioned(ctx, lastPushDateKey, version, lastPushDoc{Date: pushDay}); err != nil {
 		if errors.Is(err, storage.ErrConflict) {
 			return false, nil
 		}
@@ -91,13 +91,13 @@ func runDailyPush(ctx context.Context, s *state, sender messageSender) error {
 	}
 	text := RenderToday(matches, from)
 
-	today := s.now().UTC().Format("2006-01-02")
-	won, err := claimDailyPush(ctx, s.pushDate, today)
+	pushDay := ictDayKey(from)
+	won, err := claimDailyPush(ctx, s.pushDate, pushDay)
 	if err != nil {
 		return fmt.Errorf("wc daily push: claim date: %w", err)
 	}
 	if !won {
-		log.Info("wc daily push: already pushed today, skipping", "date", today)
+		log.Info("wc daily push: already pushed today, skipping", "date", pushDay)
 		return nil
 	}
 
