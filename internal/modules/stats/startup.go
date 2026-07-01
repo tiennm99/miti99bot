@@ -14,7 +14,14 @@ import (
 	"github.com/tiennm99/miti99bot/internal/systemstate"
 )
 
-const miscCommandRenameMigrationName = "stats-command-renames-misc-20260701"
+const (
+	miscCommandRenameMigrationName = "stats-command-renames-misc-20260701"
+
+	statsCommandUsersIndexName      = "stats_cmd_n_user"
+	statsUserCommandsIndexName      = "stats_uid_n_cmd"
+	statsUsernameLookupIndexName    = "stats_user_uid"
+	statsLegacyUserUpdatedIndexName = "stats_user_updated_at"
+)
 
 type commandRename struct {
 	old string
@@ -32,6 +39,9 @@ var miscCommandRenames = []commandRename{
 func InitStore(ctx context.Context, statsColl, systemColl storage.Collection) error {
 	if mongoColl, ok := storage.MongoCollection(statsColl); ok {
 		if err := ensureUsageIndexes(ctx, mongoColl); err != nil {
+			return err
+		}
+		if err := dropIndexIfExists(ctx, mongoColl, statsLegacyUserUpdatedIndexName); err != nil {
 			return err
 		}
 	}
@@ -130,19 +140,47 @@ func ensureUsageIndexes(ctx context.Context, coll *mongo.Collection) error {
 	models := []mongo.IndexModel{
 		{
 			Keys:    bson.D{bsonField("cmd", 1), bsonField("n", -1), bsonField("user", 1)},
-			Options: options.Index().SetName("stats_cmd_n_user"),
+			Options: options.Index().SetName(statsCommandUsersIndexName),
 		},
 		{
 			Keys:    bson.D{bsonField("uid", 1), bsonField("n", -1), bsonField("cmd", 1)},
-			Options: options.Index().SetName("stats_uid_n_cmd"),
+			Options: options.Index().SetName(statsUserCommandsIndexName),
 		},
 		{
-			Keys:    bson.D{bsonField("user", 1), bsonField("updatedAt", -1)},
-			Options: options.Index().SetName("stats_user_updated_at"),
+			Keys:    bson.D{bsonField("user", 1), bsonField("uid", 1)},
+			Options: options.Index().SetName(statsUsernameLookupIndexName),
 		},
 	}
 	if _, err := coll.Indexes().CreateMany(ctx, models); err != nil {
 		return fmt.Errorf("stats indexes: %w", err)
+	}
+	return nil
+}
+
+func dropIndexIfExists(ctx context.Context, coll *mongo.Collection, name string) error {
+	cur, err := coll.Indexes().List(ctx)
+	if err != nil {
+		return fmt.Errorf("stats list indexes before drop %s: %w", name, err)
+	}
+	defer func() { _ = cur.Close(ctx) }()
+
+	for cur.Next(ctx) {
+		var doc struct {
+			Name string `bson:"name"`
+		}
+		if err := cur.Decode(&doc); err != nil {
+			return fmt.Errorf("stats decode index before drop %s: %w", name, err)
+		}
+		if doc.Name != name {
+			continue
+		}
+		if err := coll.Indexes().DropOne(ctx, name); err != nil {
+			return fmt.Errorf("stats drop legacy index %s: %w", name, err)
+		}
+		return nil
+	}
+	if err := cur.Err(); err != nil {
+		return fmt.Errorf("stats index cursor before drop %s: %w", name, err)
 	}
 	return nil
 }
