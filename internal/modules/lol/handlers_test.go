@@ -223,3 +223,55 @@ func TestHandleSchedule_UpstreamFailureGivesFriendlyError(t *testing.T) {
 		t.Errorf("expected friendly fetch-error reply; got %q", got)
 	}
 }
+
+func TestHandleSchedule_CustomDateDoesNotUseFallbackCache(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer upstream.Close()
+
+	rb := testutil.NewRecordingBot(t)
+	col := storage.NewMemoryProvider().Collection("lol")
+	cache := storage.Typed[cacheRecord](col)
+	s := &state{
+		subscribers: storage.Typed[subscribersDoc](col),
+		pushDate:    storage.Typed[lastPushDoc](col),
+		cache:       cache,
+		client:      &Client{HTTP: upstream.Client(), URL: upstream.URL},
+		nowFn:       func() time.Time { return time.UnixMilli(fakeNowMs).UTC() },
+	}
+	from := ictDayStartOf(s.now())
+	to := addDays(from, 1)
+	if err := cache.Put(context.Background(), cacheKey(from, to), cacheRecord{
+		Ts: time.Now().UTC().UnixMilli(),
+		Events: []ScheduleEvent{{
+			StartTime: "2026-05-09T05:00:00Z",
+			State:     "unstarted",
+			League:    League{Name: "LCK", Slug: "lck"},
+			Match: Match{
+				Teams:    []Team{{Code: "T1"}, {Code: "GEN"}},
+				Strategy: Strategy{Count: 3},
+			},
+		}},
+	}); err != nil {
+		t.Fatalf("seed cache: %v", err)
+	}
+
+	cmd := modules.Command{Name: "lol", Visibility: modules.VisibilityPublic, Description: "x", Handler: s.handleSchedule}
+	reg := &modules.Registry{
+		Modules:     []modules.Module{{Name: "lol", Commands: []modules.Command{cmd}}},
+		AllCommands: map[string]modules.Command{cmd.Name: cmd},
+	}
+	modules.Install(rb.Bot, reg, modules.Auth{})
+
+	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(1, "/lol"))
+	if got := rb.LastSent().Text(); !strings.Contains(got, "T1 vs GEN") {
+		t.Fatalf("default /lol should use stale fallback; got %q", got)
+	}
+
+	rb.Reset()
+	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(1, "/lol 09-05-2026"))
+	if got := rb.LastSent().Text(); !strings.Contains(got, "Could not fetch") {
+		t.Fatalf("custom-date /lol should not use stale fallback; got %q", got)
+	}
+}

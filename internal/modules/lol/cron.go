@@ -183,7 +183,7 @@ func runDailyPush(ctx context.Context, s *state, sender messageSender) error {
 
 	from := ictDayStartOf(s.now())
 	to := addDays(from, 1)
-	events, err := s.client.GetEventsCached(ctx, s.cache, from, to)
+	events, err := s.client.GetEventsWithFallback(ctx, s.cache, from, to)
 	if err != nil {
 		return fmt.Errorf("lol daily push: fetch matches: %w", err)
 	}

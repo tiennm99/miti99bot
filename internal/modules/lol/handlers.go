@@ -2,6 +2,7 @@ package lol
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"time"
 
@@ -46,7 +47,8 @@ func (s *state) handleSchedule(ctx context.Context, b *bot.Bot, update *models.U
 	if !parsed.OK {
 		return chathelper.Reply(ctx, b, msg, parsed.Error)
 	}
-	return s.replyForRange(ctx, b, msg, parsed.Date, addDays(parsed.Date, 1), false)
+	useFallback := strings.TrimSpace(arg) == ""
+	return s.replyForRange(ctx, b, msg, parsed.Date, addDays(parsed.Date, 1), false, useFallback)
 }
 
 // handleWeek is /lol_this_week — the current ICT calendar week
@@ -57,13 +59,21 @@ func (s *state) handleWeek(ctx context.Context, b *bot.Bot, update *models.Updat
 		return nil
 	}
 	from := ictWeekStartOf(s.now())
-	return s.replyForRange(ctx, b, msg, from, addDays(from, 7), true)
+	return s.replyForRange(ctx, b, msg, from, addDays(from, 7), true, true)
 }
 
 // replyForRange fetches + filters + renders a date window. week=true uses
 // RenderWeek; false uses RenderToday.
-func (s *state) replyForRange(ctx context.Context, b *bot.Bot, msg *models.Message, from, to time.Time, week bool) error {
-	events, err := s.client.GetEventsCached(ctx, s.cache, from, to)
+func (s *state) replyForRange(ctx context.Context, b *bot.Bot, msg *models.Message, from, to time.Time, week, useFallback bool) error {
+	var (
+		events []ScheduleEvent
+		err    error
+	)
+	if useFallback {
+		events, err = s.client.GetEventsWithFallback(ctx, s.cache, from, to)
+	} else {
+		events, err = s.client.GetEventsLive(ctx, from, to)
+	}
 	if err != nil {
 		log.Error("lol_fetch_fail", "err", err, "from", from, "to", to)
 		hint := "Could not fetch matches. Try again later."
