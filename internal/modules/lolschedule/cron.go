@@ -85,10 +85,10 @@ const dailyPushCronName = "lolschedule_daily_push"
 // expression is UTC; 01:00 UTC == 08:00 ICT.
 const dailyPushSchedule = "0 1 * * *"
 
-// lastPushDateKey records the UTC date (YYYY-MM-DD) of the most recent
+// lastPushDateKey records the ICT date (YYYY-MM-DD) of the most recent
 // completed daily push. The handler claims this key before fanning out and
-// no-ops if it is already today's date, making the push idempotent per UTC
-// date. This defends against double-fire windows from rolling deploys that
+// no-ops if it is already today's schedule day, making the push idempotent per
+// ICT date. This defends against double-fire windows from rolling deploys that
 // briefly run two containers or operator misconfiguration.
 const lastPushDateKey = "daily_push:last_date"
 
@@ -135,18 +135,19 @@ func (s *state) dailyPushHandler(ctx context.Context, deps modules.Deps) error {
 	return runDailyPush(ctx, s, deps.Bot)
 }
 
-// claimDailyPush atomically records that today's UTC push is happening and
-// reports whether THIS caller won the claim. It is the idempotency primitive
-// for the daily push: a winner proceeds to fan out; a loser (another trigger
-// already claimed today) returns false and sends nothing.
+// claimDailyPush atomically records that today's ICT schedule-day push is
+// happening and reports whether THIS caller won the claim. It is the
+// idempotency primitive for the daily push: a winner proceeds to fan out; a
+// loser (another trigger already claimed today) returns false and sends
+// nothing.
 //
 // The claim uses version-based optimistic write (PutVersioned) on
 // lastPushDateKey so two simultaneous triggers cannot both win.
-func claimDailyPush(ctx context.Context, store PushDateStore, today string) (bool, error) {
+func claimDailyPush(ctx context.Context, store PushDateStore, pushDay string) (bool, error) {
 	current, version, err := store.Get(ctx, lastPushDateKey)
 	switch {
 	case err == nil:
-		if current.Date == today {
+		if current.Date == pushDay {
 			return false, nil // already pushed today
 		}
 	case errors.Is(err, storage.ErrNotFound):
@@ -155,7 +156,7 @@ func claimDailyPush(ctx context.Context, store PushDateStore, today string) (boo
 		return false, err
 	}
 
-	if err := store.PutVersioned(ctx, lastPushDateKey, version, lastPushDoc{Date: today}); err != nil {
+	if err := store.PutVersioned(ctx, lastPushDateKey, version, lastPushDoc{Date: pushDay}); err != nil {
 		if errors.Is(err, storage.ErrConflict) {
 			return false, nil // another trigger claimed today first
 		}
@@ -191,16 +192,16 @@ func runDailyPush(ctx context.Context, s *state, sender messageSender) error {
 	disableNotification := len(filtered) == 0
 
 	// Idempotency gate: claim today's push before sending. A lost claim means
-	// another trigger already pushed (or is pushing) for this UTC date, so we
-	// send nothing. Placed after the fetch so a transient fetch failure does
-	// not consume the day's claim.
-	today := s.now().UTC().Format("2006-01-02")
-	won, err := claimDailyPush(ctx, s.pushDate, today)
+	// another trigger already pushed (or is pushing) for this ICT schedule day,
+	// so we send nothing. Placed after the fetch so a transient fetch failure
+	// does not consume the day's claim.
+	pushDay := ictDayKey(from)
+	won, err := claimDailyPush(ctx, s.pushDate, pushDay)
 	if err != nil {
 		return fmt.Errorf("lolschedule daily push: claim date: %w", err)
 	}
 	if !won {
-		log.Info("lolschedule daily push: already pushed today, skipping", "date", today)
+		log.Info("lolschedule daily push: already pushed today, skipping", "date", pushDay)
 		return nil
 	}
 

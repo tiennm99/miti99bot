@@ -86,6 +86,35 @@ func TestRunDailyPush_SendsAndIsIdempotent(t *testing.T) {
 	}
 }
 
+func TestRunDailyPush_ClaimsICTDayAtMidnight(t *testing.T) {
+	s := newTestState()
+	s.nowFn = func() time.Time {
+		return time.Date(2026, 6, 12, 17, 0, 0, 0, time.UTC) // 2026-06-13 00:00 ICT
+	}
+	seedFreshCache(t, s.cache, []Match{mkMatch("TIMED", "MEX", "RSA", "2026-06-12T18:00:00Z")})
+	if _, err := addSubscriber(context.Background(), s.subscribers, 100, 0); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.pushDate.Put(context.Background(), lastPushDateKey, lastPushDoc{Date: "2026-06-12"}); err != nil {
+		t.Fatal(err)
+	}
+
+	sender := &fakeSender{}
+	if err := runDailyPush(context.Background(), s, sender); err != nil {
+		t.Fatal(err)
+	}
+	if len(sender.calls) != 1 {
+		t.Fatalf("calls = %d, want 1 midnight ICT push", len(sender.calls))
+	}
+	doc, _, err := s.pushDate.Get(context.Background(), lastPushDateKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if doc.Date != "2026-06-13" {
+		t.Fatalf("last push date = %q, want ICT day 2026-06-13", doc.Date)
+	}
+}
+
 func TestRunDailyPush_PrunesDeadChat(t *testing.T) {
 	s := newTestState()
 	seedFreshCache(t, s.cache, nil)
