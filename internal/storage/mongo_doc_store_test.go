@@ -162,7 +162,7 @@ func TestMongoDocStore_PutVersionedStaleConflict(t *testing.T) {
 }
 
 // wrappedScalar / wrappedArray prove non-object values become named root fields
-// (the lolschedule pattern) rather than an envelope or fallback.
+// (the lol pattern) rather than an envelope or fallback.
 type wrappedScalar struct {
 	Date string `json:"date" bson:"date"`
 }
@@ -176,20 +176,20 @@ func TestMongoDocStore_WrappedScalarAndArray(t *testing.T) {
 	ctx := context.Background()
 	p := NewMongoProvider(db)
 
-	scalar := Typed[wrappedScalar](p.Collection("lolschedule"))
+	scalar := Typed[wrappedScalar](p.Collection("lol"))
 	if err := scalar.Put(ctx, "last_push_date", wrappedScalar{Date: "2026-06-28"}); err != nil {
 		t.Fatalf("scalar Put: %v", err)
 	}
-	doc := rawDoc(t, db.Collection("lolschedule"), "last_push_date")
+	doc := rawDoc(t, db.Collection("lol"), "last_push_date")
 	if doc["date"] != "2026-06-28" {
 		t.Errorf("scalar root field date = %v", doc["date"])
 	}
 
-	arr := Typed[wrappedArray](p.Collection("lolschedule"))
+	arr := Typed[wrappedArray](p.Collection("lol"))
 	if err := arr.Put(ctx, "subscribers", wrappedArray{Subscribers: []int{1, 2, 3}}); err != nil {
 		t.Fatalf("array Put: %v", err)
 	}
-	doc = rawDoc(t, db.Collection("lolschedule"), "subscribers")
+	doc = rawDoc(t, db.Collection("lol"), "subscribers")
 	if _, ok := doc["subscribers"].(bson.A); !ok {
 		t.Errorf("array root field subscribers = %T, want bson.A", doc["subscribers"])
 	}

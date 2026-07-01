@@ -11,7 +11,7 @@ Atlas via long polling and an in-process cron scheduler.
 | `misc` | `/ping`, `/mstats`, `/trongtruonghop` disclaimer |
 | `wordle` | Daily Wordle game |
 | `loldle` | League-of-Legends "guess the champion" |
-| `lolschedule` | Pro-match schedule + daily push |
+| `lol` | Pro-match schedule + daily push |
 | `wc` | World Cup schedule + silent daily push |
 | `stock` | VN-stocks paper trading |
 | `gold` | Gold paper trading (opt-in; primary VNAppMob SJC buy/sell VND/luong, fallback spot XAU) |

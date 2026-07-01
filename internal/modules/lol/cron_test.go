@@ -1,4 +1,4 @@
-package lolschedule
+package lol
 
 import (
 	"context"
@@ -60,7 +60,7 @@ func fixedNow() time.Time {
 // collection, matching what the factory wires in production.
 func newTestStore(t *testing.T) (SubscriberStore, PushDateStore, CacheStore) {
 	t.Helper()
-	col := storage.NewMemoryProvider().Collection("lolschedule")
+	col := storage.NewMemoryProvider().Collection("lol")
 	return storage.Typed[subscribersDoc](col),
 		storage.Typed[lastPushDoc](col),
 		storage.Typed[cacheRecord](col)
@@ -434,7 +434,7 @@ func TestClassifyTerminal(t *testing.T) {
 
 func TestDailyPushHandler_NilBot_ReturnsError(t *testing.T) {
 	s := newTestState(t)
-	deps := modules.Deps{Store: storage.NewMemoryProvider().Collection("lolschedule")}
+	deps := modules.Deps{Store: storage.NewMemoryProvider().Collection("lol")}
 	err := s.dailyPushHandler(context.Background(), deps)
 	if err == nil {
 		t.Fatal("expected error when deps.Bot is nil, got nil")

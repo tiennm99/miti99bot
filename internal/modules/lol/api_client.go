@@ -1,4 +1,4 @@
-// Package lolschedule serves LoL esports match schedules via lolesports.com's
+// Package lol serves LoL esports match schedules via lolesports.com's
 // persisted API plus a daily push to subscribers.
 //
 // Endpoint: https://esports-api.lolesports.com/persisted/gw/getSchedule
@@ -8,7 +8,7 @@
 //
 // Cache strategy: KV-backed cacheRecord with a 120s fresh window and a
 // 60-minute stale fallback (stale-while-error).
-package lolschedule
+package lol
 
 import (
 	"context"
@@ -153,7 +153,7 @@ func (c *Client) baseURL() string {
 func (c *Client) fetchSchedulePage(ctx context.Context, pageToken string) ([]ScheduleEvent, string, string, error) {
 	u, err := url.Parse(c.baseURL())
 	if err != nil {
-		return nil, "", "", fmt.Errorf("lolschedule parse url: %w", err)
+		return nil, "", "", fmt.Errorf("lol parse url: %w", err)
 	}
 	q := u.Query()
 	q.Set("hl", "en-US")
@@ -164,7 +164,7 @@ func (c *Client) fetchSchedulePage(ctx context.Context, pageToken string) ([]Sch
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
 	if err != nil {
-		return nil, "", "", fmt.Errorf("lolschedule build request: %w", err)
+		return nil, "", "", fmt.Errorf("lol build request: %w", err)
 	}
 	req.Header.Set("x-api-key", apiKey)
 	req.Header.Set("User-Agent", userAgent)
@@ -172,20 +172,20 @@ func (c *Client) fetchSchedulePage(ctx context.Context, pageToken string) ([]Sch
 
 	resp, err := c.httpClient().Do(req)
 	if err != nil {
-		return nil, "", "", fmt.Errorf("lolschedule do: %w", err)
+		return nil, "", "", fmt.Errorf("lol do: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, "", "", fmt.Errorf("lolschedule read: %w", err)
+		return nil, "", "", fmt.Errorf("lol read: %w", err)
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		log.Warn("lolschedule_fetch", "status", resp.StatusCode, "body", truncate(string(body), 500))
-		return nil, "", "", fmt.Errorf("lolschedule API HTTP %d", resp.StatusCode)
+		log.Warn("lol_fetch", "status", resp.StatusCode, "body", truncate(string(body), 500))
+		return nil, "", "", fmt.Errorf("lol API HTTP %d", resp.StatusCode)
 	}
 	var page schedulePage
 	if err := json.Unmarshal(body, &page); err != nil {
-		return nil, "", "", fmt.Errorf("lolschedule decode: %w", err)
+		return nil, "", "", fmt.Errorf("lol decode: %w", err)
 	}
 	// Drop pre/post-show segments; they aren't matches.
 	out := make([]ScheduleEvent, 0, len(page.Data.Schedule.Events))
@@ -301,14 +301,14 @@ func (c *Client) GetEventsCached(ctx context.Context, cache CacheStore, from, to
 	if fetchErr == nil {
 		rec := cacheRecord{Ts: now, Events: events}
 		if err := cache.Put(ctx, key, rec); err != nil {
-			log.Warn("lolschedule_kv_put_fail", "err", err)
+			log.Warn("lol_kv_put_fail", "err", err)
 		}
 		return events, nil
 	}
 
 	// Upstream failed — fall back to stale cache if recent enough.
 	if hasCached && cached.Events != nil && now-cached.Ts < staleMaxAge.Milliseconds() {
-		log.Warn("lolschedule_stale_fallback", "err", fetchErr)
+		log.Warn("lol_stale_fallback", "err", fetchErr)
 		return cached.Events, nil
 	}
 	return nil, fetchErr
@@ -333,4 +333,4 @@ func truncate(s string, maxLen int) string {
 // ErrEmptyResult is reserved for explicit "no events" scenarios where the
 // fetch succeeded but returned zero matches. Currently unused outside tests
 // but kept exported so callers can distinguish from network errors.
-var ErrEmptyResult = errors.New("lolschedule: no events in range")
+var ErrEmptyResult = errors.New("lol: no events in range")

@@ -65,9 +65,13 @@ overrides are not supported in runtime env; modules use coded defaults.
 > document — `{ _id: <user key>, ...payload fields, version, updatedAt }` with no
 > `value` envelope. Payload fields are hoisted to the document root so they
 > expand and are queryable in Compass. The two non-object values are wrapped in a
-> named field: schedule subscribers under `subscribers` (array) and the daily
-> push date under `date`. Concurrency uses the `version` field (optimistic lock);
+> named field: `lol` schedule subscribers under `subscribers` (array) and the
+> daily push date under `date`. Concurrency uses the `version` field (optimistic lock);
 > `updatedAt` is a BSON Date.
+>
+> The `lol` module uses the `lol` collection. First startup after the rename
+> copies documents from the legacy `lolschedule` collection, drops that legacy
+> collection, and records completion in `system`.
 >
 > The `stats` collection uses queryable aggregate documents for command/user
 > counts and creates indexes on startup. First startup after the schema change

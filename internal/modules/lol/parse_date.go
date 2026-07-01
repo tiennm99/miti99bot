@@ -1,4 +1,4 @@
-package lolschedule
+package lol
 
 import (
 	"fmt"
@@ -86,7 +86,7 @@ func splitParts(trimmed string) ([]string, string) {
 	}
 }
 
-// ParseScheduleDate parses a /lolschedule date argument. Empty input → today.
+// ParseScheduleDate parses a /lol date argument. Empty input → today.
 // Returns the start of the requested ICT day as a UTC instant.
 func ParseScheduleDate(input string, now time.Time) parseDateResult {
 	trimmed := strings.TrimSpace(input)

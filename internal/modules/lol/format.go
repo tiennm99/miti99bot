@@ -1,4 +1,4 @@
-package lolschedule
+package lol
 
 import (
 	"fmt"
@@ -27,15 +27,15 @@ var leagueOrder = []string{
 // tournaments most viewers care about. Without this filter the API
 // returns 135+ events/week and replies blow past Telegram's 4096-char limit.
 var majorLeagueSlugs = map[string]bool{
-	"lck":           true,
-	"lpl":           true,
-	"lec":           true,
-	"lcs":           true,
-	"worlds":        true,
-	"msi":           true,
-	"first_stand":   true,
-	"lcp":           true,
-	"cblol-brazil":  true,
+	"lck":          true,
+	"lpl":          true,
+	"lec":          true,
+	"lcs":          true,
+	"worlds":       true,
+	"msi":          true,
+	"first_stand":  true,
+	"lcp":          true,
+	"cblol-brazil": true,
 	"emea_masters": true,
 }
 
