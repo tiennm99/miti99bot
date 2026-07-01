@@ -24,32 +24,9 @@ const (
 // no-op.
 func InitStore(ctx context.Context, lolColl storage.Collection) error {
 	if mongoColl, ok := storage.MongoCollection(lolColl); ok {
-		if err := backfillMatchCacheFetchedAt(ctx, mongoColl); err != nil {
-			return err
-		}
 		if err := ensureMatchCacheTTLIndex(ctx, mongoColl); err != nil {
 			return err
 		}
-	}
-	return nil
-}
-
-func backfillMatchCacheFetchedAt(ctx context.Context, coll *mongo.Collection) error {
-	filter := bson.D{
-		{Key: "_id", Value: matchCacheIDRange()},
-		{Key: "fetchedAt", Value: bson.D{{Key: "$exists", Value: false}}},
-		{Key: "ts", Value: bson.D{
-			{Key: "$type", Value: "number"},
-			{Key: "$gt", Value: int64(0)},
-		}},
-	}
-	update := mongo.Pipeline{
-		bson.D{{Key: "$set", Value: bson.D{
-			{Key: "fetchedAt", Value: bson.D{{Key: "$toDate", Value: "$ts"}}},
-		}}},
-	}
-	if _, err := coll.UpdateMany(ctx, filter, update); err != nil {
-		return fmt.Errorf("lol match cache fetchedAt backfill: %w", err)
 	}
 	return nil
 }

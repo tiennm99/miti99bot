@@ -2,7 +2,6 @@ package lol
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -36,15 +35,6 @@ type SubscriberStore = storage.DocStore[subscribersDoc]
 
 // listSubscribers returns the current subscriber list, or an empty slice
 // if none have ever subscribed.
-//
-// Decoder accepts two shapes for forward-compatibility with rows written
-// before topic-aware subscriptions existed:
-//   - current: [{"chat_id":123,"thread_id":7}, ...]
-//   - legacy:  [123, 456, ...]   (decoded with ThreadID = 0)
-//
-// The decoder handles legacy rows indefinitely; any successful add/remove
-// rewrites the slot in the new shape, but a no-op duplicate add leaves the
-// legacy bytes in place — that's fine, the fallback path stays correct.
 func listSubscribers(ctx context.Context, store SubscriberStore) ([]Subscriber, error) {
 	doc, _, err := store.Get(ctx, subscribersKey)
 	switch {
@@ -57,25 +47,6 @@ func listSubscribers(ctx context.Context, store SubscriberStore) ([]Subscriber, 
 		return doc.Subscribers, nil
 	}
 	return nil, nil
-}
-
-// listSubscribersLegacy decodes a raw JSON byte slice that may be either the
-// current [{chat_id,thread_id}] shape or the legacy [int64] shape. Used by
-// the legacy-migration path when a key was written by an older version.
-func listSubscribersLegacy(raw []byte) ([]Subscriber, error) {
-	var subs []Subscriber
-	if err := json.Unmarshal(raw, &subs); err == nil {
-		return subs, nil
-	}
-	var legacy []int64
-	if err := json.Unmarshal(raw, &legacy); err != nil {
-		return nil, fmt.Errorf("lol listSubscribers decode: %w", err)
-	}
-	out := make([]Subscriber, len(legacy))
-	for i, id := range legacy {
-		out[i] = Subscriber{ChatID: id}
-	}
-	return out, nil
 }
 
 // addSubscriber appends (chatID, threadID) if that exact pair is absent.

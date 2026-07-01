@@ -41,46 +41,8 @@ func TestInitStore_MongoCreatesMatchCacheTTLIndex(t *testing.T) {
 		t.Fatal("lol collection is not Mongo-backed")
 	}
 
-	fetchedAt := time.Date(2026, 5, 9, 5, 0, 0, 0, time.UTC)
-	if _, err := rawLolColl.InsertMany(ctx, []any{
-		bson.M{
-			"_id":       "matches:2026-05-09T00:00:00Z:2026-05-10T00:00:00Z",
-			"version":   int64(1),
-			"updatedAt": time.Now().UTC(),
-			"ts":        fetchedAt.UnixMilli(),
-			"events":    bson.A{},
-		},
-		bson.M{
-			"_id":         "subscribers",
-			"version":     int64(1),
-			"updatedAt":   time.Now().UTC(),
-			"ts":          fetchedAt.UnixMilli(),
-			"subscribers": bson.A{},
-		},
-	}); err != nil {
-		t.Fatalf("seed legacy docs: %v", err)
-	}
-
 	if err := InitStore(ctx, lolColl); err != nil {
 		t.Fatalf("InitStore: %v", err)
-	}
-
-	var matchDoc struct {
-		FetchedAt time.Time `bson:"fetchedAt"`
-	}
-	if err := rawLolColl.FindOne(ctx, bson.M{"_id": "matches:2026-05-09T00:00:00Z:2026-05-10T00:00:00Z"}).Decode(&matchDoc); err != nil {
-		t.Fatalf("load backfilled match doc: %v", err)
-	}
-	if !matchDoc.FetchedAt.Equal(fetchedAt) {
-		t.Fatalf("backfilled fetchedAt = %s, want %s", matchDoc.FetchedAt, fetchedAt)
-	}
-
-	var subscriberDoc bson.M
-	if err := rawLolColl.FindOne(ctx, bson.M{"_id": "subscribers"}).Decode(&subscriberDoc); err != nil {
-		t.Fatalf("load subscriber doc: %v", err)
-	}
-	if _, ok := subscriberDoc["fetchedAt"]; ok {
-		t.Fatalf("subscriber doc was backfilled with fetchedAt: %#v", subscriberDoc)
 	}
 
 	cur, err := rawLolColl.Indexes().List(ctx)
