@@ -76,7 +76,10 @@ overrides are not supported in runtime env; modules use coded defaults.
 > The `stats` collection uses queryable aggregate documents for command/user
 > counts and creates indexes on startup. First startup after the schema change
 > migrates legacy `count:`, `user:`, and `pair:` stats keys into the new shape,
-> deletes the legacy keys, and records completion in `system`.
+> deletes the legacy keys, and records completion in `system`. Startup also
+> migrates renamed command stats to the current command names and marks removed
+> command rows with `deleted: true`; `/stats` queries filter those retained
+> legacy rows.
 
 ## 2. Coolify
 

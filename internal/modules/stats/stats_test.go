@@ -312,6 +312,110 @@ func TestInitStore_MigratesLegacyStatsOnceAndDeletesOldKeys(t *testing.T) {
 	}
 }
 
+func TestInitStore_MigratesCommandHistoryAndMarksDeleted(t *testing.T) {
+	ctx := context.Background()
+	provider := storage.NewMemoryProvider()
+	statsColl := provider.Collection("stats")
+	systemColl := provider.Collection(systemstate.CollectionName)
+	usageDocs := storage.Typed[usageEntry](statsColl)
+
+	seed := map[string]usageEntry{
+		usageKey("gold_stats", 0):            {Cmd: "gold_stats", N: 2},
+		usageKey("gold_portfolio", 0):        {Cmd: "gold_portfolio", N: 5},
+		usageKey("stock_income_stock", 7):    {Cmd: "stock_income_stock", UserID: 7, Username: "alice", N: 3},
+		usageKey("stock_bonus", 7):           {Cmd: "stock_bonus", UserID: 7, Username: "alice", N: 4},
+		usageKey("lolschedule_week", 8):      {Cmd: "lolschedule_week", UserID: 8, Username: "bob", N: 1},
+		usageKey("lolschedule_today", 0):     {Cmd: "lolschedule_today", N: 9},
+		usageKey("stock_convert", 7):         {Cmd: "stock_convert", UserID: 7, Username: "alice", N: 2},
+		usageKey("stock_convert_extra", 7):   {Cmd: "stock_convert_extra", UserID: 7, Username: "alice", N: 99},
+		usageKey("lolschedule_weekly", 10):   {Cmd: "lolschedule_weekly", UserID: 10, Username: "carol", N: 99},
+		usageKey("stock_income_stocked", 11): {Cmd: "stock_income_stocked", UserID: 11, Username: "dan", N: 99},
+	}
+	for key, entry := range seed {
+		if err := usageDocs.Put(ctx, key, entry); err != nil {
+			t.Fatalf("seed %s: %v", key, err)
+		}
+	}
+
+	if err := InitStore(ctx, statsColl, systemColl); err != nil {
+		t.Fatalf("InitStore: %v", err)
+	}
+
+	assertUsageEntry(t, usageDocs, usageKey("gold_portfolio", 0), usageEntry{Cmd: "gold_portfolio", N: 7})
+	assertUsageEntry(t, usageDocs, usageKey("stock_bonus", 7), usageEntry{Cmd: "stock_bonus", UserID: 7, Username: "alice", N: 7})
+	assertUsageEntry(t, usageDocs, usageKey("lol_this_week", 8), usageEntry{Cmd: "lol_this_week", UserID: 8, Username: "bob", N: 1})
+	assertUsageEntry(t, usageDocs, usageKey("lolschedule_today", 0), usageEntry{Cmd: "lolschedule_today", N: 9, Deleted: true})
+	assertUsageEntry(t, usageDocs, usageKey("stock_convert", 7), usageEntry{Cmd: "stock_convert", UserID: 7, Username: "alice", N: 2, Deleted: true})
+	assertUsageEntry(t, usageDocs, usageKey("stock_convert_extra", 7), usageEntry{Cmd: "stock_convert_extra", UserID: 7, Username: "alice", N: 99})
+	assertUsageEntry(t, usageDocs, usageKey("lolschedule_weekly", 10), usageEntry{Cmd: "lolschedule_weekly", UserID: 10, Username: "carol", N: 99})
+	assertUsageEntry(t, usageDocs, usageKey("stock_income_stocked", 11), usageEntry{Cmd: "stock_income_stocked", UserID: 11, Username: "dan", N: 99})
+
+	for _, key := range []string{
+		usageKey("gold_stats", 0),
+		usageKey("stock_income_stock", 7),
+		usageKey("lolschedule_week", 8),
+	} {
+		if _, _, err := usageDocs.Get(ctx, key); !errors.Is(err, storage.ErrNotFound) {
+			t.Fatalf("renamed key %s should be deleted, got err=%v", key, err)
+		}
+	}
+
+	sys := systemstate.New(systemColl)
+	rec, ok, err := sys.Get(ctx, commandHistoryMigrationKey)
+	if err != nil || !ok {
+		t.Fatalf("command history marker ok=%v err=%v", ok, err)
+	}
+	if rec.Status != "done" || rec.Count != 5 {
+		t.Fatalf("command history marker = %+v, want done count 5", rec)
+	}
+
+	if err := InitStore(ctx, statsColl, systemColl); err != nil {
+		t.Fatalf("InitStore second run: %v", err)
+	}
+	assertUsageEntry(t, usageDocs, usageKey("gold_portfolio", 0), usageEntry{Cmd: "gold_portfolio", N: 7})
+}
+
+func TestStatsViewsFilterDeletedLegacyRows(t *testing.T) {
+	ctx := context.Background()
+	provider := storage.NewMemoryProvider()
+	c := newCounter(provider.Collection("stats"))
+	docs := storage.Typed[usageEntry](provider.Collection("stats"))
+
+	for key, entry := range map[string]usageEntry{
+		usageKey("ping", 1):          {Cmd: "ping", UserID: 1, Username: "alice", N: 3},
+		usageKey("wordle", 2):        {Cmd: "wordle", UserID: 2, Username: "bob", N: 2},
+		usageKey("wc_today", 0):      {Cmd: "wc_today", N: 100, Deleted: true},
+		usageKey("wc_today", 1):      {Cmd: "wc_today", UserID: 1, Username: "alice", N: 100, Deleted: true},
+		usageKey("stock_convert", 3): {Cmd: "stock_convert", UserID: 3, Username: "ghost", N: 50, Deleted: true},
+	} {
+		if err := docs.Put(ctx, key, entry); err != nil {
+			t.Fatalf("seed %s: %v", key, err)
+		}
+	}
+
+	for name, got := range map[string]string{
+		"top commands":     renderStats(ctx, c, ""),
+		"top users":        renderStats(ctx, c, "users"),
+		"commands by user": renderStats(ctx, c, "user alice"),
+	} {
+		if strings.Contains(got, "wc_today") || strings.Contains(got, "stock_convert") || strings.Contains(got, "ghost") {
+			t.Fatalf("%s leaked deleted stats:\n%s", name, got)
+		}
+	}
+	if got := renderStats(ctx, c, "users"); !strings.Contains(got, "@alice: 3") || strings.Contains(got, "@alice: 103") {
+		t.Fatalf("top users did not filter deleted rows correctly:\n%s", got)
+	}
+	if got := renderStats(ctx, c, "user alice"); !strings.Contains(got, "/ping: 3") || strings.Contains(got, "/wc_today") {
+		t.Fatalf("commands by user did not filter deleted rows correctly:\n%s", got)
+	}
+	if got := renderStats(ctx, c, "cmd wc_today"); got != "Command /wc_today has no users yet." {
+		t.Fatalf("deleted command users reply = %q", got)
+	}
+	if got := renderStats(ctx, c, "user ghost"); got != "User @ghost not found." {
+		t.Fatalf("deleted-only user reply = %q", got)
+	}
+}
+
 func assertUsageEntry(t *testing.T, docs storage.DocStore[usageEntry], key string, want usageEntry) {
 	t.Helper()
 	got, _, err := docs.Get(context.Background(), key)
