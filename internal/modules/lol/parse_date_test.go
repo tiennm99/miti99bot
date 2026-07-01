@@ -1,4 +1,4 @@
-package lolschedule
+package lol
 
 import (
 	"strings"

@@ -19,8 +19,8 @@ import (
 	"github.com/tiennm99/miti99bot/internal/modules"
 	"github.com/tiennm99/miti99bot/internal/modules/coin"
 	"github.com/tiennm99/miti99bot/internal/modules/gold"
+	"github.com/tiennm99/miti99bot/internal/modules/lol"
 	"github.com/tiennm99/miti99bot/internal/modules/loldle"
-	"github.com/tiennm99/miti99bot/internal/modules/lolschedule"
 	"github.com/tiennm99/miti99bot/internal/modules/misc"
 	"github.com/tiennm99/miti99bot/internal/modules/stats"
 	"github.com/tiennm99/miti99bot/internal/modules/stock"
@@ -58,16 +58,16 @@ func resolveCommitSHA(envSourceCommit string) string {
 // import cycle (modules → util → modules).
 func factories() map[string]modules.Factory {
 	return map[string]modules.Factory{
-		"util":        util.New,
-		"misc":        misc.New,
-		"wordle":      wordle.New,
-		"loldle":      loldle.New,
-		"lolschedule": lolschedule.New,
-		"wc":          wc.New,
-		"coin":        coin.New,
-		"gold":        gold.New,
-		"stock":       stock.New,
-		"stats":       stats.New,
+		"util":             util.New,
+		"misc":             misc.New,
+		"wordle":           wordle.New,
+		"loldle":           loldle.New,
+		lol.CollectionName: lol.New,
+		"wc":               wc.New,
+		"coin":             coin.New,
+		"gold":             gold.New,
+		"stock":            stock.New,
+		"stats":            stats.New,
 	}
 }
 
@@ -96,6 +96,9 @@ func main() {
 	defer closeProvider()
 	systemColl := provider.Collection(systemstate.CollectionName)
 
+	if err := lol.InitStore(rootCtx, provider, systemColl); err != nil {
+		log.Fatal("lol storage init failed", "err", err)
+	}
 	if err := stats.InitStore(rootCtx, provider.Collection("stats"), systemColl); err != nil {
 		log.Fatal("stats storage init failed", "err", err)
 	}
@@ -124,7 +127,7 @@ func main() {
 	}
 
 	// In-process cron scheduler runs unconditionally so the long-lived container
-	// fires module crons (e.g. the lolschedule daily push) on their Schedule.
+	// fires module crons (e.g. lol daily push) on their Schedule.
 	stopCron, err := cron.Run(rootCtx, reg)
 	if err != nil {
 		log.Fatal("cron scheduler init failed", "err", err)

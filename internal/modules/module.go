@@ -72,7 +72,7 @@ type Module struct {
 type Deps struct {
 	Store    storage.Collection // the module's own collection; build typed views with storage.Typed[T]
 	Registry *Registry          // populated by Build; safe to capture but read-only at module use
-	Bot      *bot.Bot           // nil-safe: only crons that fan-out (lolschedule daily push) need it
+	Bot      *bot.Bot           // nil-safe: only crons that fan-out (lol daily push) need it
 }
 
 // Factory constructs a Module from its Deps. Deps are passed directly (instead

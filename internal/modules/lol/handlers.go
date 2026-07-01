@@ -1,4 +1,4 @@
-package lolschedule
+package lol
 
 import (
 	"context"
@@ -12,7 +12,7 @@ import (
 	"github.com/tiennm99/miti99bot/internal/modules/util/chathelper"
 )
 
-// state captures everything a lolschedule handler needs at runtime.
+// state captures everything a lol handler needs at runtime.
 type state struct {
 	subscribers SubscriberStore
 	pushDate    PushDateStore
@@ -22,7 +22,7 @@ type state struct {
 	// uses time.Now via the default zero-value.
 	nowFn func() time.Time
 	// subscribersMu serializes Get→mutate→Put on the single subscribers store
-	// slot. Two concurrent /lolschedule_subscribe calls in the same
+	// slot. Two concurrent /lol_subscribe calls in the same
 	// millisecond would otherwise race and drop one append.
 	subscribersMu sync.Mutex
 }
@@ -34,7 +34,7 @@ func (s *state) now() time.Time {
 	return time.Now()
 }
 
-// handleSchedule is /lolschedule [date] — matches for one ICT day.
+// handleSchedule is /lol [date] — matches for one ICT day.
 // Empty arg → today.
 func (s *state) handleSchedule(ctx context.Context, b *bot.Bot, update *models.Update) error {
 	msg := update.Message
@@ -49,17 +49,7 @@ func (s *state) handleSchedule(ctx context.Context, b *bot.Bot, update *models.U
 	return s.replyForRange(ctx, b, msg, parsed.Date, addDays(parsed.Date, 1), false)
 }
 
-// handleToday is /lolschedule_today — today's matches.
-func (s *state) handleToday(ctx context.Context, b *bot.Bot, update *models.Update) error {
-	msg := update.Message
-	if msg == nil {
-		return nil
-	}
-	from := ictDayStartOf(s.now())
-	return s.replyForRange(ctx, b, msg, from, addDays(from, 1), false)
-}
-
-// handleWeek is /lolschedule_week — the current ICT calendar week
+// handleWeek is /lol_this_week — the current ICT calendar week
 // (Monday 00:00 ICT through the following Monday 00:00 ICT, exclusive).
 func (s *state) handleWeek(ctx context.Context, b *bot.Bot, update *models.Update) error {
 	msg := update.Message
@@ -75,7 +65,7 @@ func (s *state) handleWeek(ctx context.Context, b *bot.Bot, update *models.Updat
 func (s *state) replyForRange(ctx context.Context, b *bot.Bot, msg *models.Message, from, to time.Time, week bool) error {
 	events, err := s.client.GetEventsCached(ctx, s.cache, from, to)
 	if err != nil {
-		log.Error("lolschedule_fetch_fail", "err", err, "from", from, "to", to)
+		log.Error("lol_fetch_fail", "err", err, "from", from, "to", to)
 		hint := "Could not fetch matches. Try again later."
 		if week {
 			hint = "Could not fetch this week's matches. Try again later."
@@ -92,7 +82,7 @@ func (s *state) replyForRange(ctx context.Context, b *bot.Bot, msg *models.Messa
 	return chathelper.ReplyHTML(ctx, b, msg, text)
 }
 
-// handleSubscribe is /lolschedule_subscribe — opt the chat into the daily
+// handleSubscribe is /lol_subscribe — opt the chat into the daily
 // digest delivered by the in-process cron handler.
 func (s *state) handleSubscribe(ctx context.Context, b *bot.Bot, update *models.Update) error {
 	msg := update.Message
@@ -113,7 +103,7 @@ func (s *state) handleSubscribe(ctx context.Context, b *bot.Bot, update *models.
 	return chathelper.Reply(ctx, b, msg, "Already subscribed.")
 }
 
-// handleUnsubscribe is /lolschedule_unsubscribe — opt out.
+// handleUnsubscribe is /lol_unsubscribe — opt out.
 func (s *state) handleUnsubscribe(ctx context.Context, b *bot.Bot, update *models.Update) error {
 	msg := update.Message
 	if msg == nil {

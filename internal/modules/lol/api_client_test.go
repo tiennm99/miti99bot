@@ -1,4 +1,4 @@
-package lolschedule
+package lol
 
 import (
 	"context"
@@ -16,7 +16,7 @@ import (
 // newCacheStore returns a fresh typed cache store backed by an in-memory
 // collection — the per-test equivalent of what the factory wires in production.
 func newCacheStore() CacheStore {
-	return storage.Typed[cacheRecord](storage.NewMemoryProvider().Collection("lolschedule"))
+	return storage.Typed[cacheRecord](storage.NewMemoryProvider().Collection("lol"))
 }
 
 // mkServer spins an httptest.Server returning the supplied JSON body for

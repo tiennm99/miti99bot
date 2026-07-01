@@ -1,4 +1,4 @@
-package lolschedule
+package lol
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 )
 
 func newSubscriberStore() SubscriberStore {
-	return storage.Typed[subscribersDoc](storage.NewMemoryProvider().Collection("lolschedule"))
+	return storage.Typed[subscribersDoc](storage.NewMemoryProvider().Collection("lol"))
 }
 
 func TestSubscribers_AddRemoveListIdempotent(t *testing.T) {
