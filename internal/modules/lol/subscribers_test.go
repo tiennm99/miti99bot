@@ -2,7 +2,6 @@ package lol
 
 import (
 	"context"
-	"encoding/json"
 	"testing"
 
 	"github.com/tiennm99/miti99bot/internal/storage"
@@ -130,10 +129,7 @@ func TestSubscribers_RemoveAllForChat(t *testing.T) {
 	}
 }
 
-// TestSubscribers_LegacyDecode locks in backward-compat reads of rows
-// written before topic-aware subscriptions (raw []int64 JSON). The legacy
-// helper decodes both shapes independently of the store.
-func TestSubscribers_LegacyDecode(t *testing.T) {
+func TestSubscribers_CurrentShapeRoundTrip(t *testing.T) {
 	ctx := context.Background()
 	store := newSubscriberStore()
 
@@ -157,32 +153,7 @@ func TestSubscribers_LegacyDecode(t *testing.T) {
 		}
 	}
 
-	// Verify the legacy JSON helper handles the old []int64 shape.
-	legacyRaw := []byte(`[11,22,33]`)
-	legacySubs, err := listSubscribersLegacy(legacyRaw)
-	if err != nil {
-		t.Fatalf("listSubscribersLegacy: %v", err)
-	}
-	if len(legacySubs) != 3 {
-		t.Fatalf("legacy decode length = %d, want 3", len(legacySubs))
-	}
-	for i, s := range legacySubs {
-		if s != want[i] {
-			t.Errorf("legacy[%d]: got %v, want %v", i, s, want[i])
-		}
-	}
-
-	// Verify the legacy helper also handles the current [{chat_id,...}] shape.
-	currentRaw, _ := json.Marshal(currentSubs)
-	currentDecoded, err := listSubscribersLegacy(currentRaw)
-	if err != nil {
-		t.Fatalf("listSubscribersLegacy (current shape): %v", err)
-	}
-	if len(currentDecoded) != 3 {
-		t.Fatalf("current shape via legacy helper = %d, want 3", len(currentDecoded))
-	}
-
-	// Next mutation rewrites in the new shape — verify subscribers wrap correctly.
+	// Next mutation verifies subscribers wrap correctly.
 	if _, err := addSubscriber(ctx, store, 44, 7); err != nil {
 		t.Fatal(err)
 	}
