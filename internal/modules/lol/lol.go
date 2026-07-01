@@ -5,6 +5,9 @@ import (
 	"github.com/tiennm99/miti99bot/internal/storage"
 )
 
+// CollectionName is the MongoDB collection/module key used by the registry.
+const CollectionName = "lol"
+
 // New is the lol module Factory. The 4 user-facing commands plus the
 // daily-push cron (lol_daily_push at 08:00 ICT, fan-out to
 // subscribers) are wired here. The cron handler reads deps.Bot at invoke
