@@ -6,8 +6,8 @@
 // client (no registration). If Riot ever rotates it, lift the new value
 // from their public JS bundle.
 //
-// Cache strategy: KV-backed cacheRecord with a 120s fresh window and a
-// 60-minute stale fallback (stale-while-error).
+// Cache strategy: live-first fetches with a KV-backed 60-minute stale fallback
+// for current schedule windows.
 package lol
 
 import (
@@ -33,8 +33,6 @@ const (
 	// #nosec G101
 	apiKey    = "0TvQnueqKa5mxJntVWt0w4LpLfEkrV1Ta8rQBb9Z"
 	userAgent = "miti99bot/0.1 (https://t.me/miti99bot)"
-	// CacheTTL: schedule data changes minute-by-minute during live events.
-	cacheTTL = 120 * time.Second
 	// staleMaxAge: how long to fall back to a cached payload when the
 	// upstream call fails outright.
 	staleMaxAge = 60 * 60 * time.Second
@@ -113,11 +111,11 @@ type schedulePage struct {
 	} `json:"data"`
 }
 
-// cacheRecord is the store value: fetch timestamp + events.
+// cacheRecord is the store value: fetch timestamp + events. The Mongo store
+// owns updatedAt separately; LoL uses ts for cache freshness in every backend.
 type cacheRecord struct {
-	Ts        int64           `json:"ts" bson:"ts"`                                   // ms-since-epoch when fetched
-	FetchedAt *time.Time      `json:"fetchedAt,omitempty" bson:"fetchedAt,omitempty"` // Mongo TTL anchor for matches:* cache docs
-	Events    []ScheduleEvent `json:"events" bson:"events"`
+	Ts     int64           `json:"ts" bson:"ts"` // ms-since-epoch when fetched
+	Events []ScheduleEvent `json:"events" bson:"events"`
 }
 
 // CacheStore is the typed store for schedule cache records.
@@ -285,23 +283,25 @@ func cacheKey(from, to time.Time) string {
 	return "matches:" + from.UTC().Format(time.RFC3339) + ":" + to.UTC().Format(time.RFC3339)
 }
 
-// GetEventsCached is the cache-first lookup. Returns fresh cache within
-// cacheTTL, else fetches upstream and writes back, else falls back to
-// stale cache (within staleMaxAge), else propagates the error.
-func (c *Client) GetEventsCached(ctx context.Context, cache CacheStore, from, to time.Time) ([]ScheduleEvent, error) {
+// GetEventsLive fetches the requested range directly from upstream without
+// consulting or writing the fallback cache.
+func (c *Client) GetEventsLive(ctx context.Context, from, to time.Time) ([]ScheduleEvent, error) {
+	return c.fetchEventsInRange(ctx, from, to, 3)
+}
+
+// GetEventsWithFallback is live-first. It always tries upstream, writes a
+// successful response to cache, and uses a recent cached response only when the
+// upstream call fails.
+func (c *Client) GetEventsWithFallback(ctx context.Context, cache CacheStore, from, to time.Time) ([]ScheduleEvent, error) {
 	key := cacheKey(from, to)
-	nowTime := time.Now().UTC()
-	now := nowTime.UnixMilli()
+	now := time.Now().UTC().UnixMilli()
 
 	cached, _, cacheErr := cache.Get(ctx, key)
 	hasCached := cacheErr == nil
-	if hasCached && now-cached.Ts < cacheTTL.Milliseconds() {
-		return cached.Events, nil
-	}
 
-	events, fetchErr := c.fetchEventsInRange(ctx, from, to, 3)
+	events, fetchErr := c.GetEventsLive(ctx, from, to)
 	if fetchErr == nil {
-		rec := cacheRecord{Ts: now, FetchedAt: &nowTime, Events: events}
+		rec := cacheRecord{Ts: now, Events: events}
 		if err := cache.Put(ctx, key, rec); err != nil {
 			log.Warn("lol_kv_put_fail", "err", err)
 		}
@@ -309,7 +309,7 @@ func (c *Client) GetEventsCached(ctx context.Context, cache CacheStore, from, to
 	}
 
 	// Upstream failed — fall back to stale cache if recent enough.
-	if hasCached && cached.Events != nil && now-cached.Ts < staleMaxAge.Milliseconds() {
+	if hasCached && now-cached.Ts < staleMaxAge.Milliseconds() {
 		log.Warn("lol_stale_fallback", "err", fetchErr)
 		return cached.Events, nil
 	}

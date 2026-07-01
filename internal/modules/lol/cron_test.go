@@ -3,6 +3,8 @@ package lol
 import (
 	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"sync"
 	"testing"
 	"time"
@@ -66,8 +68,8 @@ func newTestStore(t *testing.T) (SubscriberStore, PushDateStore, CacheStore) {
 		storage.Typed[cacheRecord](col)
 }
 
-// seedFreshCache writes a cacheRecord with `now` as timestamp so the first
-// GetEventsCached call returns it without hitting the network.
+// seedFreshCache writes a cacheRecord with `now` as timestamp so
+// GetEventsWithFallback can serve it when the test upstream fails.
 func seedFreshCache(t *testing.T, cache CacheStore, events []ScheduleEvent) {
 	t.Helper()
 	from := ictDayStartOf(fixedNow())
@@ -84,11 +86,15 @@ func seedFreshCache(t *testing.T, cache CacheStore, events []ScheduleEvent) {
 func newTestState(t *testing.T) *state {
 	t.Helper()
 	subs, pd, cache := newTestStore(t)
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	t.Cleanup(upstream.Close)
 	return &state{
 		subscribers: subs,
 		pushDate:    pd,
 		cache:       cache,
-		client:      &Client{}, // zero value; tests must seed cache to avoid HTTP
+		client:      &Client{HTTP: upstream.Client(), URL: upstream.URL},
 		nowFn:       fixedNow,
 	}
 }

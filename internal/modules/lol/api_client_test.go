@@ -57,14 +57,14 @@ const sampleBody = `{
   }
 }`
 
-func TestGetEventsCached_FirstHitFetchesUpstream(t *testing.T) {
+func TestGetEventsWithFallback_FirstHitFetchesUpstreamAndCaches(t *testing.T) {
 	srv, count := mkServer(t, sampleBody)
 	c := &Client{HTTP: srv.Client(), URL: srv.URL}
 	cache := newCacheStore()
 	from := time.Date(2026, 5, 9, 0, 0, 0, 0, time.UTC)
 	to := from.Add(24 * time.Hour)
 
-	events, err := c.GetEventsCached(context.Background(), cache, from, to)
+	events, err := c.GetEventsWithFallback(context.Background(), cache, from, to)
 	if err != nil {
 		t.Fatalf("first fetch: %v", err)
 	}
@@ -84,35 +84,27 @@ func TestGetEventsCached_FirstHitFetchesUpstream(t *testing.T) {
 	if cached.Ts <= 0 {
 		t.Fatalf("cached ts = %d, want positive", cached.Ts)
 	}
-	if cached.FetchedAt == nil {
-		t.Fatal("cached fetchedAt is nil")
-	}
-	if cached.FetchedAt.UnixMilli() != cached.Ts {
-		t.Fatalf("cached fetchedAt = %d, want ts %d", cached.FetchedAt.UnixMilli(), cached.Ts)
-	}
 }
 
-func TestGetEventsCached_SecondHitUsesCache(t *testing.T) {
+func TestGetEventsWithFallback_AlwaysFetchesWhenUpstreamAvailable(t *testing.T) {
 	srv, count := mkServer(t, sampleBody)
 	c := &Client{HTTP: srv.Client(), URL: srv.URL}
 	cache := newCacheStore()
 	from := time.Date(2026, 5, 9, 0, 0, 0, 0, time.UTC)
 	to := from.Add(24 * time.Hour)
 
-	// First fetch primes the cache.
-	if _, err := c.GetEventsCached(context.Background(), cache, from, to); err != nil {
+	if _, err := c.GetEventsWithFallback(context.Background(), cache, from, to); err != nil {
 		t.Fatal(err)
 	}
-	// Second fetch within TTL must NOT hit upstream.
-	if _, err := c.GetEventsCached(context.Background(), cache, from, to); err != nil {
+	if _, err := c.GetEventsWithFallback(context.Background(), cache, from, to); err != nil {
 		t.Fatal(err)
 	}
-	if got := atomic.LoadInt32(count); got != 1 {
-		t.Errorf("upstream calls = %d, want 1 (cache should serve second call)", got)
+	if got := atomic.LoadInt32(count); got != 2 {
+		t.Errorf("upstream calls = %d, want 2 (live-first should refetch)", got)
 	}
 }
 
-func TestGetEventsCached_StaleFallback(t *testing.T) {
+func TestGetEventsWithFallback_StaleFallback(t *testing.T) {
 	// Prime the typed cache store with a stale-but-still-fresh-enough record.
 	cache := newCacheStore()
 	from := time.Date(2026, 5, 9, 0, 0, 0, 0, time.UTC)
@@ -134,7 +126,7 @@ func TestGetEventsCached_StaleFallback(t *testing.T) {
 	defer srv.Close()
 	c := &Client{HTTP: srv.Client(), URL: srv.URL}
 
-	got, err := c.GetEventsCached(context.Background(), cache, from, to)
+	got, err := c.GetEventsWithFallback(context.Background(), cache, from, to)
 	if err != nil {
 		t.Fatalf("stale fallback should succeed: %v", err)
 	}
@@ -143,7 +135,7 @@ func TestGetEventsCached_StaleFallback(t *testing.T) {
 	}
 }
 
-func TestGetEventsCached_HardFailureWhenNoCache(t *testing.T) {
+func TestGetEventsWithFallback_HardFailureWhenNoCache(t *testing.T) {
 	cache := newCacheStore()
 	from := time.Date(2026, 5, 9, 0, 0, 0, 0, time.UTC)
 	to := from.Add(24 * time.Hour)
@@ -154,9 +146,24 @@ func TestGetEventsCached_HardFailureWhenNoCache(t *testing.T) {
 	defer srv.Close()
 	c := &Client{HTTP: srv.Client(), URL: srv.URL}
 
-	_, err := c.GetEventsCached(context.Background(), cache, from, to)
+	_, err := c.GetEventsWithFallback(context.Background(), cache, from, to)
 	if err == nil {
 		t.Errorf("expected error when upstream fails AND no cache")
+	}
+}
+
+func TestGetEventsLive_DoesNotWriteCache(t *testing.T) {
+	srv, _ := mkServer(t, sampleBody)
+	c := &Client{HTTP: srv.Client(), URL: srv.URL}
+	cache := newCacheStore()
+	from := time.Date(2026, 5, 9, 0, 0, 0, 0, time.UTC)
+	to := from.Add(24 * time.Hour)
+
+	if _, err := c.GetEventsLive(context.Background(), from, to); err != nil {
+		t.Fatalf("live fetch: %v", err)
+	}
+	if _, _, err := cache.Get(context.Background(), cacheKey(from, to)); !errors.Is(err, storage.ErrNotFound) {
+		t.Fatalf("live fetch cache entry err = %v, want ErrNotFound", err)
 	}
 }
 
