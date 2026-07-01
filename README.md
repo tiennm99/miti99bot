@@ -29,7 +29,7 @@ internal/telegram/           Telegram long-polling bot wrapper
 internal/cron/               in-process cron scheduler
 internal/modules/            Module framework, registry, dispatchers, modules
 internal/storage/            typed DocStore[T] (Provider + Typed); mongodb runtime + memory (tests). Values persist as flattened native BSON root documents
-internal/systemstate/        shared `system` collection metadata for startup migrations
+internal/systemstate/        shared `system` collection helper for future startup migrations
 compose.yml                  Coolify self-host stack (single bot service)
 telegram-commands.json       Manual Telegram command menu source
 docs/deploy-coolify-selfhosted.md    Self-host deploy and operations guide
