@@ -1,12 +1,9 @@
-// Package stats tracks per-command and per-user invocation counts persistently
-// in DocStore and exposes /stats subcommands to display them sorted by popularity.
+// Package stats tracks command usage and exposes /stats subcommands sorted by
+// popularity.
 package stats
 
 import (
 	"context"
-	"errors"
-	"strconv"
-	"sync"
 
 	"github.com/go-telegram/bot/models"
 
@@ -15,128 +12,46 @@ import (
 	"github.com/tiennm99/miti99bot/internal/storage"
 )
 
-// Sort-key shapes inside the stats module's partition:
-//
-//	count:<cmd>            → countEntry — total per command
-//	user:<userID>          → userEntry  — cached username + total per user
-//	pair:<cmd>:<userID>    → countEntry — per (command, user) pair
-const (
-	countPrefix = "count:"
-	userPrefix  = "user:"
-	pairPrefix  = "pair:"
-	topK        = 20
-)
+const topK = 20
 
-type countEntry struct {
-	N int64 `json:"n" bson:"n"`
-}
-
-type userEntry struct {
-	Username string `json:"username" bson:"username"`
-	N        int64  `json:"n" bson:"n"`
-}
-
-// counter holds two typed views over the same module Collection:
-// one for countEntry values and one for userEntry values.
-// Keys are disjoint by prefix so both views safely share the collection.
+// counter owns the stats repository used by the command hook and render views.
 type counter struct {
-	counts storage.DocStore[countEntry]
-	users  storage.DocStore[userEntry]
+	store usageStore
 }
 
-func countKey(name string) string { return countPrefix + name }
-
-func userKey(id int64) string { return userPrefix + strconv.FormatInt(id, 10) }
-
-func pairKey(cmd string, id int64) string {
-	return pairPrefix + cmd + ":" + strconv.FormatInt(id, 10)
-}
-
-// Inc fans out persistent counter writes for one command invocation.
-// Always increments count:<cmd>. When the originating user has a Telegram
-// username, also increments user:<id> (refreshing the cached username) and
-// pair:<cmd>:<id>. Errors are logged and swallowed; concurrent invocations of
-// the same (cmd, user) may lose updates — stats are best-effort. A future
-// backend atomic increment would close the race.
+// Inc records one authorized command invocation. A sender only contributes to
+// user-level stats when Telegram provides a public username; otherwise the
+// invocation still contributes to command totals.
 func (c *counter) Inc(ctx context.Context, name string, update *models.Update) {
 	var (
-		userID   int64
-		username string
-		hasUser  bool
+		user    usageUser
+		hasUser bool
 	)
 	if update != nil && update.Message != nil && update.Message.From != nil && update.Message.From.Username != "" {
-		userID = update.Message.From.ID
-		username = update.Message.From.Username
+		user = usageUser{
+			ID:       update.Message.From.ID,
+			Username: update.Message.From.Username,
+		}
 		hasUser = true
 	}
 
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		c.incCount(ctx, name)
-	}()
-	if hasUser {
-		wg.Add(2)
-		go func() {
-			defer wg.Done()
-			c.incUser(ctx, userID, username)
-		}()
-		go func() {
-			defer wg.Done()
-			c.incPair(ctx, name, userID)
-		}()
-	}
-	wg.Wait()
-}
-
-func (c *counter) incCount(ctx context.Context, name string) {
-	key := countKey(name)
-	entry, _, err := c.counts.Get(ctx, key)
-	if err != nil && !errors.Is(err, storage.ErrNotFound) {
-		log.Error("stats: store get failed", "key", key, "err", err)
-		return
-	}
-	entry.N++
-	if err := c.counts.Put(ctx, key, entry); err != nil {
-		log.Error("stats: store put failed", "key", key, "err", err)
+	if err := c.store.Increment(ctx, name, user, hasUser); err != nil {
+		if hasUser {
+			log.Error("stats: increment failed", "command", name, "user_id", user.ID, "err", err)
+			return
+		}
+		log.Error("stats: increment failed", "command", name, "err", err)
 	}
 }
 
-func (c *counter) incUser(ctx context.Context, id int64, username string) {
-	key := userKey(id)
-	entry, _, err := c.users.Get(ctx, key)
-	if err != nil && !errors.Is(err, storage.ErrNotFound) {
-		log.Error("stats: store get failed", "key", key, "err", err)
-		return
-	}
-	entry.Username = username
-	entry.N++
-	if err := c.users.Put(ctx, key, entry); err != nil {
-		log.Error("stats: store put failed", "key", key, "err", err)
-	}
-}
-
-func (c *counter) incPair(ctx context.Context, name string, id int64) {
-	key := pairKey(name, id)
-	entry, _, err := c.counts.Get(ctx, key)
-	if err != nil && !errors.Is(err, storage.ErrNotFound) {
-		log.Error("stats: store get failed", "key", key, "err", err)
-		return
-	}
-	entry.N++
-	if err := c.counts.Put(ctx, key, entry); err != nil {
-		log.Error("stats: store put failed", "key", key, "err", err)
-	}
+func newCounter(coll storage.Collection) *counter {
+	return &counter{store: newUsageStore(coll)}
 }
 
 // New is the module Factory. Registers a CommandHook that persists counts and
 // a /stats command that displays them.
 func New(deps modules.Deps) modules.Module {
-	c := &counter{
-		counts: storage.Typed[countEntry](deps.Store),
-		users:  storage.Typed[userEntry](deps.Store),
-	}
+	c := newCounter(deps.Store)
 	return modules.Module{
 		CommandHook: c.Inc,
 		Commands: []modules.Command{

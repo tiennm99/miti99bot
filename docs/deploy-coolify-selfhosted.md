@@ -8,7 +8,7 @@ Run `miti99bot` as a long-lived container on [Coolify](https://coolify.io) with
 ```
    Telegram  <── long poll (getUpdates) ──  container  (outbound only)
    in-process scheduler ───────────────────> module crons
-   MongoDB Atlas (db / one collection per module)
+   MongoDB Atlas (db / one collection per module + system metadata)
    Coolify env vars (plain secrets)
    NO public ingress (polling = outbound only; no domain, no /webhook, no TLS in)
 ```
@@ -60,13 +60,19 @@ overrides are not supported in runtime env; modules use coded defaults.
 4. Copy the `mongodb+srv://…` connection string into `MONGO_URL` and put the
    db name in `MONGO_DATABASE`.
 
-> Storage layout: one collection per module; each document is a flattened native
+> Storage layout: one collection per module plus a shared `system` collection
+> for startup metadata such as one-time migrations. Each document is a flattened native
 > document — `{ _id: <user key>, ...payload fields, version, updatedAt }` with no
 > `value` envelope. Payload fields are hoisted to the document root so they
 > expand and are queryable in Compass. The two non-object values are wrapped in a
 > named field: schedule subscribers under `subscribers` (array) and the daily
 > push date under `date`. Concurrency uses the `version` field (optimistic lock);
 > `updatedAt` is a BSON Date.
+>
+> The `stats` collection uses queryable aggregate documents for command/user
+> counts and creates indexes on startup. First startup after the schema change
+> migrates legacy `count:`, `user:`, and `pair:` stats keys into the new shape,
+> deletes the legacy keys, and records completion in `system`.
 
 ## 2. Coolify
 
