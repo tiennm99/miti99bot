@@ -24,7 +24,7 @@ const (
 	usageMigrationName = "stats-usage-v2"
 	usageMigrationKey  = "migration:" + usageMigrationName
 
-	commandHistoryMigrationName = "stats-command-history-v1"
+	commandHistoryMigrationName = "stats-command-history-v2"
 	commandHistoryMigrationKey  = "migration:" + commandHistoryMigrationName
 )
 
@@ -34,6 +34,12 @@ type commandRename struct {
 }
 
 var commandRenames = []commandRename{
+	{Old: "trade_topup", New: "stock_topup"},
+	{Old: "trade_buy", New: "stock_buy"},
+	{Old: "trade_sell", New: "stock_sell"},
+	{Old: "trade_income_stock", New: "stock_bonus"},
+	{Old: "trade_income_vnd", New: "stock_dividend"},
+	{Old: "trade_stats", New: "stock_portfolio"},
 	{Old: "lolschedule", New: "lol"},
 	{Old: "lolschedule_week", New: "lol_this_week"},
 	{Old: "lolschedule_subscribe", New: "lol_subscribe"},
@@ -48,6 +54,9 @@ var commandRenames = []commandRename{
 
 var deletedCommandNames = []string{
 	"lolschedule_today",
+	"trade_income_events",
+	"trade_convert",
+	"stock_income_events",
 	"wc_today",
 	"stock_convert",
 }

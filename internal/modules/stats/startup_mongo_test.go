@@ -42,11 +42,24 @@ func TestInitStore_MongoCreatesIndexesAndMigratesLegacy(t *testing.T) {
 	systemColl := provider.Collection(systemstate.CollectionName)
 	legacyCounts := storage.Typed[legacyCountEntry](statsColl)
 	legacyUsers := storage.Typed[legacyUserEntry](statsColl)
+	sys := systemstate.New(systemColl)
+	if err := sys.Put(ctx, "migration:stats-command-history-v1", systemstate.Record{
+		Kind:      "migration",
+		Name:      "stats-command-history-v1",
+		Status:    "done",
+		Count:     2,
+		UpdatedAt: 1,
+	}); err != nil {
+		t.Fatalf("seed v1 marker: %v", err)
+	}
 	if err := legacyCounts.Put(ctx, legacyCountPrefix+"ping", legacyCountEntry{N: 2}); err != nil {
 		t.Fatalf("legacy count: %v", err)
 	}
 	if err := legacyCounts.Put(ctx, legacyCountPrefix+"gold_stats", legacyCountEntry{N: 4}); err != nil {
 		t.Fatalf("legacy renamed count: %v", err)
+	}
+	if err := legacyCounts.Put(ctx, legacyCountPrefix+"trade_stats", legacyCountEntry{N: 6}); err != nil {
+		t.Fatalf("legacy trade count: %v", err)
 	}
 	if err := legacyUsers.Put(ctx, legacyUserPrefix+"7", legacyUserEntry{Username: "alice", N: 1}); err != nil {
 		t.Fatalf("legacy user: %v", err)
@@ -66,6 +79,7 @@ func TestInitStore_MongoCreatesIndexesAndMigratesLegacy(t *testing.T) {
 	assertUsageEntry(t, usageDocs, usageKey("ping", 7), usageEntry{Cmd: "ping", UserID: 7, Username: "alice", N: 1})
 	assertUsageEntry(t, usageDocs, usageKey("ping", 0), usageEntry{Cmd: "ping", N: 1})
 	assertUsageEntry(t, usageDocs, usageKey("gold_portfolio", 0), usageEntry{Cmd: "gold_portfolio", N: 4})
+	assertUsageEntry(t, usageDocs, usageKey("stock_portfolio", 0), usageEntry{Cmd: "stock_portfolio", N: 6})
 	assertUsageEntry(t, usageDocs, usageKey("stock_convert", 7), usageEntry{Cmd: "stock_convert", UserID: 7, Username: "alice", N: 3, Deleted: true})
 
 	rawStatsColl, ok := storage.MongoCollection(statsColl)
@@ -97,13 +111,12 @@ func TestInitStore_MongoCreatesIndexesAndMigratesLegacy(t *testing.T) {
 		}
 	}
 
-	sys := systemstate.New(systemColl)
 	rec, ok, err := sys.Get(ctx, commandHistoryMigrationKey)
 	if err != nil || !ok {
 		t.Fatalf("command history marker ok=%v err=%v", ok, err)
 	}
-	if rec.Status != "done" || rec.Count != 2 {
-		t.Fatalf("command history marker = %+v, want done count 2", rec)
+	if rec.Status != "done" || rec.Count != 3 {
+		t.Fatalf("command history marker = %+v, want done count 3", rec)
 	}
 
 	rawDoc := bson.M{}
