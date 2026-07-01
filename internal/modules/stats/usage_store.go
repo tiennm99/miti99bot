@@ -439,8 +439,7 @@ func (s *mongoUsageStore) userIDByUsername(ctx context.Context, username string)
 			"deleted": bson.M{"$ne": true},
 		},
 		options.FindOne().
-			SetProjection(bson.M{"uid": 1}).
-			SetSort(bson.D{bsonField("updatedAt", -1)}),
+			SetProjection(bson.M{"uid": 1}),
 	).Decode(&doc)
 	if err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {
