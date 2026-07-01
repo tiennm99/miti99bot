@@ -60,8 +60,8 @@ func TestFactoriesIncludesExpectedModules(t *testing.T) {
 		t.Fatalf("Build selected modules: %v", err)
 	}
 	for _, name := range []string{
-		"gold_price", "gold_topup", "gold_buy", "gold_sell", "gold_stats",
-		"coin_price", "coin_topup", "coin_buy", "coin_sell", "coin_stats",
+		"gold_price", "gold_topup", "gold_buy", "gold_sell", "gold_portfolio",
+		"coin_price", "coin_topup", "coin_buy", "coin_sell", "coin_portfolio",
 		"wc", "wc_this_week", "wc_subscribe", "wc_unsubscribe",
 	} {
 		if _, ok := reg.AllCommands[name]; !ok {

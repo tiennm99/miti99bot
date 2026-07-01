@@ -62,7 +62,7 @@ func TestModuleRegistersExpectedCommands(t *testing.T) {
 	for _, cmd := range mod.Commands {
 		got[cmd.Name] = true
 	}
-	for _, name := range []string{"gold_price", "gold_topup", "gold_buy", "gold_sell", "gold_stats"} {
+	for _, name := range []string{"gold_price", "gold_topup", "gold_buy", "gold_sell", "gold_portfolio"} {
 		if !got[name] {
 			t.Fatalf("missing command %s", name)
 		}
@@ -155,7 +155,7 @@ func TestStatsWithAndWithoutPrice(t *testing.T) {
 	_ = s.handleTopup(ctx, rb.Bot, testutil.NewPrivateMessage(7, "/gold_topup 5000000"))
 	_ = s.handleBuy(ctx, rb.Bot, testutil.NewPrivateMessage(7, "/gold_buy 1"))
 	rb.Reset()
-	if err := s.handleStats(ctx, rb.Bot, testutil.NewPrivateMessage(7, "/gold_stats")); err != nil {
+	if err := s.handleStats(ctx, rb.Bot, testutil.NewPrivateMessage(7, "/gold_portfolio")); err != nil {
 		t.Fatalf("stats: %v", err)
 	}
 	text := rb.LastSent().Text()
@@ -166,7 +166,7 @@ func TestStatsWithAndWithoutPrice(t *testing.T) {
 	}
 	s.prices = fakePriceFetcher{err: ErrNoGoldPrice}
 	rb.Reset()
-	if err := s.handleStats(ctx, rb.Bot, testutil.NewPrivateMessage(7, "/gold_stats")); err != nil {
+	if err := s.handleStats(ctx, rb.Bot, testutil.NewPrivateMessage(7, "/gold_portfolio")); err != nil {
 		t.Fatalf("stats no price: %v", err)
 	}
 	rb.AssertSentText(t, "Price: no price")

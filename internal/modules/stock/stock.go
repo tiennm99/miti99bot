@@ -5,13 +5,17 @@ import (
 	"github.com/tiennm99/miti99bot/internal/storage"
 )
 
-// New is the stock module Factory. Five user-facing commands; no crons.
-// (Original miti99bot only has a SQL retention cron, which our KV-only port
-// does not implement — keeping commits paper-ledger-only is acceptable.)
+// New is the stock module Factory. Seven user-facing commands.
 func New(deps modules.Deps) modules.Module {
 	s := newState(storage.Typed[Portfolio](deps.Store))
 	return modules.Module{
 		Commands: []modules.Command{
+			{
+				Name:        "stock_price",
+				Visibility:  modules.VisibilityPublic,
+				Description: "Show current VN stock price",
+				Handler:     s.handlePrice,
+			},
 			{
 				Name:        "stock_topup",
 				Visibility:  modules.VisibilityPublic,
@@ -31,27 +35,21 @@ func New(deps modules.Deps) modules.Module {
 				Handler:     s.handleSell,
 			},
 			{
-				Name:        "stock_income_stock",
+				Name:        "stock_bonus",
 				Visibility:  modules.VisibilityPublic,
-				Description: "Record stock dividend (bonus shares)",
-				Handler:     s.handleIncomeStock,
+				Description: "Record bonus shares",
+				Handler:     s.handleBonus,
 			},
 			{
-				Name:        "stock_income_vnd",
+				Name:        "stock_dividend",
 				Visibility:  modules.VisibilityPublic,
 				Description: "Record cash dividend (VND per share)",
-				Handler:     s.handleIncomeVND,
+				Handler:     s.handleDividend,
 			},
 			{
-				Name:        "stock_convert",
+				Name:        "stock_portfolio",
 				Visibility:  modules.VisibilityPublic,
-				Description: "Currency exchange (coming soon)",
-				Handler:     s.handleConvert,
-			},
-			{
-				Name:        "stock_stats",
-				Visibility:  modules.VisibilityPublic,
-				Description: "Show portfolio summary with P&L",
+				Description: "Show stock portfolio with P&L",
 				Handler:     s.handleStats,
 			},
 		},
