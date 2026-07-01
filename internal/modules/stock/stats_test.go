@@ -53,7 +53,7 @@ func TestHandleStats_UsesSSIBatchPrices(t *testing.T) {
 		nowFn:  func() time.Time { return now },
 	}
 	rb := testutil.NewRecordingBot(t)
-	if err := s.handleStats(ctx, rb.Bot, testutil.NewPrivateMessage(7, "/stock_stats")); err != nil {
+	if err := s.handleStats(ctx, rb.Bot, testutil.NewPrivateMessage(7, "/stock_portfolio")); err != nil {
 		t.Fatalf("handleStats: %v", err)
 	}
 

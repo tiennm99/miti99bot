@@ -19,11 +19,10 @@ import (
 // prefixes/partitions). PriceClient is reused across calls; nowFn allows
 // tests to inject a deterministic clock for portfolio CreatedAt.
 type state struct {
-	store             Store
-	prices            *PriceClient
-	locks             keylock.Map
-	nowFn             func() time.Time
-	comingSoonMessage string // exposed for tests / future i18n
+	store  Store
+	prices *PriceClient
+	locks  keylock.Map
+	nowFn  func() time.Time
 }
 
 func (s *state) now() time.Time {
@@ -36,9 +35,8 @@ func (s *state) now() time.Time {
 // newState builds the default state used by the module factory.
 func newState(store Store) *state {
 	return &state{
-		store:             store,
-		prices:            &PriceClient{},
-		comingSoonMessage: "Crypto, gold & currency exchange coming soon!",
+		store:  store,
+		prices: &PriceClient{},
 	}
 }
 
@@ -67,6 +65,31 @@ func argsAfterCommand(text string) []string {
 		return nil
 	}
 	return parts[1:]
+}
+
+func (s *state) handlePrice(ctx context.Context, b *bot.Bot, update *models.Update) error {
+	args := argsAfterCommand(update.Message.Text)
+	if len(args) != 1 {
+		return chathelper.Reply(ctx, b, update.Message, "Usage: /stock_price <TICKER>\nExample: /stock_price TCB")
+	}
+	symbol, err := normalizeStockSymbol(args[0])
+	if err != nil {
+		if errors.Is(err, ErrUnknownTicker) {
+			return chathelper.Reply(ctx, b, update.Message, "Unknown stock ticker \""+strings.ToUpper(args[0])+"\".")
+		}
+		return chathelper.Reply(ctx, b, update.Message, "Could not parse that ticker. Try again later.")
+	}
+	fetchCtx, cancel := chathelper.FetchContext(ctx)
+	defer cancel()
+	price, err := s.prices.FetchPrice(fetchCtx, symbol)
+	if err != nil {
+		if errors.Is(err, ErrNoPrice) {
+			return chathelper.Reply(ctx, b, update.Message, "No price available for "+symbol+".")
+		}
+		log.Error("stock_fetch_price", "ticker", symbol, "err", err)
+		return chathelper.Reply(ctx, b, update.Message, "Could not fetch price. Try again later.")
+	}
+	return chathelper.Reply(ctx, b, update.Message, symbol+" price: "+FormatVND(price))
 }
 
 func (s *state) handleTopup(ctx context.Context, b *bot.Bot, update *models.Update) error {
@@ -120,7 +143,7 @@ func (s *state) handleBuy(ctx context.Context, b *bot.Bot, update *models.Update
 	if err != nil {
 		if errors.Is(err, ErrUnknownTicker) {
 			return chathelper.Reply(ctx, b, update.Message,
-				"Unknown stock ticker \""+strings.ToUpper(args[1])+"\".\n"+s.comingSoonMessage)
+				"Unknown stock ticker \""+strings.ToUpper(args[1])+"\".")
 		}
 		return chathelper.Reply(ctx, b, update.Message, "Could not parse that ticker. Try again later.")
 	}
@@ -217,7 +240,7 @@ func (s *state) handleSell(ctx context.Context, b *bot.Bot, update *models.Updat
 			"\nRemaining: "+FormatVND(p.Currency["VND"]))
 }
 
-func (s *state) handleIncomeStock(ctx context.Context, b *bot.Bot, update *models.Update) error {
+func (s *state) handleBonus(ctx context.Context, b *bot.Bot, update *models.Update) error {
 	userID, ok := senderInfo(update)
 	if !ok {
 		return chathelper.Reply(ctx, b, update.Message,
@@ -226,7 +249,7 @@ func (s *state) handleIncomeStock(ctx context.Context, b *bot.Bot, update *model
 	args := argsAfterCommand(update.Message.Text)
 	if len(args) < 2 {
 		return chathelper.Reply(ctx, b, update.Message,
-			"Usage: /stock_income_stock <qty> <TICKER>\nExample: /stock_income_stock 200 TCX")
+			"Usage: /stock_bonus <qty> <TICKER>\nExample: /stock_bonus 200 TCX")
 	}
 	qty, err := strconv.ParseInt(args[0], 10, 64)
 	if err != nil || qty <= 0 {
@@ -252,7 +275,7 @@ func (s *state) handleIncomeStock(ctx context.Context, b *bot.Bot, update *model
 	held := p.Assets[symbol]
 	if held == 0 {
 		return chathelper.Reply(ctx, b, update.Message,
-			"You don't hold any "+symbol+" to receive a stock dividend.")
+			"You don't hold any "+symbol+" to receive bonus shares.")
 	}
 	p.AddAsset(symbol, qty)
 	if err := SavePortfolio(ctx, s.store, userID, p); err != nil {
@@ -260,11 +283,11 @@ func (s *state) handleIncomeStock(ctx context.Context, b *bot.Bot, update *model
 		return chathelper.Reply(ctx, b, update.Message, "Could not save portfolio. Try again later.")
 	}
 	return chathelper.Reply(ctx, b, update.Message,
-		"Stock dividend: +"+FormatStock(float64(qty))+" "+symbol+
+		"Bonus shares: +"+FormatStock(float64(qty))+" "+symbol+
 			"\nHolding: "+FormatStock(float64(held))+" → "+FormatStock(float64(p.Assets[symbol])))
 }
 
-func (s *state) handleIncomeVND(ctx context.Context, b *bot.Bot, update *models.Update) error {
+func (s *state) handleDividend(ctx context.Context, b *bot.Bot, update *models.Update) error {
 	userID, ok := senderInfo(update)
 	if !ok {
 		return chathelper.Reply(ctx, b, update.Message,
@@ -273,7 +296,7 @@ func (s *state) handleIncomeVND(ctx context.Context, b *bot.Bot, update *models.
 	args := argsAfterCommand(update.Message.Text)
 	if len(args) < 2 {
 		return chathelper.Reply(ctx, b, update.Message,
-			"Usage: /stock_income_vnd <amount_per_share> <TICKER>\nExample: /stock_income_vnd 1500 TCX")
+			"Usage: /stock_dividend <amount_per_share> <TICKER>\nExample: /stock_dividend 1500 TCX")
 	}
 	amountPerShare, err := strconv.ParseFloat(args[0], 64)
 	if err != nil || amountPerShare <= 0 {
@@ -313,21 +336,13 @@ func (s *state) handleIncomeVND(ctx context.Context, b *bot.Bot, update *models.
 			"\nRemaining: "+FormatVND(p.Currency["VND"]))
 }
 
-func (s *state) handleConvert(ctx context.Context, b *bot.Bot, update *models.Update) error {
-	if update.Message == nil {
-		return nil
-	}
-	return chathelper.Reply(ctx, b, update.Message,
-		"Currency exchange is not available yet.\n"+s.comingSoonMessage)
-}
-
 // handleStats fetches current prices for held tickers and renders the
 // portfolio. Read-only; no portfolio mutation, so no keylock.
 func (s *state) handleStats(ctx context.Context, b *bot.Bot, update *models.Update) error {
 	userID, ok := senderInfo(update)
 	if !ok {
 		return chathelper.Reply(ctx, b, update.Message,
-			"Cannot identify user — /stock_stats needs a sender.")
+			"Cannot identify user — /stock_portfolio needs a sender.")
 	}
 	p, err := LoadPortfolio(ctx, s.store, userID, s.now().UnixMilli())
 	if err != nil {

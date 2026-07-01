@@ -1,7 +1,5 @@
-// Package stock is a paper-stock module for VN stocks. Per-user
-// portfolio + buy/sell at market price + stats with P&L. SQL-based trade
-// history and a retention cron are out of scope today; the current
-// implementation keeps only the live portfolio in KV.
+// Package stock is a paper-stock module for VN stocks. It keeps a per-user
+// live portfolio in KV and prices positions at the current market price.
 package stock
 
 import (

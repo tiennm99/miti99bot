@@ -15,7 +15,7 @@ import (
 func (s *state) handleStats(ctx context.Context, b *bot.Bot, update *models.Update) error {
 	userID, ok := senderInfo(update)
 	if !ok {
-		return chathelper.Reply(ctx, b, update.Message, "Cannot identify user - /coin_stats needs a sender.")
+		return chathelper.Reply(ctx, b, update.Message, "Cannot identify user - /coin_portfolio needs a sender.")
 	}
 	p, err := LoadPortfolio(ctx, s.store, userID, s.now().UnixMilli())
 	if err != nil {

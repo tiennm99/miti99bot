@@ -171,7 +171,7 @@ func (s *state) handleStats(ctx context.Context, b *bot.Bot, update *models.Upda
 	userID, ok := senderInfo(update)
 	if !ok {
 		return chathelper.Reply(ctx, b, update.Message,
-			"Cannot identify user - /gold_stats needs a sender.")
+			"Cannot identify user - /gold_portfolio needs a sender.")
 	}
 	p, err := LoadPortfolio(ctx, s.store, userID, s.now().UnixMilli())
 	if err != nil {

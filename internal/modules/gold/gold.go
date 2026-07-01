@@ -13,7 +13,7 @@ func New(deps modules.Deps) modules.Module {
 			{
 				Name:        "gold_price",
 				Visibility:  modules.VisibilityPublic,
-				Description: "Show current gold spot price (USD & VND)",
+				Description: "Show current SJC gold buy/sell price",
 				Handler:     s.handlePrice,
 			},
 			{
@@ -35,9 +35,9 @@ func New(deps modules.Deps) modules.Module {
 				Handler:     s.handleSell,
 			},
 			{
-				Name:        "gold_stats",
+				Name:        "gold_portfolio",
 				Visibility:  modules.VisibilityPublic,
-				Description: "Show gold account summary with P&L",
+				Description: "Show gold portfolio with P&L",
 				Handler:     s.handleStats,
 			},
 		},
