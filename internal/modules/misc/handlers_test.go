@@ -89,6 +89,48 @@ func TestPingStats_DeniedToNonAdmin(t *testing.T) {
 	}
 }
 
+func TestWheelOfNames_UsageWhenMissingOptions(t *testing.T) {
+	for _, text := range []string{"/wheelofnames", "/wheelofnames , ,"} {
+		t.Run(text, func(t *testing.T) {
+			rb, _ := installMisc(t, 999)
+			rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(7, text))
+
+			if got := rb.LastSent().Text(); got != wheelOfNamesUsage {
+				t.Errorf("wheelofnames reply = %q, want usage %q", got, wheelOfNamesUsage)
+			}
+		})
+	}
+}
+
+func TestWheelOfNames_SingleOption(t *testing.T) {
+	rb, _ := installMisc(t, 999)
+	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(7, "/wheelofnames Alice"))
+
+	if got := rb.LastSent().Text(); got != "Alice" {
+		t.Errorf("wheelofnames reply = %q, want Alice", got)
+	}
+}
+
+func TestWheelOfNames_PicksFromTrimmedOptions(t *testing.T) {
+	rb, _ := installMisc(t, 999)
+	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(7, "/wheelofnames Alice, Bob, Carol"))
+
+	got := rb.LastSent().Text()
+	if got != "Alice" && got != "Bob" && got != "Carol" {
+		t.Errorf("wheelofnames reply = %q, want one of Alice/Bob/Carol", got)
+	}
+}
+
+func TestWheelOfNames_IgnoresEmptySegments(t *testing.T) {
+	rb, _ := installMisc(t, 999)
+	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(7, "/wheelofnames , Alice , , Bob ,"))
+
+	got := rb.LastSent().Text()
+	if got != "Alice" && got != "Bob" {
+		t.Errorf("wheelofnames reply = %q, want Alice or Bob", got)
+	}
+}
+
 // trongTruongHopUpdate is the inline counterpart of testutil.NewPrivateMessage
 // for cases that need control over From (username, names). The dispatcher
 // requires a bot_command entity, so we lift that from the helper API by reusing
