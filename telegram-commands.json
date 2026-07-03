@@ -9,6 +9,10 @@
       "description": "Health check; replies pong"
     },
     {
+      "command": "wheelofnames",
+      "description": "Pick one random comma-separated option"
+    },
+    {
       "command": "trongtruonghop",
       "description": "Phát biểu disclaimer cho thành viên hiện tại"
     },

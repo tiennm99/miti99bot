@@ -24,6 +24,7 @@ func TestNew_RegistersExpectedCommands(t *testing.T) {
 	want := map[string]modules.Visibility{
 		"ping":           modules.VisibilityPublic,
 		"ping_stats":     modules.VisibilityProtected,
+		"wheelofnames":   modules.VisibilityPublic,
 		"the_answer":     modules.VisibilityPrivate,
 		"trongtruonghop": modules.VisibilityPublic,
 		"tth":            modules.VisibilityPublic,
