@@ -159,7 +159,14 @@ func TestStatsWithAndWithoutPrice(t *testing.T) {
 		t.Fatalf("stats: %v", err)
 	}
 	text := rb.LastSent().Text()
-	for _, want := range []string{"Gold Account Summary", "Gold: 1 luong", "Price: 2.000.000 VND/luong", "P&L:"} {
+	for _, want := range []string{
+		"Gold Account Summary",
+		"Gold: 1 luong",
+		"SJC buy (you sell): 2.000.000 VND/luong",
+		"SJC sell (you buy): 2.000.000 VND/luong",
+		"Gold value (at SJC buy): 2.000.000 VND",
+		"P&L:",
+	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("stats missing %q in %q", want, text)
 		}
@@ -170,6 +177,33 @@ func TestStatsWithAndWithoutPrice(t *testing.T) {
 		t.Fatalf("stats no price: %v", err)
 	}
 	rb.AssertSentText(t, "Price: no price")
+}
+
+func TestHandleStatsShowsBuyAndSellPrices(t *testing.T) {
+	ctx := context.Background()
+	s := &state{
+		store:  newGoldStore(),
+		prices: spreadPriceFetcher{buy: 90_000_000, sell: 91_000_000},
+		nowFn:  func() time.Time { return time.UnixMilli(123) },
+	}
+	rb := testutil.NewRecordingBot(t)
+	_ = s.handleTopup(ctx, rb.Bot, testutil.NewPrivateMessage(7, "/gold_topup 500000000"))
+	_ = s.handleBuy(ctx, rb.Bot, testutil.NewPrivateMessage(7, "/gold_buy 1"))
+	rb.Reset()
+	if err := s.handleStats(ctx, rb.Bot, testutil.NewPrivateMessage(7, "/gold_portfolio")); err != nil {
+		t.Fatalf("stats: %v", err)
+	}
+	text := rb.LastSent().Text()
+	for _, want := range []string{
+		"SJC buy (you sell): 90.000.000 VND/luong",
+		"SJC sell (you buy): 91.000.000 VND/luong",
+		"Gold value (at SJC buy): 90.000.000 VND",
+		"Total value: 499.000.000 VND",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("stats missing %q in %q", want, text)
+		}
+	}
 }
 
 // spreadPriceFetcher returns different buy/sell prices so handler tests can
