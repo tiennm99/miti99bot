@@ -184,11 +184,12 @@ func (s *state) handleStats(ctx context.Context, b *bot.Bot, update *models.Upda
 	// Fetch under a reply-reserved sub-context; reply on the original ctx.
 	fetchCtx, cancel := chathelper.FetchContext(ctx)
 	defer cancel()
-	if buyPrice, _, err := s.prices.FetchLuongPrices(fetchCtx); err == nil {
+	if buyPrice, sellPrice, err := s.prices.FetchLuongPrices(fetchCtx); err == nil {
 		goldValue := p.Luong * buyPrice
 		totalValue += goldValue
-		lines = append(lines, "Price: "+FormatVND(buyPrice)+"/luong")
-		lines = append(lines, "Gold value: "+FormatVND(goldValue))
+		lines = append(lines, "SJC buy (you sell): "+FormatVND(buyPrice)+"/luong")
+		lines = append(lines, "SJC sell (you buy): "+FormatVND(sellPrice)+"/luong")
+		lines = append(lines, "Gold value (at SJC buy): "+FormatVND(goldValue))
 		lines = append(lines, "Total value: "+FormatVND(totalValue))
 		lines = append(lines, "Invested: "+FormatVND(p.Meta.Invested))
 		lines = append(lines, "P&L: "+FormatPnL(totalValue, p.Meta.Invested))
