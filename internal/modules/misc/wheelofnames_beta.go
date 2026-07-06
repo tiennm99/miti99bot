@@ -47,17 +47,13 @@ func renderWheelOfNamesBetaGIF(options []string, winner int) ([]byte, error) {
 
 	frames := make([]*image.Paletted, 0, wheelBetaSpinFrames+wheelBetaHoldFrames)
 	delays := make([]int, 0, wheelBetaSpinFrames+wheelBetaHoldFrames)
-	finalRotation := finalWheelRotation(len(options), winner)
-	startRotation := finalRotation - 8*2*math.Pi
+	profile := newWheelBetaSpinProfile(len(options), winner, nil)
 	for i := 0; i < wheelBetaSpinFrames; i++ {
 		t := float64(i) / float64(wheelBetaSpinFrames-1)
-		remaining := 1 - t
-		progress := 1 - remaining*remaining*remaining
-		rotation := startRotation + (finalRotation-startRotation)*progress
-		frames = append(frames, renderWheelBetaFrame(options, winner, rotation, false))
+		frames = append(frames, renderWheelBetaFrameWithStatus(options, winner, profile.rotationAt(t), false, profile.statusAt(t)))
 		delays = append(delays, wheelBetaSpinDelay)
 	}
-	resultFrame := renderWheelBetaFrame(options, winner, finalRotation, true)
+	resultFrame := renderWheelBetaFrame(options, winner, profile.finalRotation, true)
 	for i := 0; i < wheelBetaHoldFrames; i++ {
 		frames = append(frames, resultFrame)
 		delays = append(delays, wheelBetaHoldDelay)
@@ -81,6 +77,10 @@ func renderWheelOfNamesBetaGIF(options []string, winner int) ([]byte, error) {
 }
 
 func renderWheelBetaFrame(options []string, winner int, rotation float64, reveal bool) *image.Paletted {
+	return renderWheelBetaFrameWithStatus(options, winner, rotation, reveal, "")
+}
+
+func renderWheelBetaFrameWithStatus(options []string, winner int, rotation float64, reveal bool, status string) *image.Paletted {
 	rect := image.Rect(0, 0, wheelBetaSize, wheelBetaSize)
 	img := image.NewPaletted(rect, wheelBetaPalette)
 	draw.Draw(img, rect, image.NewUniform(wheelBetaPalette[0]), image.Point{}, draw.Src)
@@ -101,12 +101,16 @@ func renderWheelBetaFrame(options []string, winner int, rotation float64, reveal
 		}
 	}
 
+	drawWheelRim(img, cx, cy)
 	drawWheelSliceLabels(img, options, rotation)
 	drawCircle(img, cx, cy, 24, 2)
 	drawCircle(img, cx, cy, 18, 1)
 	drawPointer(img, cx, cy-wheelBetaRadius)
 	drawCenteredText(img, "WHEELOFNAMES BETA", cy+wheelBetaRadius+34, 1)
-	label := "CURRENT"
+	label := status
+	if label == "" {
+		label = "CURRENT"
+	}
 	value := asciiWheelText(options[currentWheelBetaIndex(len(options), rotation)], 28)
 	if reveal {
 		label = "RESULT"
@@ -117,8 +121,12 @@ func renderWheelBetaFrame(options []string, winner int, rotation float64, reveal
 }
 
 func finalWheelRotation(optionCount, winner int) float64 {
+	return finalWheelRotationWithOffset(optionCount, winner, 0)
+}
+
+func finalWheelRotationWithOffset(optionCount, winner int, sliceOffset float64) float64 {
 	segment := 2 * math.Pi / float64(optionCount)
-	return -math.Pi/2 - (float64(winner)+0.5)*segment
+	return -math.Pi/2 - (float64(winner)+0.5+sliceOffset)*segment
 }
 
 func currentWheelBetaIndex(optionCount int, rotation float64) int {

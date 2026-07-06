@@ -6,6 +6,7 @@ import (
 	"image"
 	"image/gif"
 	"math"
+	"math/rand/v2"
 	"strings"
 	"testing"
 	"time"
@@ -307,6 +308,49 @@ func TestWheelOfNamesBeta_CurrentOptionTracksPointer(t *testing.T) {
 		if got := currentWheelBetaIndex(4, rotation); got != winner {
 			t.Fatalf("currentWheelBetaIndex at final rotation = %d, want %d", got, winner)
 		}
+	}
+}
+
+func TestWheelOfNamesBeta_RandomSpinProfileKeepsWinnerUnderPointer(t *testing.T) {
+	rng := rand.New(rand.NewPCG(1, 2))
+	for optionCount := 2; optionCount <= 10; optionCount++ {
+		for winner := 0; winner < optionCount; winner++ {
+			for spin := 0; spin < 20; spin++ {
+				profile := newWheelBetaSpinProfile(optionCount, winner, rng)
+				if got := currentWheelBetaIndex(optionCount, profile.finalRotation); got != winner {
+					t.Fatalf("optionCount=%d winner=%d spin=%d final index = %d", optionCount, winner, spin, got)
+				}
+				if got := profile.rotationAt(1); math.Abs(got-profile.finalRotation) > 1e-9 {
+					t.Fatalf("rotationAt(1) = %f, want final %f", got, profile.finalRotation)
+				}
+			}
+		}
+	}
+}
+
+func TestWheelOfNamesBeta_SpinProfileVariesBetweenSpins(t *testing.T) {
+	rng := rand.New(rand.NewPCG(10, 20))
+	first := newWheelBetaSpinProfile(5, 2, rng)
+	second := newWheelBetaSpinProfile(5, 2, rng)
+	if first.startRotation == second.startRotation &&
+		first.finalRotation == second.finalRotation &&
+		first.accelEnd == second.accelEnd &&
+		first.coastEnd == second.coastEnd &&
+		first.wobblePhase == second.wobblePhase {
+		t.Fatalf("spin profiles did not vary: %+v", first)
+	}
+}
+
+func TestWheelOfNamesBeta_SpinProfileProgressIsMonotonic(t *testing.T) {
+	rng := rand.New(rand.NewPCG(30, 40))
+	profile := newWheelBetaSpinProfile(6, 4, rng)
+	prev := -1.0
+	for i := 0; i <= 100; i++ {
+		progress := profile.progressAt(float64(i) / 100)
+		if progress < prev {
+			t.Fatalf("progress at step %d = %f, previous %f", i, progress, prev)
+		}
+		prev = progress
 	}
 }
 
