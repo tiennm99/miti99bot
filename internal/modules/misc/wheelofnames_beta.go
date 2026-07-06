@@ -37,6 +37,8 @@ var wheelBetaPalette = color.Palette{
 	color.RGBA{R: 235, G: 117, B: 164, A: 255},
 }
 
+var wheelBetaSliceColorIndexes = []byte{3, 4, 5, 6, 7, 8, 9}
+
 func renderWheelOfNamesBetaGIF(options []string, winner int) ([]byte, error) {
 	if len(options) == 0 {
 		return nil, fmt.Errorf("no options")
@@ -51,7 +53,8 @@ func renderWheelOfNamesBetaGIF(options []string, winner int) ([]byte, error) {
 	startRotation := finalRotation - 8*2*math.Pi
 	for i := 0; i < wheelBetaSpinFrames; i++ {
 		t := float64(i) / float64(wheelBetaSpinFrames-1)
-		progress := 1 - math.Pow(1-t, 3)
+		remaining := 1 - t
+		progress := 1 - remaining*remaining*remaining
 		rotation := startRotation + (finalRotation-startRotation)*progress
 		frames = append(frames, renderWheelBetaFrame(options, winner, rotation, false))
 		delays = append(delays, wheelBetaSpinDelay)
@@ -92,7 +95,7 @@ func renderWheelBetaFrame(options []string, winner int, rotation float64, reveal
 			}
 			theta := normalizeAngle(math.Atan2(float64(dy), float64(dx)) - rotation)
 			idx := int(theta / segment)
-			colorIndex := byte(3 + idx%7)
+			colorIndex := wheelBetaSliceColorIndexes[idx%len(wheelBetaSliceColorIndexes)]
 			img.SetColorIndex(x, y, colorIndex)
 		}
 	}
@@ -101,15 +104,24 @@ func renderWheelBetaFrame(options []string, winner int, rotation float64, reveal
 	drawCircle(img, cx, cy, 18, 1)
 	drawPointer(img, cx, cy-wheelBetaRadius-10)
 	drawCenteredText(img, "WHEELOFNAMES BETA", cy+wheelBetaRadius+34, 1)
+	label := "CURRENT"
+	value := asciiWheelText(options[currentWheelBetaIndex(len(options), rotation)], 28)
 	if reveal {
-		drawResultBand(img, asciiWheelText(options[winner], 28))
+		label = "WINNER"
+		value = asciiWheelText(options[winner], 28)
 	}
+	drawStatusBand(img, label, value)
 	return img
 }
 
 func finalWheelRotation(optionCount, winner int) float64 {
 	segment := 2 * math.Pi / float64(optionCount)
 	return -math.Pi/2 - (float64(winner)+0.5)*segment
+}
+
+func currentWheelBetaIndex(optionCount int, rotation float64) int {
+	segment := 2 * math.Pi / float64(optionCount)
+	return int(normalizeAngle(-math.Pi/2-rotation) / segment)
 }
 
 func normalizeAngle(theta float64) float64 {
@@ -141,14 +153,14 @@ func drawPointer(img *image.Paletted, cx, tipY int) {
 	}
 }
 
-func drawResultBand(img *image.Paletted, winner string) {
+func drawStatusBand(img *image.Paletted, label, value string) {
 	for y := 230; y < 282; y++ {
 		for x := 28; x < wheelBetaSize-28; x++ {
 			img.SetColorIndex(x, y, 2)
 		}
 	}
-	drawCenteredText(img, "WINNER", 250, 1)
-	drawCenteredText(img, winner, 270, 1)
+	drawCenteredText(img, label, 250, 1)
+	drawCenteredText(img, value, 270, 1)
 }
 
 func drawCenteredText(img *image.Paletted, text string, baselineY int, colorIndex byte) {
