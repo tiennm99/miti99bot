@@ -79,7 +79,7 @@ func (s *state) handleWeek(ctx context.Context, b *bot.Bot, update *models.Updat
 		"No major LoL matches this week.", "")
 }
 
-// handleNextWeek is /lol_nextweek — the next ICT calendar week
+// handleNextWeek is /lol_next_week — the next ICT calendar week
 // (Monday 00:00 ICT through the following Monday 00:00 ICT, exclusive).
 func (s *state) handleNextWeek(ctx context.Context, b *bot.Bot, update *models.Update) error {
 	msg := update.Message
