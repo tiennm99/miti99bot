@@ -57,9 +57,62 @@ func drawCircle(img *image.Paletted, cx, cy, radius int, colorIndex byte) {
 	}
 }
 
+func drawWheelDropShadow(img *image.Paletted, cx, cy int) {
+	rx := wheelBetaRadius + 9
+	ry := wheelBetaRadius + 5
+	shadowCY := cy + 8
+	limit := rx * rx * ry * ry
+	for y := shadowCY - ry; y <= shadowCY+ry; y++ {
+		for x := cx - rx; x <= cx+rx; x++ {
+			dx := x - cx
+			dy := y - shadowCY
+			if dx*dx*ry*ry+dy*dy*rx*rx <= limit {
+				setWheelBetaPixel(img, x, y, wheelBetaShadowColorIndex)
+			}
+		}
+	}
+}
+
+func drawWheelLighting(img *image.Paletted, cx, cy int) {
+	outer := wheelBetaRadius * wheelBetaRadius
+	edgeStart := wheelBetaRadius - 13
+	edge := edgeStart * edgeStart
+	for y := cy - wheelBetaRadius; y <= cy+wheelBetaRadius; y++ {
+		for x := cx - wheelBetaRadius; x <= cx+wheelBetaRadius; x++ {
+			dx, dy := x-cx, y-cy
+			d2 := dx*dx + dy*dy
+			if d2 > outer || d2 < edge {
+				continue
+			}
+			if dx+dy > wheelBetaRadius/3 {
+				img.SetColorIndex(x, y, wheelBetaBevelColorIndex)
+			}
+			if dx+dy < -wheelBetaRadius {
+				img.SetColorIndex(x, y, wheelBetaHighlightColorIndex)
+			}
+		}
+	}
+
+	drawHighlightOval(img, cx-30, cy-50, 44, 18)
+}
+
+func drawHighlightOval(img *image.Paletted, cx, cy, rx, ry int) {
+	limit := rx * rx * ry * ry
+	for y := cy - ry; y <= cy+ry; y++ {
+		for x := cx - rx; x <= cx+rx; x++ {
+			dx := x - cx
+			dy := y - cy
+			if dx*dx*ry*ry+dy*dy*rx*rx <= limit {
+				setWheelBetaPixel(img, x, y, wheelBetaHighlightColorIndex)
+			}
+		}
+	}
+}
+
 func drawWheelRim(img *image.Paletted, cx, cy int) {
-	drawCircleOutline(img, cx, cy, wheelBetaRadius, 3, 1)
-	drawCircleOutline(img, cx, cy, wheelBetaRadius-6, 1, 2)
+	drawCircleOutline(img, cx, cy, wheelBetaRadius, 3, wheelBetaInkColorIndex)
+	drawCircleOutline(img, cx, cy, wheelBetaRadius-5, 1, wheelBetaBevelColorIndex)
+	drawCircleOutline(img, cx, cy, wheelBetaRadius-8, 1, wheelBetaHighlightColorIndex)
 }
 
 func drawCircleOutline(img *image.Paletted, cx, cy, radius, thickness int, colorIndex byte) {
@@ -77,24 +130,72 @@ func drawCircleOutline(img *image.Paletted, cx, cy, radius, thickness int, color
 	}
 }
 
-func drawPointer(img *image.Paletted, cx, tipY int) {
+func drawPointer(img *image.Paletted, cx, tipY int, fillColorIndex byte) {
 	for y := 0; y < 34; y++ {
 		half := y / 2
 		rowY := tipY - y
 		for x := cx - half; x <= cx+half; x++ {
-			img.SetColorIndex(x, rowY, 1)
+			setWheelBetaPixel(img, x, rowY, wheelBetaInkColorIndex)
+		}
+	}
+	for y := 3; y < 30; y++ {
+		half := y/2 - 2
+		if half < 0 {
+			continue
+		}
+		rowY := tipY - y
+		for x := cx - half; x <= cx+half; x++ {
+			setWheelBetaPixel(img, x, rowY, fillColorIndex)
 		}
 	}
 }
 
+func drawWinnerCelebration(img *image.Paletted, step int) {
+	if step < 0 {
+		return
+	}
+
+	cx, cy := wheelBetaSize/2, wheelBetaSize/2
+	phase := step % wheelBetaCelebrateFrames
+	ringRadius := 34 + phase*5
+	if ringRadius < wheelBetaRadius-8 {
+		drawCircleOutline(img, cx, cy, ringRadius, 1, wheelBetaSparkColorIndex)
+	}
+
+	for i := 0; i < 14; i++ {
+		angle := (float64(i)/14)*2*math.Pi + float64(phase)*0.31
+		inner := float64(wheelBetaRadius + 9 + phase%3)
+		outer := inner + 7 + float64(phase%4)
+		x1 := cx + int(math.Round(math.Cos(angle)*inner))
+		y1 := cy + int(math.Round(math.Sin(angle)*inner))
+		x2 := cx + int(math.Round(math.Cos(angle)*outer))
+		y2 := cy + int(math.Round(math.Sin(angle)*outer))
+		colorIndex := wheelBetaSliceColorIndexes[(i+phase)%len(wheelBetaSliceColorIndexes)]
+		if i%5 == 0 {
+			colorIndex = wheelBetaSparkColorIndex
+		}
+		drawPalettedLine(img, x1, y1, x2, y2, colorIndex)
+		drawSpark(img, x2, y2, colorIndex)
+	}
+}
+
 func drawStatusBand(img *image.Paletted, label, value string) {
-	for y := 230; y < 282; y++ {
-		for x := 28; x < wheelBetaSize-28; x++ {
-			img.SetColorIndex(x, y, 2)
+	for y := 235; y < 286; y++ {
+		for x := 31; x < wheelBetaSize-25; x++ {
+			img.SetColorIndex(x, y, wheelBetaShadowColorIndex)
 		}
 	}
-	drawCenteredText(img, label, 250, 1)
-	drawCenteredText(img, value, 270, 1)
+	for y := 230; y < 282; y++ {
+		for x := 28; x < wheelBetaSize-28; x++ {
+			img.SetColorIndex(x, y, wheelBetaPaperColorIndex)
+		}
+	}
+	for x := 28; x < wheelBetaSize-28; x++ {
+		img.SetColorIndex(x, 230, wheelBetaHighlightColorIndex)
+		img.SetColorIndex(x, 281, wheelBetaBevelColorIndex)
+	}
+	drawCenteredText(img, label, 250, wheelBetaInkColorIndex)
+	drawCenteredText(img, value, 270, wheelBetaInkColorIndex)
 }
 
 func drawCenteredText(img *image.Paletted, text string, baselineY int, colorIndex byte) {
@@ -131,4 +232,56 @@ func asciiWheelText(s string, limit int) string {
 		return "winner"
 	}
 	return out
+}
+
+func drawSpark(img *image.Paletted, cx, cy int, colorIndex byte) {
+	for y := cy - 1; y <= cy+1; y++ {
+		for x := cx - 1; x <= cx+1; x++ {
+			if x == cx || y == cy {
+				setWheelBetaPixel(img, x, y, colorIndex)
+			}
+		}
+	}
+}
+
+func drawPalettedLine(img *image.Paletted, x0, y0, x1, y1 int, colorIndex byte) {
+	dx := absInt(x1 - x0)
+	sx := -1
+	if x0 < x1 {
+		sx = 1
+	}
+	dy := -absInt(y1 - y0)
+	sy := -1
+	if y0 < y1 {
+		sy = 1
+	}
+	err := dx + dy
+	for {
+		setWheelBetaPixel(img, x0, y0, colorIndex)
+		if x0 == x1 && y0 == y1 {
+			return
+		}
+		e2 := 2 * err
+		if e2 >= dy {
+			err += dy
+			x0 += sx
+		}
+		if e2 <= dx {
+			err += dx
+			y0 += sy
+		}
+	}
+}
+
+func setWheelBetaPixel(img *image.Paletted, x, y int, colorIndex byte) {
+	if image.Pt(x, y).In(img.Rect) {
+		img.SetColorIndex(x, y, colorIndex)
+	}
+}
+
+func absInt(v int) int {
+	if v < 0 {
+		return -v
+	}
+	return v
 }

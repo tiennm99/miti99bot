@@ -11,15 +11,26 @@ import (
 )
 
 const (
-	wheelBetaSize         = 320
-	wheelBetaRadius       = 118
-	wheelBetaSpinDuration = 7
-	wheelBetaHoldDuration = 3
-	wheelBetaSpinDelay    = 20
-	wheelBetaSpinFrames   = wheelBetaSpinDuration * 100 / wheelBetaSpinDelay
-	wheelBetaHoldFrames   = wheelBetaHoldDuration * 100 / wheelBetaSpinDelay
-	wheelBetaHoldDelay    = wheelBetaSpinDelay
-	wheelBetaDuration     = wheelBetaSpinDuration + wheelBetaHoldDuration
+	wheelBetaSize            = 320
+	wheelBetaRadius          = 118
+	wheelBetaSpinDuration    = 7
+	wheelBetaHoldDuration    = 3
+	wheelBetaSpinDelay       = 20
+	wheelBetaSpinFrames      = wheelBetaSpinDuration * 100 / wheelBetaSpinDelay
+	wheelBetaHoldFrames      = wheelBetaHoldDuration * 100 / wheelBetaSpinDelay
+	wheelBetaHoldDelay       = wheelBetaSpinDelay
+	wheelBetaDuration        = wheelBetaSpinDuration + wheelBetaHoldDuration
+	wheelBetaCelebrateFrames = 8
+)
+
+const (
+	wheelBetaBackgroundColorIndex byte = 0
+	wheelBetaInkColorIndex        byte = 1
+	wheelBetaPaperColorIndex      byte = 2
+	wheelBetaShadowColorIndex     byte = 10
+	wheelBetaBevelColorIndex      byte = 11
+	wheelBetaHighlightColorIndex  byte = 12
+	wheelBetaSparkColorIndex      byte = 13
 )
 
 var wheelBetaPalette = color.Palette{
@@ -33,6 +44,10 @@ var wheelBetaPalette = color.Palette{
 	color.RGBA{R: 147, G: 103, B: 196, A: 255},
 	color.RGBA{R: 52, G: 197, B: 197, A: 255},
 	color.RGBA{R: 235, G: 117, B: 164, A: 255},
+	color.RGBA{R: 204, G: 212, B: 224, A: 255},
+	color.RGBA{R: 82, G: 94, B: 111, A: 255},
+	color.RGBA{R: 255, G: 244, B: 206, A: 255},
+	color.RGBA{R: 255, G: 218, B: 89, A: 255},
 }
 
 var wheelBetaSliceColorIndexes = []byte{3, 4, 5, 6, 7, 8, 9}
@@ -53,9 +68,12 @@ func renderWheelOfNamesBetaGIF(options []string, winner int) ([]byte, error) {
 		frames = append(frames, renderWheelBetaFrameWithStatus(options, winner, profile.rotationAt(t), false, profile.statusAt(t)))
 		delays = append(delays, wheelBetaSpinDelay)
 	}
-	resultFrame := renderWheelBetaFrame(options, winner, profile.finalRotation, true)
 	for i := 0; i < wheelBetaHoldFrames; i++ {
-		frames = append(frames, resultFrame)
+		celebrateStep := i
+		if celebrateStep >= wheelBetaCelebrateFrames {
+			celebrateStep = -1
+		}
+		frames = append(frames, renderWheelBetaFrameWithCelebration(options, winner, profile.finalRotation, true, "", celebrateStep))
 		delays = append(delays, wheelBetaHoldDelay)
 	}
 
@@ -81,11 +99,17 @@ func renderWheelBetaFrame(options []string, winner int, rotation float64, reveal
 }
 
 func renderWheelBetaFrameWithStatus(options []string, winner int, rotation float64, reveal bool, status string) *image.Paletted {
+	return renderWheelBetaFrameWithCelebration(options, winner, rotation, reveal, status, -1)
+}
+
+func renderWheelBetaFrameWithCelebration(options []string, winner int, rotation float64, reveal bool, status string, celebrateStep int) *image.Paletted {
 	rect := image.Rect(0, 0, wheelBetaSize, wheelBetaSize)
 	img := image.NewPaletted(rect, wheelBetaPalette)
-	draw.Draw(img, rect, image.NewUniform(wheelBetaPalette[0]), image.Point{}, draw.Src)
+	draw.Draw(img, rect, image.NewUniform(wheelBetaPalette[wheelBetaBackgroundColorIndex]), image.Point{}, draw.Src)
 
 	cx, cy := wheelBetaSize/2, wheelBetaSize/2
+	drawWheelDropShadow(img, cx, cy)
+
 	segment := 2 * math.Pi / float64(len(options))
 	r2 := wheelBetaRadius * wheelBetaRadius
 	for y := cy - wheelBetaRadius; y <= cy+wheelBetaRadius; y++ {
@@ -101,17 +125,21 @@ func renderWheelBetaFrameWithStatus(options []string, winner int, rotation float
 		}
 	}
 
+	currentIndex := currentWheelBetaIndex(len(options), rotation)
+	pointerColor := wheelBetaSliceColorIndexes[currentIndex%len(wheelBetaSliceColorIndexes)]
+	drawWheelLighting(img, cx, cy)
 	drawWheelRim(img, cx, cy)
+	drawWinnerCelebration(img, celebrateStep)
 	drawWheelSliceLabels(img, options, rotation)
-	drawCircle(img, cx, cy, 24, 2)
-	drawCircle(img, cx, cy, 18, 1)
-	drawPointer(img, cx, cy-wheelBetaRadius)
-	drawCenteredText(img, "WHEELOFNAMES BETA", cy+wheelBetaRadius+34, 1)
+	drawCircle(img, cx, cy, 24, wheelBetaPaperColorIndex)
+	drawCircle(img, cx, cy, 18, wheelBetaInkColorIndex)
+	drawPointer(img, cx, cy-wheelBetaRadius, pointerColor)
+	drawCenteredText(img, "WHEELOFNAMES BETA", cy+wheelBetaRadius+34, wheelBetaInkColorIndex)
 	label := status
 	if label == "" {
 		label = "CURRENT"
 	}
-	value := asciiWheelText(options[currentWheelBetaIndex(len(options), rotation)], 28)
+	value := asciiWheelText(options[currentIndex], 28)
 	if reveal {
 		label = "RESULT"
 		value = asciiWheelText(options[winner], 28)
