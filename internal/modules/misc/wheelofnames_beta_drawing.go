@@ -1,19 +1,48 @@
 package misc
 
 import (
+	_ "embed"
 	"image"
 	"image/color"
 	"math"
 	"strings"
+	"unicode"
 
 	"golang.org/x/image/font"
-	"golang.org/x/image/font/basicfont"
+	"golang.org/x/image/font/opentype"
 	"golang.org/x/image/math/fixed"
 )
 
 const (
 	wheelBetaSliceLabelRadius = 64
+	wheelBetaFontSize         = 10
+	wheelBetaFontDPI          = 72
 )
+
+//go:embed fonts/dejavu-sans.ttf
+var wheelBetaTextFontBytes []byte
+
+var wheelBetaTextFont = mustWheelBetaTextFont()
+
+func mustWheelBetaTextFont() *opentype.Font {
+	parsed, err := opentype.Parse(wheelBetaTextFontBytes)
+	if err != nil {
+		panic(err)
+	}
+	return parsed
+}
+
+func newWheelBetaTextFace() font.Face {
+	face, err := opentype.NewFace(wheelBetaTextFont, &opentype.FaceOptions{
+		Size:    wheelBetaFontSize,
+		DPI:     wheelBetaFontDPI,
+		Hinting: font.HintingFull,
+	})
+	if err != nil {
+		panic(err)
+	}
+	return face
+}
 
 func drawWheelSliceLabels(img *image.Paletted, options []string, rotation float64) {
 	if len(options) == 0 {
@@ -26,7 +55,7 @@ func drawWheelSliceLabels(img *image.Paletted, options []string, rotation float6
 		angle := rotation + (float64(idx)+0.5)*segment
 		centerX := cx + int(math.Round(math.Cos(angle)*float64(wheelBetaSliceLabelRadius)))
 		centerY := cy + int(math.Round(math.Sin(angle)*float64(wheelBetaSliceLabelRadius)))
-		text := asciiWheelText(option, limit)
+		text := wheelBetaDisplayText(option, limit)
 		drawRotatedCenteredTextAt(img, text, centerX+1, centerY+1, angle, wheelBetaPaperColorIndex)
 		drawRotatedCenteredTextAt(img, text, centerX, centerY, angle, wheelBetaInkColorIndex)
 	}
@@ -203,7 +232,10 @@ func drawCenteredText(img *image.Paletted, text string, baselineY int, colorInde
 }
 
 func drawCenteredTextAt(img *image.Paletted, text string, centerX, baselineY int, colorIndex byte) {
-	face := basicfont.Face7x13
+	face := newWheelBetaTextFace()
+	defer func() {
+		_ = face.Close()
+	}()
 	width := font.MeasureString(face, text).Ceil()
 	x := centerX - width/2
 	drawer := font.Drawer{
@@ -216,7 +248,10 @@ func drawCenteredTextAt(img *image.Paletted, text string, centerX, baselineY int
 }
 
 func drawRotatedCenteredTextAt(img *image.Paletted, text string, centerX, centerY int, angle float64, colorIndex byte) {
-	face := basicfont.Face7x13
+	face := newWheelBetaTextFace()
+	defer func() {
+		_ = face.Close()
+	}()
 	padding := 2
 	metrics := face.Metrics()
 	textWidth := font.MeasureString(face, text).Ceil()
@@ -247,17 +282,20 @@ func drawRotatedCenteredTextAt(img *image.Paletted, text string, centerX, center
 	}
 }
 
-func asciiWheelText(s string, limit int) string {
+func wheelBetaDisplayText(s string, limit int) string {
 	var b strings.Builder
+	count := 0
 	for _, r := range s {
-		if b.Len() >= limit {
+		if count >= limit {
 			break
 		}
-		if r < 32 || r > 126 {
+		if unicode.IsControl(r) {
 			b.WriteByte('?')
+			count++
 			continue
 		}
 		b.WriteRune(r)
+		count++
 	}
 	out := strings.TrimSpace(b.String())
 	if out == "" {

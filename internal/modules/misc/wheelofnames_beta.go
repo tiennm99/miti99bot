@@ -140,10 +140,10 @@ func renderWheelBetaFrameWithCelebration(options []string, winner int, rotation 
 	if label == "" {
 		label = "CURRENT"
 	}
-	value := asciiWheelText(options[currentIndex], 28)
+	value := wheelBetaDisplayText(options[currentIndex], 28)
 	if reveal {
 		label = "RESULT"
-		value = asciiWheelText(options[winner], 28)
+		value = wheelBetaDisplayText(options[winner], 28)
 	}
 	drawStatusBand(img, label, value)
 	return img
