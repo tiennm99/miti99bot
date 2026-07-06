@@ -14,9 +14,10 @@ import (
 )
 
 const (
-	wheelBetaSliceLabelRadius = 64
-	wheelBetaFontSize         = 10
-	wheelBetaFontDPI          = 72
+	wheelBetaSliceLabelRadius         = 64
+	wheelBetaSliceLabelAlphaThreshold = 96
+	wheelBetaFontSize                 = 10
+	wheelBetaFontDPI                  = 72
 )
 
 //go:embed fonts/dejavu-sans.ttf
@@ -56,8 +57,7 @@ func drawWheelSliceLabels(img *image.Paletted, options []string, rotation float6
 		centerX := cx + int(math.Round(math.Cos(angle)*float64(wheelBetaSliceLabelRadius)))
 		centerY := cy + int(math.Round(math.Sin(angle)*float64(wheelBetaSliceLabelRadius)))
 		text := wheelBetaDisplayText(option, limit)
-		drawRotatedCenteredTextAt(img, text, centerX+1, centerY+1, angle, wheelBetaPaperColorIndex)
-		drawRotatedCenteredTextAt(img, text, centerX, centerY, angle, wheelBetaInkColorIndex)
+		drawRotatedCenteredTextAt(img, text, centerX, centerY, angle, wheelBetaInkColorIndex, wheelBetaSliceLabelAlphaThreshold)
 	}
 }
 
@@ -247,7 +247,7 @@ func drawCenteredTextAt(img *image.Paletted, text string, centerX, baselineY int
 	drawer.DrawString(text)
 }
 
-func drawRotatedCenteredTextAt(img *image.Paletted, text string, centerX, centerY int, angle float64, colorIndex byte) {
+func drawRotatedCenteredTextAt(img *image.Paletted, text string, centerX, centerY int, angle float64, colorIndex byte, alphaThreshold byte) {
 	face := newWheelBetaTextFace()
 	defer func() {
 		_ = face.Close()
@@ -265,12 +265,16 @@ func drawRotatedCenteredTextAt(img *image.Paletted, text string, centerX, center
 	}
 	drawer.DrawString(text)
 
+	stampRotatedTextMask(img, mask, centerX, centerY, angle, colorIndex, alphaThreshold)
+}
+
+func stampRotatedTextMask(img *image.Paletted, mask *image.Alpha, centerX, centerY int, angle float64, colorIndex byte, alphaThreshold byte) {
 	sourceCenterX := float64(mask.Bounds().Dx()-1) / 2
 	sourceCenterY := float64(mask.Bounds().Dy()-1) / 2
 	sin, cos := math.Sin(angle), math.Cos(angle)
 	for y := mask.Bounds().Min.Y; y < mask.Bounds().Max.Y; y++ {
 		for x := mask.Bounds().Min.X; x < mask.Bounds().Max.X; x++ {
-			if mask.AlphaAt(x, y).A == 0 {
+			if mask.AlphaAt(x, y).A < alphaThreshold {
 				continue
 			}
 			localX := float64(x) - sourceCenterX
