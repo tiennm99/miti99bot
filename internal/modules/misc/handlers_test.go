@@ -254,14 +254,24 @@ func TestWheelOfNamesBeta_RenderGIFTiming(t *testing.T) {
 		t.Fatalf("frames = %d, want %d", len(decoded.Image), wheelBetaSpinFrames+1)
 	}
 	totalDelay := 0
+	spinDelay := 0
 	for i, delay := range decoded.Delay {
 		totalDelay += delay
 		if i < wheelBetaSpinFrames && delay != wheelBetaSpinDelay {
 			t.Fatalf("spin delay[%d] = %d, want %d", i, delay, wheelBetaSpinDelay)
 		}
+		if i < wheelBetaSpinFrames {
+			spinDelay += delay
+		}
+	}
+	if spinDelay != wheelBetaSpinDuration*100 {
+		t.Fatalf("spin delay total = %dcs, want %dcs", spinDelay, wheelBetaSpinDuration*100)
 	}
 	if got := decoded.Delay[len(decoded.Delay)-1]; got != wheelBetaHoldDelay {
 		t.Fatalf("hold delay = %d, want %d", got, wheelBetaHoldDelay)
+	}
+	if got := decoded.Delay[len(decoded.Delay)-1]; got != wheelBetaHoldDuration*100 {
+		t.Fatalf("hold delay total = %dcs, want %dcs", got, wheelBetaHoldDuration*100)
 	}
 	if totalDelay != wheelBetaDuration*100 {
 		t.Fatalf("total delay = %dcs, want %dcs", totalDelay, wheelBetaDuration*100)
@@ -294,8 +304,8 @@ func TestWheelOfNamesBeta_SendsAnimationWithoutSpoilingCaption(t *testing.T) {
 	if strings.Contains(call.Form["caption"], "Alice") {
 		t.Fatalf("caption spoils winner: %q", call.Form["caption"])
 	}
-	if got := call.Form["duration"]; got != "7" {
-		t.Fatalf("duration = %q, want 7", got)
+	if got := call.Form["duration"]; got != "10" {
+		t.Fatalf("duration = %q, want 10", got)
 	}
 	if got := call.Form["width"]; got != "320" {
 		t.Fatalf("width = %q, want 320", got)
