@@ -69,7 +69,7 @@
       "description": "LoL matches for this week"
     },
     {
-      "command": "lol_nextweek",
+      "command": "lol_next_week",
       "description": "LoL matches for next week"
     },
     {

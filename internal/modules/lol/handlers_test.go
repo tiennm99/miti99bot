@@ -41,7 +41,7 @@ func installSchedule(t *testing.T, bodyJSON string, nowMs int64) (*testutil.Reco
 			{Name: "lol", Visibility: modules.VisibilityPublic, Description: "x", Handler: s.handleSchedule},
 			{Name: "lol_tomorrow", Visibility: modules.VisibilityPublic, Description: "x", Handler: s.handleTomorrow},
 			{Name: "lol_this_week", Visibility: modules.VisibilityPublic, Description: "x", Handler: s.handleWeek},
-			{Name: "lol_nextweek", Visibility: modules.VisibilityPublic, Description: "x", Handler: s.handleNextWeek},
+			{Name: "lol_next_week", Visibility: modules.VisibilityPublic, Description: "x", Handler: s.handleNextWeek},
 			{Name: "lol_subscribe", Visibility: modules.VisibilityPublic, Description: "x", Handler: s.handleSubscribe},
 			{Name: "lol_unsubscribe", Visibility: modules.VisibilityPublic, Description: "x", Handler: s.handleUnsubscribe},
 		},
@@ -160,7 +160,7 @@ func TestHandleTomorrow_RendersTomorrow(t *testing.T) {
 
 func TestHandleNextWeek_RendersNextWeek(t *testing.T) {
 	rb, _ := installSchedule(t, futureBody, fakeNowMs)
-	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(1, "/lol_nextweek"))
+	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(1, "/lol_next_week"))
 
 	got := rb.LastSent().Text()
 	for _, want := range []string{"Mon May 11", "Sun May 17", "<b>LPL</b>", "JDG vs BLG"} {
@@ -179,7 +179,7 @@ func TestNewRegistersScheduleShortcuts(t *testing.T) {
 	for _, cmd := range mod.Commands {
 		got[cmd.Name] = true
 	}
-	for _, want := range []string{"lol", "lol_tomorrow", "lol_this_week", "lol_nextweek"} {
+	for _, want := range []string{"lol", "lol_tomorrow", "lol_this_week", "lol_next_week"} {
 		if !got[want] {
 			t.Errorf("New() missing command %s", want)
 		}

@@ -41,7 +41,7 @@ func New(deps modules.Deps) modules.Module {
 				Handler:     s.handleWeek,
 			},
 			{
-				Name:        "lol_nextweek",
+				Name:        "lol_next_week",
 				Visibility:  modules.VisibilityPublic,
 				Description: "LoL esports matches for next week (Mon–Sun, ICT)",
 				Handler:     s.handleNextWeek,
