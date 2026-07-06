@@ -17,7 +17,8 @@ const (
 	wheelBetaHoldDuration = 3
 	wheelBetaSpinDelay    = 20
 	wheelBetaSpinFrames   = wheelBetaSpinDuration * 100 / wheelBetaSpinDelay
-	wheelBetaHoldDelay    = wheelBetaHoldDuration * 100
+	wheelBetaHoldFrames   = wheelBetaHoldDuration * 100 / wheelBetaSpinDelay
+	wheelBetaHoldDelay    = wheelBetaSpinDelay
 	wheelBetaDuration     = wheelBetaSpinDuration + wheelBetaHoldDuration
 )
 
@@ -44,8 +45,8 @@ func renderWheelOfNamesBetaGIF(options []string, winner int) ([]byte, error) {
 		return nil, fmt.Errorf("winner index %d out of range %d", winner, len(options))
 	}
 
-	frames := make([]*image.Paletted, 0, wheelBetaSpinFrames+1)
-	delays := make([]int, 0, wheelBetaSpinFrames+1)
+	frames := make([]*image.Paletted, 0, wheelBetaSpinFrames+wheelBetaHoldFrames)
+	delays := make([]int, 0, wheelBetaSpinFrames+wheelBetaHoldFrames)
 	finalRotation := finalWheelRotation(len(options), winner)
 	startRotation := finalRotation - 8*2*math.Pi
 	for i := 0; i < wheelBetaSpinFrames; i++ {
@@ -56,8 +57,11 @@ func renderWheelOfNamesBetaGIF(options []string, winner int) ([]byte, error) {
 		frames = append(frames, renderWheelBetaFrame(options, winner, rotation, false))
 		delays = append(delays, wheelBetaSpinDelay)
 	}
-	frames = append(frames, renderWheelBetaFrame(options, winner, finalRotation, true))
-	delays = append(delays, wheelBetaHoldDelay)
+	resultFrame := renderWheelBetaFrame(options, winner, finalRotation, true)
+	for i := 0; i < wheelBetaHoldFrames; i++ {
+		frames = append(frames, resultFrame)
+		delays = append(delays, wheelBetaHoldDelay)
+	}
 
 	var buf bytes.Buffer
 	err := gif.EncodeAll(&buf, &gif.GIF{

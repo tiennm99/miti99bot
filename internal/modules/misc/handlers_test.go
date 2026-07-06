@@ -252,11 +252,12 @@ func TestWheelOfNamesBeta_RenderGIFTiming(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DecodeAll: %v", err)
 	}
-	if len(decoded.Image) != wheelBetaSpinFrames+1 {
-		t.Fatalf("frames = %d, want %d", len(decoded.Image), wheelBetaSpinFrames+1)
+	if len(decoded.Image) != wheelBetaSpinFrames+wheelBetaHoldFrames {
+		t.Fatalf("frames = %d, want %d", len(decoded.Image), wheelBetaSpinFrames+wheelBetaHoldFrames)
 	}
 	totalDelay := 0
 	spinDelay := 0
+	holdDelay := 0
 	for i, delay := range decoded.Delay {
 		totalDelay += delay
 		if i < wheelBetaSpinFrames && delay != wheelBetaSpinDelay {
@@ -264,23 +265,40 @@ func TestWheelOfNamesBeta_RenderGIFTiming(t *testing.T) {
 		}
 		if i < wheelBetaSpinFrames {
 			spinDelay += delay
+			continue
 		}
+		if delay != wheelBetaHoldDelay {
+			t.Fatalf("hold delay[%d] = %d, want %d", i, delay, wheelBetaHoldDelay)
+		}
+		holdDelay += delay
 	}
 	if spinDelay != wheelBetaSpinDuration*100 {
 		t.Fatalf("spin delay total = %dcs, want %dcs", spinDelay, wheelBetaSpinDuration*100)
 	}
-	if got := decoded.Delay[len(decoded.Delay)-1]; got != wheelBetaHoldDelay {
-		t.Fatalf("hold delay = %d, want %d", got, wheelBetaHoldDelay)
-	}
-	if got := decoded.Delay[len(decoded.Delay)-1]; got != wheelBetaHoldDuration*100 {
-		t.Fatalf("hold delay total = %dcs, want %dcs", got, wheelBetaHoldDuration*100)
+	if holdDelay != wheelBetaHoldDuration*100 {
+		t.Fatalf("hold delay total = %dcs, want %dcs", holdDelay, wheelBetaHoldDuration*100)
 	}
 	if totalDelay != wheelBetaDuration*100 {
 		t.Fatalf("total delay = %dcs, want %dcs", totalDelay, wheelBetaDuration*100)
 	}
+	if equalPalettedFrames(decoded.Image[wheelBetaSpinFrames-1], decoded.Image[wheelBetaSpinFrames]) {
+		t.Fatalf("first result frame matches last spin frame, want visible RESULT transition")
+	}
+	for i := wheelBetaSpinFrames + 1; i < len(decoded.Image); i++ {
+		if !equalPalettedFrames(decoded.Image[wheelBetaSpinFrames], decoded.Image[i]) {
+			t.Fatalf("result hold frame %d differs from first result frame", i)
+		}
+	}
 	if decoded.LoopCount != -1 {
 		t.Fatalf("loop count = %d, want -1", decoded.LoopCount)
 	}
+}
+
+func equalPalettedFrames(a, b *image.Paletted) bool {
+	if !a.Rect.Eq(b.Rect) || a.Stride != b.Stride {
+		return false
+	}
+	return bytes.Equal(a.Pix, b.Pix)
 }
 
 func TestWheelOfNamesBeta_CurrentOptionTracksPointer(t *testing.T) {
