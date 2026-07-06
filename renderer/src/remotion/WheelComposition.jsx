@@ -4,26 +4,18 @@ import {Circle, Pie} from '@remotion/shapes';
 import {
   cssDegreesToPieRadians,
   getFinalWheelRotationDegrees,
-  getReadableTextRotationDegrees,
   getSliceCenterDegrees,
   getSliceDegrees,
 } from './wheel-layout.js';
+import {getContrastingTextColor, getRadialLabelLayout} from './wheel-label-layout.js';
 import {getTheme} from './themes.js';
 
 const baseFont =
-  'Inter, "Noto Sans", "Noto Sans Vietnamese", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+  'Quicksand, Inter, "Noto Sans", "Noto Sans Vietnamese", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
 
 /**
  * @typedef {import('../schemas/wheel-request.js').WheelRenderRequest} WheelRenderRequest
  */
-
-/**
- * @param {{text: string, maxLength?: number}} props
- */
-const LabelText = ({text, maxLength = 24}) => {
-  const displayText = text.length > maxLength ? `${text.slice(0, maxLength - 1)}…` : text;
-  return <>{displayText}</>;
-};
 
 /**
  * @param {WheelRenderRequest} props
@@ -49,15 +41,14 @@ export const WheelComposition = (props) => {
   const size = Math.min(width, height);
   const center = size / 2;
   const radius = size * 0.41;
+  const centerRingRadius = size * 0.09;
+  const centerRadius = size * 0.06;
   const sliceDegrees = getSliceDegrees(props.options.length);
   const finalRotation = getFinalWheelRotationDegrees(props.options.length, props.winnerIndex);
   const startRotation = -24;
   const rotation = interpolate(progress, [0, 1], [startRotation, finalRotation], {
     easing: Easing.out(Easing.cubic),
   });
-
-  const labelRadius = radius * (props.options.length > 20 ? 0.64 : 0.58);
-  const fontSize = Math.max(10, Math.min(24, radius / Math.max(5.8, props.options.length * 0.33)));
 
   return (
     <AbsoluteFill
@@ -103,10 +94,15 @@ export const WheelComposition = (props) => {
             const start = index * sliceDegrees;
             const centerDegrees = getSliceCenterDegrees(props.options.length, index);
             const isWinner = index === props.winnerIndex;
-            const color = theme.slices[index % theme.slices.length] ?? theme.slices[0];
-            const x = center + Math.cos((centerDegrees * Math.PI) / 180) * labelRadius;
-            const y = center + Math.sin((centerDegrees * Math.PI) / 180) * labelRadius;
-            const textRotation = getReadableTextRotationDegrees(centerDegrees);
+            const color = theme.slices[index % theme.slices.length] ?? theme.slices[0] ?? '#cccccc';
+            const label = getRadialLabelLayout({
+              center,
+              radius,
+              hubRadius: centerRingRadius,
+              centerDegrees,
+              optionCount: props.options.length,
+              text: option,
+            });
 
             return (
               <React.Fragment key={`${option}-${index}`}>
@@ -127,28 +123,29 @@ export const WheelComposition = (props) => {
                 <div
                   style={{
                     alignItems: 'center',
-                    color: theme.text,
+                    boxSizing: 'border-box',
+                    color: getContrastingTextColor(color),
                     display: 'flex',
-                    fontSize,
+                    fontSize: label.fontSize,
                     fontWeight: 400,
-                    height: fontSize * 1.35,
-                    justifyContent: 'center',
-                    left: x,
+                    height: label.fontSize * 1.35,
+                    justifyContent: 'flex-end',
+                    left: label.x,
                     letterSpacing: 0,
                     lineHeight: 1,
-                    maxWidth: radius * 0.68,
                     overflow: 'hidden',
-                    padding: '0 4px',
+                    padding: `0 ${Math.max(4, radius * 0.02)}px 0 0`,
                     position: 'absolute',
-                    textAlign: 'center',
-                    textShadow: `0 1px 0 ${theme.textHalo}, 0 -1px 0 ${theme.textHalo}, 1px 0 0 ${theme.textHalo}, -1px 0 0 ${theme.textHalo}`,
-                    top: y,
-                    transform: `translate(-50%, -50%) rotate(${textRotation}deg)`,
+                    textAlign: 'right',
+                    textOverflow: 'ellipsis',
+                    top: label.y,
+                    transform: `translate(-50%, -50%) rotate(${label.rotation}deg)`,
                     transformOrigin: '50% 50%',
                     whiteSpace: 'nowrap',
+                    width: label.width,
                   }}
                 >
-                  <LabelText text={option} />
+                  {option}
                 </div>
               </React.Fragment>
             );
@@ -157,13 +154,13 @@ export const WheelComposition = (props) => {
 
         <Circle
           fill={theme.centerRing}
-          radius={size * 0.09}
-          style={{left: center - size * 0.09, position: 'absolute', top: center - size * 0.09}}
+          radius={centerRingRadius}
+          style={{left: center - centerRingRadius, position: 'absolute', top: center - centerRingRadius}}
         />
         <Circle
           fill={theme.center}
-          radius={size * 0.06}
-          style={{left: center - size * 0.06, position: 'absolute', top: center - size * 0.06}}
+          radius={centerRadius}
+          style={{left: center - centerRadius, position: 'absolute', top: center - centerRadius}}
         />
         <div
           style={{

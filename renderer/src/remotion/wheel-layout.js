@@ -34,12 +34,3 @@ export const getFinalWheelRotationDegrees = (optionCount, winnerIndex, fullTurns
  * @returns {number}
  */
 export const cssDegreesToPieRadians = (cssDegrees) => ((cssDegrees - 90) * Math.PI) / 180;
-
-/**
- * @param {number} degrees
- * @returns {number}
- */
-export const getReadableTextRotationDegrees = (degrees) => {
-  const normalized = ((degrees % fullTurnDegrees) + fullTurnDegrees) % fullTurnDegrees;
-  return normalized > 90 && normalized < 270 ? degrees + 180 : degrees;
-};

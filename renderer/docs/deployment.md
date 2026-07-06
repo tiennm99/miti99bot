@@ -33,6 +33,9 @@ MAX_OPTION_CHARS=40
 API_TOKEN=change-me
 ```
 
+`compose.yml` forwards these values from the shell with `${VAR:-default}`
+fallbacks, so unset or empty shell variables use the defaults above.
+
 Start with 1-2 vCPU and 1-2 GB RAM. Increase only after render benchmarks show
 the service is CPU-bound or concurrency-limited.
 
