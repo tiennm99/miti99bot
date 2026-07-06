@@ -3,10 +3,14 @@ package misc
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"image"
 	"image/gif"
 	"math"
 	"math/rand/v2"
+	"net/http"
+	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -510,6 +514,101 @@ func TestWheelOfNamesBeta_SendsAnimationWithoutSpoilingCaption(t *testing.T) {
 	}
 	if got := call.Form["height"]; got != "320" {
 		t.Fatalf("height = %q, want 320", got)
+	}
+}
+
+func TestWheelOfNamesBeta_UsesRemoteAPIWhenConfigured(t *testing.T) {
+	var got wheelBetaAPIRequest
+	var gotAuthorization string
+	var calls int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		if r.URL.Path != "/api/gif" {
+			t.Errorf("path = %q, want /api/gif", r.URL.Path)
+		}
+		gotAuthorization = r.Header.Get("Authorization")
+		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
+			t.Errorf("Decode request body: %v", err)
+		}
+		w.Header().Set("Content-Type", "image/gif")
+		_, _ = w.Write([]byte("GIF89a-remote"))
+	}))
+	defer server.Close()
+	t.Setenv(wheelOfNamesBetaAPIURLEnv, server.URL+"/api/gif")
+	t.Setenv(wheelOfNamesBetaAPITokenEnv, "remote-token")
+
+	rb, _ := installMisc(t, 999)
+	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(7, "/wheelofnamesbeta Alice, Bob, Carol"))
+
+	if calls != 1 {
+		t.Fatalf("remote calls = %d, want 1", calls)
+	}
+	if gotAuthorization != "Bearer remote-token" {
+		t.Fatalf("Authorization = %q, want bearer token", gotAuthorization)
+	}
+	if !slices.Equal(got.Options, []string{"Alice", "Bob", "Carol"}) {
+		t.Fatalf("options = %#v, want parsed options", got.Options)
+	}
+	if got.WinnerIndex < 0 || got.WinnerIndex >= len(got.Options) {
+		t.Fatalf("winnerIndex = %d, want in range", got.WinnerIndex)
+	}
+	assertWheelBetaRemoteDefaults(t, got)
+
+	call := rb.LastSent()
+	if call.Method != "sendAnimation" {
+		t.Fatalf("method = %q, want sendAnimation", call.Method)
+	}
+	if got := call.Form["caption"]; got != "Spinning..." {
+		t.Fatalf("caption = %q, want Spinning...", got)
+	}
+	if strings.Contains(call.Form["caption"], got.Options[got.WinnerIndex]) {
+		t.Fatalf("caption spoils winner: %q", call.Form["caption"])
+	}
+	if got := call.Form["duration"]; got != "7" {
+		t.Fatalf("duration = %q, want 7", got)
+	}
+	if got := call.Form["width"]; got != "512" {
+		t.Fatalf("width = %q, want 512", got)
+	}
+	if got := call.Form["height"]; got != "512" {
+		t.Fatalf("height = %q, want 512", got)
+	}
+}
+
+func TestWheelOfNamesBeta_RemoteFailureFallsBackToLocalAnimation(t *testing.T) {
+	var calls int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		http.Error(w, "no", http.StatusInternalServerError)
+	}))
+	defer server.Close()
+	t.Setenv(wheelOfNamesBetaAPIURLEnv, server.URL+"/api/gif")
+	t.Setenv(wheelOfNamesBetaAPITokenEnv, "remote-token")
+
+	rb, _ := installMisc(t, 999)
+	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(7, "/wheelofnamesbeta Alice"))
+
+	if calls != 1 {
+		t.Fatalf("remote calls = %d, want 1", calls)
+	}
+	call := rb.LastSent()
+	if call.Method != "sendAnimation" {
+		t.Fatalf("method = %q, want sendAnimation", call.Method)
+	}
+	if got := call.Form["caption"]; got != "Spinning..." {
+		t.Fatalf("caption = %q, want Spinning...", got)
+	}
+	if strings.Contains(call.Form["caption"], "Alice") {
+		t.Fatalf("caption spoils winner: %q", call.Form["caption"])
+	}
+	if got := call.Form["duration"]; got != "10" {
+		t.Fatalf("duration = %q, want local duration 10", got)
+	}
+	if got := call.Form["width"]; got != "320" {
+		t.Fatalf("width = %q, want local width 320", got)
+	}
+	if got := call.Form["height"]; got != "320" {
+		t.Fatalf("height = %q, want local height 320", got)
 	}
 }
 
