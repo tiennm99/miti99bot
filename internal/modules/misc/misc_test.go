@@ -21,13 +21,14 @@ func TestNew_RegistersExpectedCommands(t *testing.T) {
 	mod := New(deps)
 
 	want := map[string]modules.Visibility{
-		"ping":           modules.VisibilityPublic,
-		"ping_stats":     modules.VisibilityProtected,
-		"random":         modules.VisibilityPublic,
-		"wheelofnames":   modules.VisibilityPublic,
-		"the_answer":     modules.VisibilityPrivate,
-		"trongtruonghop": modules.VisibilityPublic,
-		"tth":            modules.VisibilityPublic,
+		"ping":             modules.VisibilityPublic,
+		"ping_stats":       modules.VisibilityProtected,
+		"random":           modules.VisibilityPublic,
+		"wheelofnames":     modules.VisibilityPublic,
+		"wheelofnamesbeta": modules.VisibilityPublic,
+		"the_answer":       modules.VisibilityPrivate,
+		"trongtruonghop":   modules.VisibilityPublic,
+		"tth":              modules.VisibilityPublic,
 	}
 	if len(mod.Commands) != len(want) {
 		t.Fatalf("commands count = %d, want %d", len(mod.Commands), len(want))

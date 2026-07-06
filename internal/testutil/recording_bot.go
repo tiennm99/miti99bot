@@ -131,7 +131,7 @@ func apiMethodFromPath(p string) string {
 // expect a Message; most others accept a bool.
 func okResponseFor(method string) string {
 	switch method {
-	case "sendMessage", "sendSticker", "sendPhoto", "sendDocument", "sendVideo":
+	case "sendMessage", "sendSticker", "sendPhoto", "sendDocument", "sendVideo", "sendAnimation":
 		// Minimal shape: id, date, chat. Bot library decodes via json so
 		// extra fields are ignored.
 		msg := map[string]any{
