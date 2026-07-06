@@ -61,8 +61,16 @@
       "description": "LoL matches for a date; supports dd, dd-mm, dd/mm, ddmm"
     },
     {
+      "command": "lol_tomorrow",
+      "description": "LoL matches for tomorrow"
+    },
+    {
       "command": "lol_this_week",
       "description": "LoL matches for this week"
+    },
+    {
+      "command": "lol_nextweek",
+      "description": "LoL matches for next week"
     },
     {
       "command": "lol_subscribe",

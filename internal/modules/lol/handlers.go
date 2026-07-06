@@ -48,7 +48,23 @@ func (s *state) handleSchedule(ctx context.Context, b *bot.Bot, update *models.U
 		return chathelper.Reply(ctx, b, msg, parsed.Error)
 	}
 	useFallback := strings.TrimSpace(arg) == ""
-	return s.replyForRange(ctx, b, msg, parsed.Date, addDays(parsed.Date, 1), false, useFallback)
+	emptyLine := "No major LoL matches on this day."
+	if useFallback {
+		emptyLine = "No major LoL matches today."
+	}
+	return s.replyForRange(ctx, b, msg, parsed.Date, addDays(parsed.Date, 1), false, useFallback,
+		emptyLine, "")
+}
+
+// handleTomorrow is /lol_tomorrow — matches for tomorrow's ICT day.
+func (s *state) handleTomorrow(ctx context.Context, b *bot.Bot, update *models.Update) error {
+	msg := update.Message
+	if msg == nil {
+		return nil
+	}
+	from := addDays(ictDayStartOf(s.now()), 1)
+	return s.replyForRange(ctx, b, msg, from, addDays(from, 1), false, true,
+		"No major LoL matches tomorrow.", "Could not fetch tomorrow's matches. Try again later.")
 }
 
 // handleWeek is /lol_this_week — the current ICT calendar week
@@ -59,12 +75,25 @@ func (s *state) handleWeek(ctx context.Context, b *bot.Bot, update *models.Updat
 		return nil
 	}
 	from := ictWeekStartOf(s.now())
-	return s.replyForRange(ctx, b, msg, from, addDays(from, 7), true, true)
+	return s.replyForRange(ctx, b, msg, from, addDays(from, 7), true, true,
+		"No major LoL matches this week.", "")
 }
 
-// replyForRange fetches + filters + renders a date window. week=true uses
-// RenderWeek; false uses RenderToday.
-func (s *state) replyForRange(ctx context.Context, b *bot.Bot, msg *models.Message, from, to time.Time, week, useFallback bool) error {
+// handleNextWeek is /lol_nextweek — the next ICT calendar week
+// (Monday 00:00 ICT through the following Monday 00:00 ICT, exclusive).
+func (s *state) handleNextWeek(ctx context.Context, b *bot.Bot, update *models.Update) error {
+	msg := update.Message
+	if msg == nil {
+		return nil
+	}
+	from := ictNextWeekStartOf(s.now())
+	return s.replyForRange(ctx, b, msg, from, addDays(from, 7), true, true,
+		"No major LoL matches next week.", "Could not fetch next week's matches. Try again later.")
+}
+
+// replyForRange fetches, filters, and renders a date window. week=true groups
+// by league and day; false groups by league only.
+func (s *state) replyForRange(ctx context.Context, b *bot.Bot, msg *models.Message, from, to time.Time, week, useFallback bool, emptyLine, fetchErrorHint string) error {
 	var (
 		events []ScheduleEvent
 		err    error
@@ -76,18 +105,20 @@ func (s *state) replyForRange(ctx context.Context, b *bot.Bot, msg *models.Messa
 	}
 	if err != nil {
 		log.Error("lol_fetch_fail", "err", err, "from", from, "to", to)
-		hint := "Could not fetch matches. Try again later."
-		if week {
-			hint = "Could not fetch this week's matches. Try again later."
+		if fetchErrorHint == "" {
+			fetchErrorHint = "Could not fetch matches. Try again later."
+			if week {
+				fetchErrorHint = "Could not fetch this week's matches. Try again later."
+			}
 		}
-		return chathelper.Reply(ctx, b, msg, hint)
+		return chathelper.Reply(ctx, b, msg, fetchErrorHint)
 	}
 	filtered := FilterMajor(events)
 	var text string
 	if week {
-		text = RenderWeek(filtered, from, to)
+		text = renderWeek(filtered, from, to, emptyLine)
 	} else {
-		text = RenderToday(filtered, from)
+		text = renderDay(filtered, from, emptyLine)
 	}
 	return chathelper.ReplyHTML(ctx, b, msg, text)
 }

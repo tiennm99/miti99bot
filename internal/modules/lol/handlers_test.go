@@ -39,7 +39,9 @@ func installSchedule(t *testing.T, bodyJSON string, nowMs int64) (*testutil.Reco
 		Name: "lol",
 		Commands: []modules.Command{
 			{Name: "lol", Visibility: modules.VisibilityPublic, Description: "x", Handler: s.handleSchedule},
+			{Name: "lol_tomorrow", Visibility: modules.VisibilityPublic, Description: "x", Handler: s.handleTomorrow},
 			{Name: "lol_this_week", Visibility: modules.VisibilityPublic, Description: "x", Handler: s.handleWeek},
+			{Name: "lol_nextweek", Visibility: modules.VisibilityPublic, Description: "x", Handler: s.handleNextWeek},
 			{Name: "lol_subscribe", Visibility: modules.VisibilityPublic, Description: "x", Handler: s.handleSubscribe},
 			{Name: "lol_unsubscribe", Visibility: modules.VisibilityPublic, Description: "x", Handler: s.handleUnsubscribe},
 		},
@@ -68,6 +70,28 @@ const todayBody = `{
           "state": "unstarted",
           "league": {"slug": "lck", "name": "LCK"},
           "match": {"teams": [{"code":"T1"},{"code":"GEN"}], "strategy":{"count":3}}
+        }
+      ],
+      "pages": {"newer": null}
+    }
+  }
+}`
+
+const futureBody = `{
+  "data": {
+    "schedule": {
+      "events": [
+        {
+          "startTime": "2026-05-10T05:00:00Z",
+          "state": "unstarted",
+          "league": {"slug": "lck", "name": "LCK"},
+          "match": {"teams": [{"code":"DK"},{"code":"KT"}], "strategy":{"count":3}}
+        },
+        {
+          "startTime": "2026-05-12T08:00:00Z",
+          "state": "unstarted",
+          "league": {"slug": "lpl", "name": "LPL"},
+          "match": {"teams": [{"code":"JDG"},{"code":"BLG"}], "strategy":{"count":5}}
         }
       ],
       "pages": {"newer": null}
@@ -115,6 +139,49 @@ func TestHandleWeek_RendersWeek(t *testing.T) {
 	for _, want := range []string{"Mon May 4", "Sun May 10"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("week header missing %q in:\n%s", want, got)
+		}
+	}
+}
+
+func TestHandleTomorrow_RendersTomorrow(t *testing.T) {
+	rb, _ := installSchedule(t, futureBody, fakeNowMs)
+	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(1, "/lol_tomorrow"))
+
+	got := rb.LastSent().Text()
+	for _, want := range []string{"Sun May 10", "<b>LCK</b>", "DK vs KT"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("tomorrow reply missing %q in:\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, "JDG vs BLG") {
+		t.Errorf("tomorrow reply included next-week match:\n%s", got)
+	}
+}
+
+func TestHandleNextWeek_RendersNextWeek(t *testing.T) {
+	rb, _ := installSchedule(t, futureBody, fakeNowMs)
+	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(1, "/lol_nextweek"))
+
+	got := rb.LastSent().Text()
+	for _, want := range []string{"Mon May 11", "Sun May 17", "<b>LPL</b>", "JDG vs BLG"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("next-week reply missing %q in:\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, "DK vs KT") {
+		t.Errorf("next-week reply included tomorrow match:\n%s", got)
+	}
+}
+
+func TestNewRegistersScheduleShortcuts(t *testing.T) {
+	mod := New(modules.Deps{Store: storage.NewMemoryProvider().Collection("lol")})
+	got := map[string]bool{}
+	for _, cmd := range mod.Commands {
+		got[cmd.Name] = true
+	}
+	for _, want := range []string{"lol", "lol_tomorrow", "lol_this_week", "lol_nextweek"} {
+		if !got[want] {
+			t.Errorf("New() missing command %s", want)
 		}
 	}
 }

@@ -47,6 +47,12 @@ func ictWeekStartOf(now time.Time) time.Time {
 	return day.AddDate(0, 0, -daysFromMonday).UTC()
 }
 
+// ictNextWeekStartOf returns the Monday 00:00 ICT after the current ICT
+// calendar week, expressed as a UTC instant.
+func ictNextWeekStartOf(now time.Time) time.Time {
+	return addDays(ictWeekStartOf(now), 7)
+}
+
 // addDays returns date + days, preserving time-of-day.
 func addDays(date time.Time, days int) time.Time {
 	return date.Add(time.Duration(days) * 24 * time.Hour)
