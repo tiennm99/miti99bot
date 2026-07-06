@@ -130,22 +130,22 @@ func drawCircleOutline(img *image.Paletted, cx, cy, radius, thickness int, color
 	}
 }
 
-func drawPointer(img *image.Paletted, cx, tipY int, fillColorIndex byte) {
-	for y := 0; y < 34; y++ {
-		half := y / 2
-		rowY := tipY - y
-		for x := cx - half; x <= cx+half; x++ {
-			setWheelBetaPixel(img, x, rowY, wheelBetaInkColorIndex)
+func drawPointer(img *image.Paletted, tipX, cy int, fillColorIndex byte) {
+	for xOffset := 0; xOffset < 34; xOffset++ {
+		half := xOffset / 2
+		x := tipX + xOffset
+		for y := cy - half; y <= cy+half; y++ {
+			setWheelBetaPixel(img, x, y, wheelBetaInkColorIndex)
 		}
 	}
-	for y := 3; y < 30; y++ {
-		half := y/2 - 2
+	for xOffset := 3; xOffset < 30; xOffset++ {
+		half := xOffset/2 - 2
 		if half < 0 {
 			continue
 		}
-		rowY := tipY - y
-		for x := cx - half; x <= cx+half; x++ {
-			setWheelBetaPixel(img, x, rowY, fillColorIndex)
+		x := tipX + xOffset
+		for y := cy - half; y <= cy+half; y++ {
+			setWheelBetaPixel(img, x, y, fillColorIndex)
 		}
 	}
 }

@@ -21,6 +21,7 @@ const (
 	wheelBetaHoldDelay       = wheelBetaSpinDelay
 	wheelBetaDuration        = wheelBetaSpinDuration + wheelBetaHoldDuration
 	wheelBetaCelebrateFrames = 8
+	wheelBetaPointerAngle    = 0.0
 )
 
 const (
@@ -133,7 +134,7 @@ func renderWheelBetaFrameWithCelebration(options []string, winner int, rotation 
 	drawWheelSliceLabels(img, options, rotation)
 	drawCircle(img, cx, cy, 24, wheelBetaPaperColorIndex)
 	drawCircle(img, cx, cy, 18, wheelBetaInkColorIndex)
-	drawPointer(img, cx, cy-wheelBetaRadius, pointerColor)
+	drawPointer(img, cx+wheelBetaRadius, cy, pointerColor)
 	drawCenteredText(img, "WHEELOFNAMES BETA", cy+wheelBetaRadius+34, wheelBetaInkColorIndex)
 	label := status
 	if label == "" {
@@ -154,12 +155,12 @@ func finalWheelRotation(optionCount, winner int) float64 {
 
 func finalWheelRotationWithOffset(optionCount, winner int, sliceOffset float64) float64 {
 	segment := 2 * math.Pi / float64(optionCount)
-	return -math.Pi/2 - (float64(winner)+0.5+sliceOffset)*segment
+	return wheelBetaPointerAngle - (float64(winner)+0.5+sliceOffset)*segment
 }
 
 func currentWheelBetaIndex(optionCount int, rotation float64) int {
 	segment := 2 * math.Pi / float64(optionCount)
-	return int(normalizeAngle(-math.Pi/2-rotation) / segment)
+	return int(normalizeAngle(wheelBetaPointerAngle-rotation) / segment)
 }
 
 func normalizeAngle(theta float64) float64 {

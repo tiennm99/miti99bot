@@ -361,21 +361,34 @@ func TestWheelOfNamesBeta_SpinProfileProgressIsMonotonic(t *testing.T) {
 func TestWheelOfNamesBeta_PointerPointsIntoWheel(t *testing.T) {
 	img := renderWheelBetaFrame([]string{"Alice", "Bob"}, 0, finalWheelRotation(2, 0), false)
 	cx := wheelBetaSize / 2
-	tipY := wheelBetaSize/2 - wheelBetaRadius
-	if got := img.ColorIndexAt(cx, tipY); got != 1 {
+	cy := wheelBetaSize / 2
+	tipX := cx + wheelBetaRadius
+	if got := img.ColorIndexAt(tipX, cy); got != 1 {
 		t.Fatalf("pointer tip color = %d, want 1", got)
 	}
-	if got := img.ColorIndexAt(cx+5, tipY-10); got != 1 {
+	if got := img.ColorIndexAt(tipX+10, cy+5); got != 1 {
 		t.Fatalf("pointer shoulder color = %d, want 1", got)
 	}
-	if got := img.ColorIndexAt(cx, tipY-12); got != wheelBetaSliceColorIndexes[0] {
+	if got := img.ColorIndexAt(tipX+12, cy); got != wheelBetaSliceColorIndexes[0] {
 		t.Fatalf("pointer body color = %d, want current slice color %d", got, wheelBetaSliceColorIndexes[0])
 	}
-	if got := img.ColorIndexAt(cx+5, tipY); got == 1 {
-		t.Fatalf("pointer tip is too wide at color index %d", got)
+	if got := img.ColorIndexAt(tipX, cy+5); got == 1 {
+		t.Fatalf("pointer tip is too tall at color index %d", got)
 	}
-	if got := img.ColorIndexAt(cx+12, tipY+20); got == 1 {
-		t.Fatalf("pointer widens below wheel edge at color index %d", got)
+	if got := img.ColorIndexAt(tipX-20, cy+12); got == 1 {
+		t.Fatalf("pointer widens inside wheel edge at color index %d", got)
+	}
+}
+
+func TestWheelOfNamesBeta_FinalSliceRendersAtRightPointer(t *testing.T) {
+	options := []string{"Alice", "Bob", "Carol", "Dana"}
+	winner := 2
+	img := renderWheelBetaFrame(options, winner, finalWheelRotation(len(options), winner), true)
+	x := wheelBetaSize/2 + wheelBetaRadius - 20
+	y := wheelBetaSize / 2
+	want := wheelBetaSliceColorIndexes[winner%len(wheelBetaSliceColorIndexes)]
+	if got := img.ColorIndexAt(x, y); got != want {
+		t.Fatalf("right pointer slice color = %d, want winner slice color %d", got, want)
 	}
 }
 
