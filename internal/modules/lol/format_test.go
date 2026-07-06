@@ -90,19 +90,21 @@ func TestRenderToday_GroupsByLeagueInOrder(t *testing.T) {
 	day := time.Date(2026, 5, 9, 0, 0, 0, 0, IctLocation)
 	events := []ScheduleEvent{
 		mkEvent("unstarted", "lcs", "LCS", "TL", "C9", "2026-05-09T18:00:00Z"),
+		mkEvent("unstarted", "ewc_lol", "Esports World Cup", "GEN", "KC", "2026-05-09T09:00:00Z"),
 		mkEvent("unstarted", "lck", "LCK", "T1", "GEN", "2026-05-09T05:00:00Z"),
 		mkEvent("unstarted", "lpl", "LPL", "JDG", "BLG", "2026-05-09T08:00:00Z"),
 	}
 	got := RenderToday(events, day)
-	// LEAGUE_ORDER puts LCK before LPL before LCS.
+	// League order puts international events before regional leagues.
+	idxEwc := strings.Index(got, "<b>Esports World Cup</b>")
 	idxLck := strings.Index(got, "<b>LCK</b>")
 	idxLpl := strings.Index(got, "<b>LPL</b>")
 	idxLcs := strings.Index(got, "<b>LCS</b>")
-	if idxLck < 0 || idxLpl < 0 || idxLcs < 0 {
+	if idxEwc < 0 || idxLck < 0 || idxLpl < 0 || idxLcs < 0 {
 		t.Fatalf("missing league section; got:\n%s", got)
 	}
-	if idxLck >= idxLpl || idxLpl >= idxLcs {
-		t.Errorf("league order wrong: lck=%d lpl=%d lcs=%d\n%s", idxLck, idxLpl, idxLcs, got)
+	if idxEwc >= idxLck || idxLck >= idxLpl || idxLpl >= idxLcs {
+		t.Errorf("league order wrong: ewc=%d lck=%d lpl=%d lcs=%d\n%s", idxEwc, idxLck, idxLpl, idxLcs, got)
 	}
 	// Header in ICT.
 	if !strings.Contains(got, "LoL — Sat May 9</b> (ICT)") {
@@ -145,10 +147,11 @@ func TestFilterMajor(t *testing.T) {
 		{League: League{Slug: "tcl"}}, // Turkish league — not in allowlist
 		{League: League{Slug: "lja"}}, // Japan academy — not in allowlist
 		{League: League{Slug: "msi"}},
+		{League: League{Slug: "ewc_lol"}},
 	}
 	got := FilterMajor(events)
-	if len(got) != 3 {
-		t.Errorf("filtered count = %d, want 3", len(got))
+	if len(got) != 4 {
+		t.Errorf("filtered count = %d, want 4", len(got))
 	}
 	for _, e := range got {
 		if e.League.Slug == "tcl" || e.League.Slug == "lja" {
