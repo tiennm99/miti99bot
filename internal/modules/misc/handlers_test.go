@@ -1,7 +1,9 @@
 package misc
 
 import (
+	"bytes"
 	"context"
+	"image/gif"
 	"strings"
 	"testing"
 	"time"
@@ -223,6 +225,86 @@ func TestWheelOfNames_GroupSkipsDraftsButSendsFinal(t *testing.T) {
 	}
 	if calls[0].Method != "sendMessage" || calls[0].Text() != "Alice" {
 		t.Fatalf("group call = %+v, want sendMessage Alice", calls[0])
+	}
+}
+
+func TestWheelOfNamesBeta_UsageWhenMissingOptions(t *testing.T) {
+	for _, text := range []string{"/wheelofnamesbeta", "/wheelofnamesbeta , ,"} {
+		t.Run(text, func(t *testing.T) {
+			rb, _ := installMisc(t, 999)
+			rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(7, text))
+
+			if got := rb.LastSent().Text(); got != wheelOfNamesBetaUsage {
+				t.Errorf("wheelofnamesbeta reply = %q, want usage %q", got, wheelOfNamesBetaUsage)
+			}
+		})
+	}
+}
+
+func TestWheelOfNamesBeta_RenderGIFTiming(t *testing.T) {
+	data, err := renderWheelOfNamesBetaGIF([]string{"Alice", "Bob"}, 0)
+	if err != nil {
+		t.Fatalf("renderWheelOfNamesBetaGIF: %v", err)
+	}
+	decoded, err := gif.DecodeAll(bytes.NewReader(data))
+	if err != nil {
+		t.Fatalf("DecodeAll: %v", err)
+	}
+	if len(decoded.Image) != wheelBetaSpinFrames+1 {
+		t.Fatalf("frames = %d, want %d", len(decoded.Image), wheelBetaSpinFrames+1)
+	}
+	totalDelay := 0
+	for i, delay := range decoded.Delay {
+		totalDelay += delay
+		if i < wheelBetaSpinFrames && delay != wheelBetaSpinDelay {
+			t.Fatalf("spin delay[%d] = %d, want %d", i, delay, wheelBetaSpinDelay)
+		}
+	}
+	if got := decoded.Delay[len(decoded.Delay)-1]; got != wheelBetaHoldDelay {
+		t.Fatalf("hold delay = %d, want %d", got, wheelBetaHoldDelay)
+	}
+	if totalDelay != wheelBetaDuration*100 {
+		t.Fatalf("total delay = %dcs, want %dcs", totalDelay, wheelBetaDuration*100)
+	}
+	if decoded.LoopCount != -1 {
+		t.Fatalf("loop count = %d, want -1", decoded.LoopCount)
+	}
+}
+
+func TestWheelOfNamesBeta_SendsAnimationWithWinnerCaption(t *testing.T) {
+	rb, _ := installMisc(t, 999)
+	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(7, "/wheelofnamesbeta Alice"))
+
+	call := rb.LastSent()
+	if call.Method != "sendAnimation" {
+		t.Fatalf("method = %q, want sendAnimation", call.Method)
+	}
+	if got := call.Form["caption"]; got != "Winner: Alice" {
+		t.Fatalf("caption = %q, want Winner: Alice", got)
+	}
+	if got := call.Form["duration"]; got != "7" {
+		t.Fatalf("duration = %q, want 7", got)
+	}
+	if got := call.Form["width"]; got != "320" {
+		t.Fatalf("width = %q, want 320", got)
+	}
+	if got := call.Form["height"]; got != "320" {
+		t.Fatalf("height = %q, want 320", got)
+	}
+}
+
+func TestWheelOfNamesBeta_ForwardsMessageThreadID(t *testing.T) {
+	rb, _ := installMisc(t, 999)
+	update := testutil.NewSupergroupMessage(-100, 7, "/wheelofnamesbeta Alice")
+	update.Message.MessageThreadID = 42
+	rb.Bot.ProcessUpdate(context.Background(), update)
+
+	call := rb.LastSent()
+	if call.Method != "sendAnimation" {
+		t.Fatalf("method = %q, want sendAnimation", call.Method)
+	}
+	if got := call.Form["message_thread_id"]; got != "42" {
+		t.Fatalf("message_thread_id = %q, want 42", got)
 	}
 }
 

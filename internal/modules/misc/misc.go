@@ -1,7 +1,8 @@
 // Package misc is a small stub module that proves the framework end-to-end:
 // /ping (public, exercises KV write), /ping_stats (protected, exercises KV
 // read), /random (public random picker), /wheelofnames (public streaming
-// random picker), /the_answer (private easter egg).
+// random picker), /wheelofnamesbeta (public GIF wheel picker), /the_answer
+// (private easter egg).
 package misc
 
 import (
@@ -49,6 +50,7 @@ func New(deps modules.Deps) modules.Module {
 			pingStatsCommand(store),
 			randomCommand(),
 			wheelOfNamesCommand(),
+			wheelOfNamesBetaCommand(),
 			theAnswerCommand(),
 			trongTruongHopCommand("trongtruonghop"),
 			trongTruongHopCommand("tth"),
