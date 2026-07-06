@@ -16,12 +16,14 @@ import (
 )
 
 const (
-	wheelBetaSize       = 320
-	wheelBetaRadius     = 118
-	wheelBetaSpinFrames = 30
-	wheelBetaSpinDelay  = 20
-	wheelBetaHoldDelay  = 100
-	wheelBetaDuration   = 7
+	wheelBetaSize         = 320
+	wheelBetaRadius       = 118
+	wheelBetaSpinDuration = 7
+	wheelBetaHoldDuration = 3
+	wheelBetaSpinDelay    = 20
+	wheelBetaSpinFrames   = wheelBetaSpinDuration * 100 / wheelBetaSpinDelay
+	wheelBetaHoldDelay    = wheelBetaHoldDuration * 100
+	wheelBetaDuration     = wheelBetaSpinDuration + wheelBetaHoldDuration
 )
 
 var wheelBetaPalette = color.Palette{
