@@ -1,5 +1,6 @@
 import {describe, expect, test} from 'vitest';
 import {
+  cssDegreesToPieRadians,
   getFinalWheelRotationDegrees,
   getSliceCenterDegrees,
   getSliceDegrees,
@@ -24,6 +25,22 @@ describe('wheel layout', () => {
     const screenAngle = ((winnerCenter + rotation) % 360 + 360) % 360;
 
     expect(screenAngle).toBe(0);
+  });
+
+  test('converts CSS slice starts to Remotion Pie rotation radians', () => {
+    /**
+     * @param {number} cssDegrees
+     */
+    const getRenderedStartDegrees = (cssDegrees) => {
+      const rotationDegrees = (cssDegreesToPieRadians(cssDegrees) * 180) / Math.PI;
+      return (270 + rotationDegrees + 360) % 360;
+    };
+
+    expect(getRenderedStartDegrees(0)).toBe(0);
+    expect(getRenderedStartDegrees(45)).toBe(45);
+    expect(getRenderedStartDegrees(90)).toBe(90);
+    expect(getRenderedStartDegrees(180)).toBe(180);
+    expect(getRenderedStartDegrees(270)).toBe(270);
   });
 
   test('defines a right-side pointer that points into the wheel', () => {
