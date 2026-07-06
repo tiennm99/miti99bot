@@ -57,6 +57,26 @@ func drawCircle(img *image.Paletted, cx, cy, radius int, colorIndex byte) {
 	}
 }
 
+func drawWheelRim(img *image.Paletted, cx, cy int) {
+	drawCircleOutline(img, cx, cy, wheelBetaRadius, 3, 1)
+	drawCircleOutline(img, cx, cy, wheelBetaRadius-6, 1, 2)
+}
+
+func drawCircleOutline(img *image.Paletted, cx, cy, radius, thickness int, colorIndex byte) {
+	outer := radius * radius
+	innerRadius := radius - thickness
+	inner := innerRadius * innerRadius
+	for y := cy - radius; y <= cy+radius; y++ {
+		for x := cx - radius; x <= cx+radius; x++ {
+			dx, dy := x-cx, y-cy
+			d2 := dx*dx + dy*dy
+			if d2 <= outer && d2 >= inner {
+				img.SetColorIndex(x, y, colorIndex)
+			}
+		}
+	}
+}
+
 func drawPointer(img *image.Paletted, cx, tipY int) {
 	for y := 0; y < 34; y++ {
 		half := y / 2
