@@ -2,29 +2,114 @@ package stats
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"strings"
+	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 
 	"github.com/tiennm99/miti99bot/internal/storage"
+	"github.com/tiennm99/miti99bot/internal/systemstate"
 )
 
 const (
 	statsCommandUsersIndexName   = "stats_cmd_n_user"
 	statsUserCommandsIndexName   = "stats_uid_n_cmd"
 	statsUsernameLookupIndexName = "stats_user_uid"
+
+	renameLolNextWeekStatsKey = "stats:command-rename:lol_nextweek-to-lol_next_week"
+	oldLolNextWeekCommand     = "lol_nextweek"
+	newLolNextWeekCommand     = "lol_next_week"
 )
 
 // InitStore performs stats collection startup maintenance. It is safe to call
-// every boot: MongoDB indexes are created idempotently and memory storage is a
-// no-op.
-func InitStore(ctx context.Context, statsColl storage.Collection) error {
+// every boot: MongoDB indexes are created idempotently and one-time command
+// rename migrations are guarded by the shared system collection.
+func InitStore(ctx context.Context, statsColl, systemColl storage.Collection) error {
 	if mongoColl, ok := storage.MongoCollection(statsColl); ok {
 		if err := ensureUsageIndexes(ctx, mongoColl); err != nil {
 			return err
 		}
+	}
+	if err := migrateCommandRename(ctx, statsColl, systemColl, oldLolNextWeekCommand, newLolNextWeekCommand, renameLolNextWeekStatsKey); err != nil {
+		return err
+	}
+	return nil
+}
+
+func migrateCommandRename(ctx context.Context, statsColl, systemColl storage.Collection, oldCmd, newCmd, markerKey string) error {
+	state := systemstate.New(systemColl)
+	if rec, ok, err := state.Get(ctx, markerKey); err != nil {
+		return fmt.Errorf("stats command rename marker %s: %w", markerKey, err)
+	} else if ok && rec.Status == "complete" {
+		return nil
+	}
+
+	docs := storage.Typed[usageEntry](statsColl)
+	keys, err := docs.List(ctx, oldCmd)
+	if err != nil {
+		return fmt.Errorf("stats command rename list %s: %w", oldCmd, err)
+	}
+
+	var moved int64
+	for _, key := range keys {
+		if key != oldCmd && !strings.HasPrefix(key, oldCmd+":") {
+			continue
+		}
+		entry, _, err := docs.Get(ctx, key)
+		if err != nil {
+			return fmt.Errorf("stats command rename get %s: %w", key, err)
+		}
+		if entry.Cmd != oldCmd {
+			continue
+		}
+
+		targetKey := usageKey(newCmd, entry.UserID)
+		target, _, err := docs.Get(ctx, targetKey)
+		if err != nil && !errors.Is(err, storage.ErrNotFound) {
+			return fmt.Errorf("stats command rename get target %s: %w", targetKey, err)
+		}
+		missingTarget := errors.Is(err, storage.ErrNotFound)
+		if missingTarget {
+			target = usageEntry{}
+		}
+
+		target.Cmd = newCmd
+		target.UserID = entry.UserID
+		if entry.UserID == 0 {
+			target.Username = ""
+		} else if entry.Username != "" {
+			target.Username = entry.Username
+		}
+		target.N += entry.N
+		if missingTarget {
+			target.Deleted = entry.Deleted
+		}
+		if !entry.Deleted {
+			target.Deleted = false
+		}
+		if err := docs.Put(ctx, targetKey, target); err != nil {
+			return fmt.Errorf("stats command rename put target %s: %w", targetKey, err)
+		}
+		if err := docs.Delete(ctx, key); err != nil {
+			return fmt.Errorf("stats command rename delete old %s: %w", key, err)
+		}
+		moved += entry.N
+	}
+
+	now := time.Now().UTC().UnixMilli()
+	if err := state.Put(ctx, markerKey, systemstate.Record{
+		Kind:        "migration",
+		Name:        markerKey,
+		Status:      "complete",
+		Count:       moved,
+		CompletedAt: now,
+		UpdatedAt:   now,
+	}); err != nil {
+		return fmt.Errorf("stats command rename marker put %s: %w", markerKey, err)
 	}
 	return nil
 }

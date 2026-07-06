@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/tiennm99/miti99bot/internal/storage"
+	"github.com/tiennm99/miti99bot/internal/systemstate"
 )
 
 func TestInitStore_MongoCreatesIndexes(t *testing.T) {
@@ -34,16 +35,17 @@ func TestInitStore_MongoCreatesIndexes(t *testing.T) {
 
 	provider := storage.NewMongoProvider(db)
 	statsColl := provider.Collection("stats")
+	systemColl := provider.Collection(systemstate.CollectionName)
 
 	rawStatsColl, ok := storage.MongoCollection(statsColl)
 	if !ok {
 		t.Fatal("stats collection is not Mongo-backed")
 	}
 
-	if err := InitStore(ctx, statsColl); err != nil {
+	if err := InitStore(ctx, statsColl, systemColl); err != nil {
 		t.Fatalf("InitStore: %v", err)
 	}
-	if err := InitStore(ctx, statsColl); err != nil {
+	if err := InitStore(ctx, statsColl, systemColl); err != nil {
 		t.Fatalf("InitStore second run: %v", err)
 	}
 
