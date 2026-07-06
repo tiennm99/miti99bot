@@ -1,121 +1,36 @@
 package misc
 
 import (
-	_ "embed"
 	"image"
-	"image/draw"
+	"image/color"
 	"math"
 	"strings"
 	"unicode"
 
-	"github.com/tdewolff/canvas"
-	"github.com/tdewolff/canvas/renderers/rasterizer"
+	"golang.org/x/image/font"
+	"golang.org/x/image/font/basicfont"
+	"golang.org/x/image/math/fixed"
+	"golang.org/x/text/unicode/norm"
 )
 
 const (
 	wheelBetaSliceLabelRadius = 64
-	wheelBetaFontSize         = 10
 )
 
-//go:embed fonts/dejavu-sans.ttf
-var wheelBetaTextFontBytes []byte
-
-var (
-	wheelBetaTextFont       = mustWheelBetaTextFont()
-	wheelBetaTextFontFamily = mustWheelBetaTextFontFamily()
-)
-
-func mustWheelBetaTextFont() *canvas.Font {
-	parsed, err := canvas.LoadFont(wheelBetaTextFontBytes, 0, canvas.FontRegular)
-	if err != nil {
-		panic(err)
-	}
-	return parsed
-}
-
-func mustWheelBetaTextFontFamily() *canvas.FontFamily {
-	family := canvas.NewFontFamily("wheel-beta")
-	if err := family.LoadFont(wheelBetaTextFontBytes, 0, canvas.FontRegular); err != nil {
-		panic(err)
-	}
-	return family
-}
-
-func newWheelBetaTextFace(colorIndex byte) *canvas.FontFace {
-	return wheelBetaTextFontFamily.Face(wheelBetaFontSize, wheelBetaPalette[colorIndex], canvas.FontRegular)
-}
-
-func renderWheelBetaCanvasImage(options []string, rotation float64, pointerColorIndex byte, label, value string, celebrateStep int) image.Image {
-	c := canvas.New(float64(wheelBetaSize), float64(wheelBetaSize))
-	ctx := canvas.NewContext(c)
-	ctx.SetCoordSystem(canvas.CartesianIV)
-	ctx.SetStrokeCapper(canvas.RoundCap)
-	ctx.SetStrokeJoiner(canvas.RoundJoin)
-
-	drawWheelBetaRect(ctx, 0, 0, float64(wheelBetaSize), float64(wheelBetaSize), wheelBetaBackgroundColorIndex)
-
-	cx := float64(wheelBetaSize) / 2
-	cy := float64(wheelBetaSize) / 2
-	drawWheelDropShadow(ctx, cx, cy)
-	drawWheelSlices(ctx, options, rotation)
-	drawWheelLighting(ctx, cx, cy)
-	drawWheelRim(ctx, cx, cy)
-	drawWinnerCelebration(ctx, celebrateStep)
-	drawWheelSliceLabels(ctx, options, rotation)
-	drawCircle(ctx, cx, cy, 24, wheelBetaPaperColorIndex)
-	drawCircle(ctx, cx, cy, 18, wheelBetaInkColorIndex)
-	drawPointer(ctx, cx+float64(wheelBetaRadius), cy, pointerColorIndex)
-	drawCenteredText(ctx, "WHEELOFNAMES BETA", cy+float64(wheelBetaRadius)+24, wheelBetaInkColorIndex)
-	drawStatusBand(ctx, label, value)
-
-	return rasterizer.Draw(c, canvas.DPMM(1), canvas.DefaultColorSpace)
-}
-
-func palettizeWheelBetaFrame(src image.Image) *image.Paletted {
-	rect := image.Rect(0, 0, wheelBetaSize, wheelBetaSize)
-	img := image.NewPaletted(rect, wheelBetaPalette)
-	draw.FloydSteinberg.Draw(img, rect, src, image.Point{})
-	return img
-}
-
-func drawWheelSlices(ctx *canvas.Context, options []string, rotation float64) {
+func drawWheelSliceLabels(img *image.Paletted, options []string, rotation float64) {
 	if len(options) == 0 {
 		return
 	}
-	cx := float64(wheelBetaSize) / 2
-	cy := float64(wheelBetaSize) / 2
-	segment := 2 * math.Pi / float64(len(options))
-	steps := int(math.Ceil(float64(wheelBetaRadius) * segment / 4))
-	if steps < 8 {
-		steps = 8
-	}
-	for idx := range options {
-		start := rotation + float64(idx)*segment
-		path := &canvas.Path{}
-		path.MoveTo(cx, cy)
-		for step := 0; step <= steps; step++ {
-			angle := start + segment*float64(step)/float64(steps)
-			path.LineTo(cx+math.Cos(angle)*float64(wheelBetaRadius), cy+math.Sin(angle)*float64(wheelBetaRadius))
-		}
-		path.Close()
-		drawWheelBetaPath(ctx, path, wheelBetaSliceColorIndexes[idx%len(wheelBetaSliceColorIndexes)])
-	}
-}
-
-func drawWheelSliceLabels(ctx *canvas.Context, options []string, rotation float64) {
-	if len(options) == 0 {
-		return
-	}
-	cx := float64(wheelBetaSize) / 2
-	cy := float64(wheelBetaSize) / 2
+	cx, cy := wheelBetaSize/2, wheelBetaSize/2
 	segment := 2 * math.Pi / float64(len(options))
 	limit := wheelBetaSliceLabelLimit(len(options))
 	for idx, option := range options {
 		angle := rotation + (float64(idx)+0.5)*segment
-		centerX := cx + math.Cos(angle)*float64(wheelBetaSliceLabelRadius)
-		centerY := cy + math.Sin(angle)*float64(wheelBetaSliceLabelRadius)
+		centerX := cx + int(math.Round(math.Cos(angle)*float64(wheelBetaSliceLabelRadius)))
+		centerY := cy + int(math.Round(math.Sin(angle)*float64(wheelBetaSliceLabelRadius)))
 		text := wheelBetaDisplayText(option, limit)
-		drawRotatedCenteredTextAt(ctx, text, centerX, centerY, angle, wheelBetaInkColorIndex)
+		drawRotatedCenteredTextAt(img, text, centerX+1, centerY+1, angle, wheelBetaPaperColorIndex)
+		drawRotatedCenteredTextAt(img, text, centerX, centerY, angle, wheelBetaInkColorIndex)
 	}
 }
 
@@ -132,126 +47,225 @@ func wheelBetaSliceLabelLimit(optionCount int) int {
 	}
 }
 
-func drawCircle(ctx *canvas.Context, cx, cy, radius float64, colorIndex byte) {
-	ctx.SetFillColor(wheelBetaPalette[colorIndex])
-	ctx.DrawPath(cx, cy, canvas.Circle(radius))
-	ctx.Fill()
+func drawCircle(img *image.Paletted, cx, cy, radius int, colorIndex byte) {
+	r2 := radius * radius
+	for y := cy - radius; y <= cy+radius; y++ {
+		for x := cx - radius; x <= cx+radius; x++ {
+			dx, dy := x-cx, y-cy
+			if dx*dx+dy*dy <= r2 {
+				img.SetColorIndex(x, y, colorIndex)
+			}
+		}
+	}
 }
 
-func drawWheelDropShadow(ctx *canvas.Context, cx, cy float64) {
-	ctx.SetFillColor(wheelBetaPalette[wheelBetaShadowColorIndex])
-	ctx.DrawPath(cx, cy+8, canvas.Ellipse(float64(wheelBetaRadius+9), float64(wheelBetaRadius+5)))
-	ctx.Fill()
+func drawWheelDropShadow(img *image.Paletted, cx, cy int) {
+	rx := wheelBetaRadius + 9
+	ry := wheelBetaRadius + 5
+	shadowCY := cy + 8
+	limit := rx * rx * ry * ry
+	for y := shadowCY - ry; y <= shadowCY+ry; y++ {
+		for x := cx - rx; x <= cx+rx; x++ {
+			dx := x - cx
+			dy := y - shadowCY
+			if dx*dx*ry*ry+dy*dy*rx*rx <= limit {
+				setWheelBetaPixel(img, x, y, wheelBetaShadowColorIndex)
+			}
+		}
+	}
 }
 
-func drawWheelLighting(ctx *canvas.Context, cx, cy float64) {
-	drawHighlightOval(ctx, cx-30, cy-50, 44, 18)
-	drawCircleOutline(ctx, cx, cy, float64(wheelBetaRadius-5), 2, wheelBetaBevelColorIndex)
-	drawCircleOutline(ctx, cx, cy, float64(wheelBetaRadius-8), 1, wheelBetaHighlightColorIndex)
+func drawWheelLighting(img *image.Paletted, cx, cy int) {
+	outer := wheelBetaRadius * wheelBetaRadius
+	edgeStart := wheelBetaRadius - 13
+	edge := edgeStart * edgeStart
+	for y := cy - wheelBetaRadius; y <= cy+wheelBetaRadius; y++ {
+		for x := cx - wheelBetaRadius; x <= cx+wheelBetaRadius; x++ {
+			dx, dy := x-cx, y-cy
+			d2 := dx*dx + dy*dy
+			if d2 > outer || d2 < edge {
+				continue
+			}
+			if dx+dy > wheelBetaRadius/3 {
+				img.SetColorIndex(x, y, wheelBetaBevelColorIndex)
+			}
+			if dx+dy < -wheelBetaRadius {
+				img.SetColorIndex(x, y, wheelBetaHighlightColorIndex)
+			}
+		}
+	}
+
+	drawHighlightOval(img, cx-30, cy-50, 44, 18)
 }
 
-func drawHighlightOval(ctx *canvas.Context, cx, cy, rx, ry float64) {
-	ctx.SetFillColor(wheelBetaPalette[wheelBetaHighlightColorIndex])
-	ctx.DrawPath(cx, cy, canvas.Ellipse(rx, ry))
-	ctx.Fill()
+func drawHighlightOval(img *image.Paletted, cx, cy, rx, ry int) {
+	limit := rx * rx * ry * ry
+	for y := cy - ry; y <= cy+ry; y++ {
+		for x := cx - rx; x <= cx+rx; x++ {
+			dx := x - cx
+			dy := y - cy
+			if dx*dx*ry*ry+dy*dy*rx*rx <= limit {
+				setWheelBetaPixel(img, x, y, wheelBetaHighlightColorIndex)
+			}
+		}
+	}
 }
 
-func drawWheelRim(ctx *canvas.Context, cx, cy float64) {
-	drawCircleOutline(ctx, cx, cy, float64(wheelBetaRadius)-1.5, 3, wheelBetaInkColorIndex)
-	drawCircleOutline(ctx, cx, cy, float64(wheelBetaRadius-5), 1, wheelBetaBevelColorIndex)
-	drawCircleOutline(ctx, cx, cy, float64(wheelBetaRadius-8), 1, wheelBetaHighlightColorIndex)
+func drawWheelRim(img *image.Paletted, cx, cy int) {
+	drawCircleOutline(img, cx, cy, wheelBetaRadius, 3, wheelBetaInkColorIndex)
+	drawCircleOutline(img, cx, cy, wheelBetaRadius-5, 1, wheelBetaBevelColorIndex)
+	drawCircleOutline(img, cx, cy, wheelBetaRadius-8, 1, wheelBetaHighlightColorIndex)
 }
 
-func drawCircleOutline(ctx *canvas.Context, cx, cy, radius, thickness float64, colorIndex byte) {
-	ctx.SetFillColor(canvas.Transparent)
-	ctx.SetStrokeColor(wheelBetaPalette[colorIndex])
-	ctx.SetStrokeWidth(thickness)
-	ctx.DrawPath(cx, cy, canvas.Circle(radius))
-	ctx.Stroke()
+func drawCircleOutline(img *image.Paletted, cx, cy, radius, thickness int, colorIndex byte) {
+	outer := radius * radius
+	innerRadius := radius - thickness
+	inner := innerRadius * innerRadius
+	for y := cy - radius; y <= cy+radius; y++ {
+		for x := cx - radius; x <= cx+radius; x++ {
+			dx, dy := x-cx, y-cy
+			d2 := dx*dx + dy*dy
+			if d2 <= outer && d2 >= inner {
+				img.SetColorIndex(x, y, colorIndex)
+			}
+		}
+	}
 }
 
-func drawPointer(ctx *canvas.Context, tipX, cy float64, fillColorIndex byte) {
-	outer := &canvas.Path{}
-	outer.MoveTo(tipX+2, cy)
-	outer.LineTo(tipX+34, cy+24)
-	outer.LineTo(tipX+34, cy-24)
-	outer.Close()
-	drawWheelBetaPath(ctx, outer, wheelBetaInkColorIndex)
-	drawWheelBetaRect(ctx, tipX-1, cy-2, tipX+5, cy+2, wheelBetaInkColorIndex)
-
-	inner := &canvas.Path{}
-	inner.MoveTo(tipX+4, cy)
-	inner.LineTo(tipX+30, cy+10)
-	inner.LineTo(tipX+30, cy-10)
-	inner.Close()
-	drawWheelBetaPath(ctx, inner, fillColorIndex)
+func drawPointer(img *image.Paletted, tipX, cy int, fillColorIndex byte) {
+	for xOffset := 0; xOffset < 34; xOffset++ {
+		half := xOffset / 2
+		x := tipX + xOffset
+		for y := cy - half; y <= cy+half; y++ {
+			setWheelBetaPixel(img, x, y, wheelBetaInkColorIndex)
+		}
+	}
+	for xOffset := 3; xOffset < 30; xOffset++ {
+		half := xOffset/2 - 2
+		if half < 0 {
+			continue
+		}
+		x := tipX + xOffset
+		for y := cy - half; y <= cy+half; y++ {
+			setWheelBetaPixel(img, x, y, fillColorIndex)
+		}
+	}
 }
 
-func drawWinnerCelebration(ctx *canvas.Context, step int) {
+func drawWinnerCelebration(img *image.Paletted, step int) {
 	if step < 0 {
 		return
 	}
 
-	cx := float64(wheelBetaSize) / 2
-	cy := float64(wheelBetaSize) / 2
+	cx, cy := wheelBetaSize/2, wheelBetaSize/2
 	phase := step % wheelBetaCelebrateFrames
 	ringRadius := 34 + phase*5
 	if ringRadius < wheelBetaRadius-8 {
-		drawCircleOutline(ctx, cx, cy, float64(ringRadius), 1, wheelBetaSparkColorIndex)
+		drawCircleOutline(img, cx, cy, ringRadius, 1, wheelBetaSparkColorIndex)
 	}
 
 	for i := 0; i < 14; i++ {
 		angle := (float64(i)/14)*2*math.Pi + float64(phase)*0.31
 		inner := float64(wheelBetaRadius + 9 + phase%3)
 		outer := inner + 7 + float64(phase%4)
-		x1 := cx + math.Cos(angle)*inner
-		y1 := cy + math.Sin(angle)*inner
-		x2 := cx + math.Cos(angle)*outer
-		y2 := cy + math.Sin(angle)*outer
+		x1 := cx + int(math.Round(math.Cos(angle)*inner))
+		y1 := cy + int(math.Round(math.Sin(angle)*inner))
+		x2 := cx + int(math.Round(math.Cos(angle)*outer))
+		y2 := cy + int(math.Round(math.Sin(angle)*outer))
 		colorIndex := wheelBetaSliceColorIndexes[(i+phase)%len(wheelBetaSliceColorIndexes)]
 		if i%5 == 0 {
 			colorIndex = wheelBetaSparkColorIndex
 		}
-		drawWheelBetaLine(ctx, x1, y1, x2, y2, 2, colorIndex)
-		drawSpark(ctx, x2, y2, colorIndex)
+		drawPalettedLine(img, x1, y1, x2, y2, colorIndex)
+		drawSpark(img, x2, y2, colorIndex)
 	}
 }
 
-func drawStatusBand(ctx *canvas.Context, label, value string) {
-	drawWheelBetaRect(ctx, 31, 235, float64(wheelBetaSize-25), 286, wheelBetaShadowColorIndex)
-	drawWheelBetaRect(ctx, 28, 230, float64(wheelBetaSize-28), 282, wheelBetaPaperColorIndex)
-	drawWheelBetaLine(ctx, 28, 230, float64(wheelBetaSize-28), 230, 1, wheelBetaHighlightColorIndex)
-	drawWheelBetaLine(ctx, 28, 281, float64(wheelBetaSize-28), 281, 1, wheelBetaBevelColorIndex)
-	drawCenteredText(ctx, label, 240, wheelBetaInkColorIndex)
-	drawCenteredText(ctx, value, 260, wheelBetaInkColorIndex)
+func drawStatusBand(img *image.Paletted, label, value string) {
+	for y := 235; y < 286; y++ {
+		for x := 31; x < wheelBetaSize-25; x++ {
+			img.SetColorIndex(x, y, wheelBetaShadowColorIndex)
+		}
+	}
+	for y := 230; y < 282; y++ {
+		for x := 28; x < wheelBetaSize-28; x++ {
+			img.SetColorIndex(x, y, wheelBetaPaperColorIndex)
+		}
+	}
+	for x := 28; x < wheelBetaSize-28; x++ {
+		img.SetColorIndex(x, 230, wheelBetaHighlightColorIndex)
+		img.SetColorIndex(x, 281, wheelBetaBevelColorIndex)
+	}
+	drawCenteredText(img, label, 250, wheelBetaInkColorIndex)
+	drawCenteredText(img, value, 270, wheelBetaInkColorIndex)
 }
 
-func drawCenteredText(ctx *canvas.Context, text string, topY float64, colorIndex byte) {
-	drawCenteredTextAt(ctx, text, float64(wheelBetaSize)/2, topY, colorIndex)
+func drawCenteredText(img *image.Paletted, text string, baselineY int, colorIndex byte) {
+	drawCenteredTextAt(img, text, wheelBetaSize/2, baselineY, colorIndex)
 }
 
-func drawCenteredTextAt(ctx *canvas.Context, text string, centerX, topY float64, colorIndex byte) {
-	face := newWheelBetaTextFace(colorIndex)
-	ctx.DrawText(centerX, topY, canvas.NewTextLine(face, text, canvas.Center))
+func drawCenteredTextAt(img *image.Paletted, text string, centerX, baselineY int, colorIndex byte) {
+	face := basicfont.Face7x13
+	width := font.MeasureString(face, text).Ceil()
+	x := centerX - width/2
+	drawer := font.Drawer{
+		Dst:  img,
+		Src:  image.NewUniform(wheelBetaPalette[colorIndex]),
+		Face: face,
+		Dot:  fixed.P(x, baselineY),
+	}
+	drawer.DrawString(text)
 }
 
-func drawRotatedCenteredTextAt(ctx *canvas.Context, text string, centerX, centerY, angle float64, colorIndex byte) {
-	face := newWheelBetaTextFace(colorIndex)
-	topY := centerY - face.Metrics().LineHeight/2
-	ctx.Push()
-	ctx.RotateAbout(angle*180/math.Pi, centerX, centerY)
-	ctx.DrawText(centerX, topY, canvas.NewTextLine(face, text, canvas.Center))
-	ctx.Pop()
+func drawRotatedCenteredTextAt(img *image.Paletted, text string, centerX, centerY int, angle float64, colorIndex byte) {
+	face := basicfont.Face7x13
+	padding := 2
+	metrics := face.Metrics()
+	textWidth := font.MeasureString(face, text).Ceil()
+	textHeight := metrics.Height.Ceil()
+	mask := image.NewAlpha(image.Rect(0, 0, textWidth+padding*2, textHeight+padding*2))
+	drawer := font.Drawer{
+		Dst:  mask,
+		Src:  image.NewUniform(color.Alpha{A: 255}),
+		Face: face,
+		Dot:  fixed.P(padding, padding+metrics.Ascent.Ceil()),
+	}
+	drawer.DrawString(text)
+
+	sourceCenterX := float64(mask.Bounds().Dx()-1) / 2
+	sourceCenterY := float64(mask.Bounds().Dy()-1) / 2
+	sin, cos := math.Sin(angle), math.Cos(angle)
+	for y := mask.Bounds().Min.Y; y < mask.Bounds().Max.Y; y++ {
+		for x := mask.Bounds().Min.X; x < mask.Bounds().Max.X; x++ {
+			if mask.AlphaAt(x, y).A == 0 {
+				continue
+			}
+			localX := float64(x) - sourceCenterX
+			localY := float64(y) - sourceCenterY
+			targetX := centerX + int(math.Round(localX*cos-localY*sin))
+			targetY := centerY + int(math.Round(localX*sin+localY*cos))
+			setWheelBetaPixel(img, targetX, targetY, colorIndex)
+		}
+	}
 }
 
 func wheelBetaDisplayText(s string, limit int) string {
 	var b strings.Builder
 	count := 0
-	for _, r := range s {
+	for _, r := range norm.NFD.String(s) {
+		if unicode.Is(unicode.Mn, r) {
+			continue
+		}
 		if count >= limit {
 			break
 		}
+		r = wheelBetaASCIIRune(r)
 		if unicode.IsControl(r) {
+			b.WriteByte('?')
+			count++
+			continue
+		}
+		if r < 32 || r > 126 {
 			b.WriteByte('?')
 			count++
 			continue
@@ -266,35 +280,65 @@ func wheelBetaDisplayText(s string, limit int) string {
 	return out
 }
 
-func drawSpark(ctx *canvas.Context, cx, cy float64, colorIndex byte) {
-	drawWheelBetaLine(ctx, cx-2, cy, cx+2, cy, 1, colorIndex)
-	drawWheelBetaLine(ctx, cx, cy-2, cx, cy+2, 1, colorIndex)
+func wheelBetaASCIIRune(r rune) rune {
+	switch r {
+	case 'đ':
+		return 'd'
+	case 'Đ':
+		return 'D'
+	default:
+		return r
+	}
 }
 
-func drawWheelBetaLine(ctx *canvas.Context, x0, y0, x1, y1, width float64, colorIndex byte) {
-	ctx.SetFillColor(canvas.Transparent)
-	ctx.SetStrokeColor(wheelBetaPalette[colorIndex])
-	ctx.SetStrokeWidth(width)
-	path := &canvas.Path{}
-	path.MoveTo(x0, y0)
-	path.LineTo(x1, y1)
-	ctx.DrawPath(0, 0, path)
-	ctx.Stroke()
+func drawSpark(img *image.Paletted, cx, cy int, colorIndex byte) {
+	for y := cy - 1; y <= cy+1; y++ {
+		for x := cx - 1; x <= cx+1; x++ {
+			if x == cx || y == cy {
+				setWheelBetaPixel(img, x, y, colorIndex)
+			}
+		}
+	}
 }
 
-func drawWheelBetaRect(ctx *canvas.Context, x0, y0, x1, y1 float64, colorIndex byte) {
-	path := &canvas.Path{}
-	path.MoveTo(x0, y0)
-	path.LineTo(x1, y0)
-	path.LineTo(x1, y1)
-	path.LineTo(x0, y1)
-	path.Close()
-	drawWheelBetaPath(ctx, path, colorIndex)
+func drawPalettedLine(img *image.Paletted, x0, y0, x1, y1 int, colorIndex byte) {
+	dx := absInt(x1 - x0)
+	sx := -1
+	if x0 < x1 {
+		sx = 1
+	}
+	dy := -absInt(y1 - y0)
+	sy := -1
+	if y0 < y1 {
+		sy = 1
+	}
+	err := dx + dy
+	for {
+		setWheelBetaPixel(img, x0, y0, colorIndex)
+		if x0 == x1 && y0 == y1 {
+			return
+		}
+		e2 := 2 * err
+		if e2 >= dy {
+			err += dy
+			x0 += sx
+		}
+		if e2 <= dx {
+			err += dx
+			y0 += sy
+		}
+	}
 }
 
-func drawWheelBetaPath(ctx *canvas.Context, path *canvas.Path, colorIndex byte) {
-	ctx.SetStrokeColor(canvas.Transparent)
-	ctx.SetFillColor(wheelBetaPalette[colorIndex])
-	ctx.DrawPath(0, 0, path)
-	ctx.Fill()
+func setWheelBetaPixel(img *image.Paletted, x, y int, colorIndex byte) {
+	if image.Pt(x, y).In(img.Rect) {
+		img.SetColorIndex(x, y, colorIndex)
+	}
+}
+
+func absInt(v int) int {
+	if v < 0 {
+		return -v
+	}
+	return v
 }

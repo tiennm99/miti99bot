@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"image"
 	"image/color"
+	"image/draw"
 	"image/gif"
 	"math"
 )
@@ -103,8 +104,38 @@ func renderWheelBetaFrameWithStatus(options []string, winner int, rotation float
 }
 
 func renderWheelBetaFrameWithCelebration(options []string, winner int, rotation float64, reveal bool, status string, celebrateStep int) *image.Paletted {
+	rect := image.Rect(0, 0, wheelBetaSize, wheelBetaSize)
+	img := image.NewPaletted(rect, wheelBetaPalette)
+	draw.Draw(img, rect, image.NewUniform(wheelBetaPalette[wheelBetaBackgroundColorIndex]), image.Point{}, draw.Src)
+
+	cx, cy := wheelBetaSize/2, wheelBetaSize/2
+	drawWheelDropShadow(img, cx, cy)
+
+	segment := 2 * math.Pi / float64(len(options))
+	r2 := wheelBetaRadius * wheelBetaRadius
+	for y := cy - wheelBetaRadius; y <= cy+wheelBetaRadius; y++ {
+		for x := cx - wheelBetaRadius; x <= cx+wheelBetaRadius; x++ {
+			dx, dy := x-cx, y-cy
+			if dx*dx+dy*dy > r2 {
+				continue
+			}
+			theta := normalizeAngle(math.Atan2(float64(dy), float64(dx)) - rotation)
+			idx := int(theta / segment)
+			colorIndex := wheelBetaSliceColorIndexes[idx%len(wheelBetaSliceColorIndexes)]
+			img.SetColorIndex(x, y, colorIndex)
+		}
+	}
+
 	currentIndex := currentWheelBetaIndex(len(options), rotation)
 	pointerColor := wheelBetaSliceColorIndexes[currentIndex%len(wheelBetaSliceColorIndexes)]
+	drawWheelLighting(img, cx, cy)
+	drawWheelRim(img, cx, cy)
+	drawWinnerCelebration(img, celebrateStep)
+	drawWheelSliceLabels(img, options, rotation)
+	drawCircle(img, cx, cy, 24, wheelBetaPaperColorIndex)
+	drawCircle(img, cx, cy, 18, wheelBetaInkColorIndex)
+	drawPointer(img, cx+wheelBetaRadius, cy, pointerColor)
+	drawCenteredText(img, "WHEELOFNAMES BETA", cy+wheelBetaRadius+34, wheelBetaInkColorIndex)
 	label := status
 	if label == "" {
 		label = "CURRENT"
@@ -114,7 +145,8 @@ func renderWheelBetaFrameWithCelebration(options []string, winner int, rotation 
 		label = "RESULT"
 		value = wheelBetaDisplayText(options[winner], 28)
 	}
-	return palettizeWheelBetaFrame(renderWheelBetaCanvasImage(options, rotation, pointerColor, label, value, celebrateStep))
+	drawStatusBand(img, label, value)
+	return img
 }
 
 func finalWheelRotation(optionCount, winner int) float64 {
