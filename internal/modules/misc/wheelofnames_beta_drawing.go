@@ -2,6 +2,7 @@ package misc
 
 import (
 	"image"
+	"image/color"
 	"math"
 	"strings"
 
@@ -11,8 +12,7 @@ import (
 )
 
 const (
-	wheelBetaSliceLabelRadius         = 64
-	wheelBetaSliceLabelBaselineOffset = 5
+	wheelBetaSliceLabelRadius = 64
 )
 
 func drawWheelSliceLabels(img *image.Paletted, options []string, rotation float64) {
@@ -25,10 +25,10 @@ func drawWheelSliceLabels(img *image.Paletted, options []string, rotation float6
 	for idx, option := range options {
 		angle := rotation + (float64(idx)+0.5)*segment
 		centerX := cx + int(math.Round(math.Cos(angle)*float64(wheelBetaSliceLabelRadius)))
-		baselineY := cy + int(math.Round(math.Sin(angle)*float64(wheelBetaSliceLabelRadius))) + wheelBetaSliceLabelBaselineOffset
+		centerY := cy + int(math.Round(math.Sin(angle)*float64(wheelBetaSliceLabelRadius)))
 		text := asciiWheelText(option, limit)
-		drawCenteredTextAt(img, text, centerX+1, baselineY+1, 2)
-		drawCenteredTextAt(img, text, centerX, baselineY, 1)
+		drawRotatedCenteredTextAt(img, text, centerX+1, centerY+1, angle, wheelBetaPaperColorIndex)
+		drawRotatedCenteredTextAt(img, text, centerX, centerY, angle, wheelBetaInkColorIndex)
 	}
 }
 
@@ -213,6 +213,38 @@ func drawCenteredTextAt(img *image.Paletted, text string, centerX, baselineY int
 		Dot:  fixed.P(x, baselineY),
 	}
 	drawer.DrawString(text)
+}
+
+func drawRotatedCenteredTextAt(img *image.Paletted, text string, centerX, centerY int, angle float64, colorIndex byte) {
+	face := basicfont.Face7x13
+	padding := 2
+	metrics := face.Metrics()
+	textWidth := font.MeasureString(face, text).Ceil()
+	textHeight := metrics.Height.Ceil()
+	mask := image.NewAlpha(image.Rect(0, 0, textWidth+padding*2, textHeight+padding*2))
+	drawer := font.Drawer{
+		Dst:  mask,
+		Src:  image.NewUniform(color.Alpha{A: 255}),
+		Face: face,
+		Dot:  fixed.P(padding, padding+metrics.Ascent.Ceil()),
+	}
+	drawer.DrawString(text)
+
+	sourceCenterX := float64(mask.Bounds().Dx()-1) / 2
+	sourceCenterY := float64(mask.Bounds().Dy()-1) / 2
+	sin, cos := math.Sin(angle), math.Cos(angle)
+	for y := mask.Bounds().Min.Y; y < mask.Bounds().Max.Y; y++ {
+		for x := mask.Bounds().Min.X; x < mask.Bounds().Max.X; x++ {
+			if mask.AlphaAt(x, y).A == 0 {
+				continue
+			}
+			localX := float64(x) - sourceCenterX
+			localY := float64(y) - sourceCenterY
+			targetX := centerX + int(math.Round(localX*cos-localY*sin))
+			targetY := centerY + int(math.Round(localX*sin+localY*cos))
+			setWheelBetaPixel(img, targetX, targetY, colorIndex)
+		}
+	}
 }
 
 func asciiWheelText(s string, limit int) string {
