@@ -69,7 +69,8 @@ func (p wheelBetaSpinProfile) progressAt(t float64) float64 {
 	accelEnd := p.accelEnd
 	coastEnd := p.coastEnd
 	if accelEnd <= 0 || coastEnd <= accelEnd || coastEnd >= 1 {
-		return 1 - math.Pow(1-t, 3)
+		remaining := 1 - t
+		return 1 - remaining*remaining*remaining
 	}
 
 	accelArea := accelEnd * 0.5
