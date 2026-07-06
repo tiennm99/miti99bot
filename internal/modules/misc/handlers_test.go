@@ -3,7 +3,9 @@ package misc
 import (
 	"bytes"
 	"context"
+	"image"
 	"image/gif"
+	"math"
 	"strings"
 	"testing"
 	"time"
@@ -288,6 +290,51 @@ func TestWheelOfNamesBeta_CurrentOptionTracksPointer(t *testing.T) {
 			t.Fatalf("currentWheelBetaIndex at final rotation = %d, want %d", got, winner)
 		}
 	}
+}
+
+func TestWheelOfNamesBeta_PointerPointsIntoWheel(t *testing.T) {
+	img := renderWheelBetaFrame([]string{"Alice", "Bob"}, 0, finalWheelRotation(2, 0), false)
+	cx := wheelBetaSize / 2
+	tipY := wheelBetaSize/2 - wheelBetaRadius
+	if got := img.ColorIndexAt(cx, tipY); got != 1 {
+		t.Fatalf("pointer tip color = %d, want 1", got)
+	}
+	if got := img.ColorIndexAt(cx+5, tipY-10); got != 1 {
+		t.Fatalf("pointer shoulder color = %d, want 1", got)
+	}
+	if got := img.ColorIndexAt(cx+5, tipY); got == 1 {
+		t.Fatalf("pointer tip is too wide at color index %d", got)
+	}
+	if got := img.ColorIndexAt(cx+12, tipY+20); got == 1 {
+		t.Fatalf("pointer widens below wheel edge at color index %d", got)
+	}
+}
+
+func TestWheelOfNamesBeta_DrawsOptionLabelsInsideSlices(t *testing.T) {
+	options := []string{"Student", "Teacher", "Parent", "Staff"}
+	rotation := 0.0
+	img := renderWheelBetaFrame(options, 0, rotation, false)
+	segment := 2 * math.Pi / float64(len(options))
+	angle := rotation + segment/2
+	centerX := wheelBetaSize/2 + int(math.Round(math.Cos(angle)*float64(wheelBetaSliceLabelRadius)))
+	baselineY := wheelBetaSize/2 + int(math.Round(math.Sin(angle)*float64(wheelBetaSliceLabelRadius))) + wheelBetaSliceLabelBaselineOffset
+	bounds := image.Rect(centerX-28, baselineY-14, centerX+28, baselineY+2)
+	if got := countColorIndex(img, bounds, 1); got == 0 {
+		t.Fatalf("slice label dark pixels = %d, want > 0", got)
+	}
+}
+
+func countColorIndex(img *image.Paletted, bounds image.Rectangle, colorIndex byte) int {
+	bounds = bounds.Intersect(img.Bounds())
+	count := 0
+	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
+		for x := bounds.Min.X; x < bounds.Max.X; x++ {
+			if img.ColorIndexAt(x, y) == colorIndex {
+				count++
+			}
+		}
+	}
+	return count
 }
 
 func TestWheelOfNamesBeta_SendsAnimationWithoutSpoilingCaption(t *testing.T) {
