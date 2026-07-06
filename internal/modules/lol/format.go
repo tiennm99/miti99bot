@@ -199,12 +199,10 @@ func renderLeagueSection(g leagueGroup) string {
 	return "<b>" + html.EscapeString(g.Name) + "</b>\n" + strings.Join(lines, "\n")
 }
 
-// RenderToday renders the today reply — grouped by league. day may be any
-// instant on the target ICT day.
-func RenderToday(events []ScheduleEvent, day time.Time) string {
+func renderDay(events []ScheduleEvent, day time.Time, emptyLine string) string {
 	header := "<b>LoL — " + html.EscapeString(formatIctDayLabel(day)) + "</b> (ICT)"
 	if len(events) == 0 {
-		return header + "\nNo major LoL matches today."
+		return header + "\n" + emptyLine
 	}
 	groups := groupByLeague(events)
 	sections := make([]string, len(groups))
@@ -214,15 +212,18 @@ func RenderToday(events []ScheduleEvent, day time.Time) string {
 	return header + "\n\n" + strings.Join(sections, "\n\n")
 }
 
-// RenderWeek renders a week-range reply — grouped by league → day.
-// `to` is exclusive (the start of the day after the range), so the label
-// uses to-1.
-func RenderWeek(events []ScheduleEvent, from, to time.Time) string {
+// RenderToday renders the today reply — grouped by league. day may be any
+// instant on the target ICT day.
+func RenderToday(events []ScheduleEvent, day time.Time) string {
+	return renderDay(events, day, "No major LoL matches today.")
+}
+
+func renderWeek(events []ScheduleEvent, from, to time.Time, emptyLine string) string {
 	fromLbl := html.EscapeString(formatIctDayLabel(from))
 	toLbl := html.EscapeString(formatIctDayLabel(to.Add(-time.Millisecond)))
 	header := "<b>LoL — " + fromLbl + " → " + toLbl + "</b> (ICT)"
 	if len(events) == 0 {
-		return header + "\nNo major LoL matches this week."
+		return header + "\n" + emptyLine
 	}
 
 	leagueBlocks := make([]string, 0, len(events))
@@ -261,4 +262,11 @@ func RenderWeek(events []ScheduleEvent, from, to time.Time) string {
 		leagueBlocks = append(leagueBlocks, block)
 	}
 	return header + "\n\n" + strings.Join(leagueBlocks, "\n\n")
+}
+
+// RenderWeek renders a week-range reply — grouped by league → day.
+// `to` is exclusive (the start of the day after the range), so the label
+// uses to-1.
+func RenderWeek(events []ScheduleEvent, from, to time.Time) string {
+	return renderWeek(events, from, to, "No major LoL matches this week.")
 }
