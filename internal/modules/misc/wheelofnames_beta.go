@@ -8,11 +8,6 @@ import (
 	"image/draw"
 	"image/gif"
 	"math"
-	"strings"
-
-	"golang.org/x/image/font"
-	"golang.org/x/image/font/basicfont"
-	"golang.org/x/image/math/fixed"
 )
 
 const (
@@ -102,14 +97,15 @@ func renderWheelBetaFrame(options []string, winner int, rotation float64, reveal
 		}
 	}
 
+	drawWheelSliceLabels(img, options, rotation)
 	drawCircle(img, cx, cy, 24, 2)
 	drawCircle(img, cx, cy, 18, 1)
-	drawPointer(img, cx, cy-wheelBetaRadius-10)
+	drawPointer(img, cx, cy-wheelBetaRadius)
 	drawCenteredText(img, "WHEELOFNAMES BETA", cy+wheelBetaRadius+34, 1)
 	label := "CURRENT"
 	value := asciiWheelText(options[currentWheelBetaIndex(len(options), rotation)], 28)
 	if reveal {
-		label = "WINNER"
+		label = "RESULT"
 		value = asciiWheelText(options[winner], 28)
 	}
 	drawStatusBand(img, label, value)
@@ -132,67 +128,4 @@ func normalizeAngle(theta float64) float64 {
 		theta += 2 * math.Pi
 	}
 	return theta
-}
-
-func drawCircle(img *image.Paletted, cx, cy, radius int, colorIndex byte) {
-	r2 := radius * radius
-	for y := cy - radius; y <= cy+radius; y++ {
-		for x := cx - radius; x <= cx+radius; x++ {
-			dx, dy := x-cx, y-cy
-			if dx*dx+dy*dy <= r2 {
-				img.SetColorIndex(x, y, colorIndex)
-			}
-		}
-	}
-}
-
-func drawPointer(img *image.Paletted, cx, tipY int) {
-	for y := 0; y < 34; y++ {
-		half := y / 2
-		for x := cx - half; x <= cx+half; x++ {
-			img.SetColorIndex(x, tipY+y, 1)
-		}
-	}
-}
-
-func drawStatusBand(img *image.Paletted, label, value string) {
-	for y := 230; y < 282; y++ {
-		for x := 28; x < wheelBetaSize-28; x++ {
-			img.SetColorIndex(x, y, 2)
-		}
-	}
-	drawCenteredText(img, label, 250, 1)
-	drawCenteredText(img, value, 270, 1)
-}
-
-func drawCenteredText(img *image.Paletted, text string, baselineY int, colorIndex byte) {
-	face := basicfont.Face7x13
-	width := font.MeasureString(face, text).Ceil()
-	x := (wheelBetaSize - width) / 2
-	drawer := font.Drawer{
-		Dst:  img,
-		Src:  image.NewUniform(wheelBetaPalette[colorIndex]),
-		Face: face,
-		Dot:  fixed.P(x, baselineY),
-	}
-	drawer.DrawString(text)
-}
-
-func asciiWheelText(s string, limit int) string {
-	var b strings.Builder
-	for _, r := range s {
-		if b.Len() >= limit {
-			break
-		}
-		if r < 32 || r > 126 {
-			b.WriteByte('?')
-			continue
-		}
-		b.WriteRune(r)
-	}
-	out := strings.TrimSpace(b.String())
-	if out == "" {
-		return "winner"
-	}
-	return out
 }
