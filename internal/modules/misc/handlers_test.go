@@ -271,7 +271,16 @@ func TestWheelOfNamesBeta_RenderGIFTiming(t *testing.T) {
 	}
 }
 
-func TestWheelOfNamesBeta_SendsAnimationWithWinnerCaption(t *testing.T) {
+func TestWheelOfNamesBeta_CurrentOptionTracksPointer(t *testing.T) {
+	for winner := range []string{"Alice", "Bob", "Carol", "Dana"} {
+		rotation := finalWheelRotation(4, winner)
+		if got := currentWheelBetaIndex(4, rotation); got != winner {
+			t.Fatalf("currentWheelBetaIndex at final rotation = %d, want %d", got, winner)
+		}
+	}
+}
+
+func TestWheelOfNamesBeta_SendsAnimationWithoutSpoilingCaption(t *testing.T) {
 	rb, _ := installMisc(t, 999)
 	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(7, "/wheelofnamesbeta Alice"))
 
@@ -279,8 +288,11 @@ func TestWheelOfNamesBeta_SendsAnimationWithWinnerCaption(t *testing.T) {
 	if call.Method != "sendAnimation" {
 		t.Fatalf("method = %q, want sendAnimation", call.Method)
 	}
-	if got := call.Form["caption"]; got != "Winner: Alice" {
-		t.Fatalf("caption = %q, want Winner: Alice", got)
+	if got := call.Form["caption"]; got != "Spinning..." {
+		t.Fatalf("caption = %q, want Spinning...", got)
+	}
+	if strings.Contains(call.Form["caption"], "Alice") {
+		t.Fatalf("caption spoils winner: %q", call.Form["caption"])
 	}
 	if got := call.Form["duration"]; got != "7" {
 		t.Fatalf("duration = %q, want 7", got)

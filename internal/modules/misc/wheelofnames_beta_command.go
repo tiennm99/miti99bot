@@ -46,7 +46,7 @@ func wheelOfNamesBetaCommand() modules.Command {
 				Duration: wheelBetaDuration,
 				Width:    wheelBetaSize,
 				Height:   wheelBetaSize,
-				Caption:  "Winner: " + options[winner],
+				Caption:  "Spinning...",
 			})
 			if err != nil {
 				log.Warn("wheelofnamesbeta send animation failed", "chat", update.Message.Chat.ID, "err", err)
