@@ -120,6 +120,14 @@ func TestRenderToday_EmptyShowsNoMatches(t *testing.T) {
 	}
 }
 
+func TestRenderDay_CustomEmptyLine(t *testing.T) {
+	day := time.Date(2026, 5, 10, 0, 0, 0, 0, IctLocation)
+	got := renderDay(nil, day, "No major LoL matches tomorrow.")
+	if !strings.Contains(got, "Sun May 10") || !strings.Contains(got, "No major LoL matches tomorrow.") {
+		t.Errorf("custom day empty render wrong: %q", got)
+	}
+}
+
 func TestRenderWeek_GroupsByLeagueAndDay(t *testing.T) {
 	from := time.Date(2026, 5, 9, 0, 0, 0, 0, IctLocation)
 	to := from.AddDate(0, 0, 7)
@@ -137,6 +145,17 @@ func TestRenderWeek_GroupsByLeagueAndDay(t *testing.T) {
 	}
 	if !strings.Contains(got, "Sun May 10") {
 		t.Errorf("missing Sun May 10: %q", got)
+	}
+}
+
+func TestRenderWeek_CustomEmptyLine(t *testing.T) {
+	from := time.Date(2026, 5, 11, 0, 0, 0, 0, IctLocation)
+	to := from.AddDate(0, 0, 7)
+	got := renderWeek(nil, from, to, "No major LoL matches next week.")
+	for _, want := range []string{"Mon May 11", "Sun May 17", "No major LoL matches next week."} {
+		if !strings.Contains(got, want) {
+			t.Errorf("custom week empty render missing %q in %q", want, got)
+		}
 	}
 }
 

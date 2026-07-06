@@ -128,6 +128,15 @@ func TestIctWeekStartOf(t *testing.T) {
 	}
 }
 
+func TestIctNextWeekStartOf(t *testing.T) {
+	// refNow is Sat 2026-05-09 19:00 ICT. Next ICT calendar week starts
+	// Mon 2026-05-11 00:00 ICT = 2026-05-10 17:00 UTC.
+	want := time.Date(2026, 5, 10, 17, 0, 0, 0, time.UTC)
+	if got := ictNextWeekStartOf(refNow); !got.Equal(want) {
+		t.Errorf("ictNextWeekStartOf(Sat) = %v, want %v", got, want)
+	}
+}
+
 func TestAddDays(t *testing.T) {
 	base := time.Date(2026, 5, 9, 12, 30, 0, 0, time.UTC)
 	got := addDays(base, 3)
