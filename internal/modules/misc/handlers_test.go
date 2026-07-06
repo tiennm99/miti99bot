@@ -285,9 +285,13 @@ func TestWheelOfNamesBeta_RenderGIFTiming(t *testing.T) {
 	if equalPalettedFrames(decoded.Image[wheelBetaSpinFrames-1], decoded.Image[wheelBetaSpinFrames]) {
 		t.Fatalf("first result frame matches last spin frame, want visible RESULT transition")
 	}
-	for i := wheelBetaSpinFrames + 1; i < len(decoded.Image); i++ {
-		if !equalPalettedFrames(decoded.Image[wheelBetaSpinFrames], decoded.Image[i]) {
-			t.Fatalf("result hold frame %d differs from first result frame", i)
+	if equalPalettedFrames(decoded.Image[wheelBetaSpinFrames], decoded.Image[wheelBetaSpinFrames+1]) {
+		t.Fatalf("first celebration frame matches second celebration frame, want visible result burst")
+	}
+	firstStableHoldFrame := wheelBetaSpinFrames + wheelBetaCelebrateFrames
+	for i := firstStableHoldFrame + 1; i < len(decoded.Image); i++ {
+		if !equalPalettedFrames(decoded.Image[firstStableHoldFrame], decoded.Image[i]) {
+			t.Fatalf("stable result hold frame %d differs from frame %d", i, firstStableHoldFrame)
 		}
 	}
 	if decoded.LoopCount != -1 {
@@ -335,7 +339,7 @@ func TestWheelOfNamesBeta_SpinProfileVariesBetweenSpins(t *testing.T) {
 	if first.startRotation == second.startRotation &&
 		first.finalRotation == second.finalRotation &&
 		first.accelEnd == second.accelEnd &&
-		first.coastEnd == second.coastEnd &&
+		first.decelSharpness == second.decelSharpness &&
 		first.wobblePhase == second.wobblePhase {
 		t.Fatalf("spin profiles did not vary: %+v", first)
 	}
@@ -363,6 +367,9 @@ func TestWheelOfNamesBeta_PointerPointsIntoWheel(t *testing.T) {
 	}
 	if got := img.ColorIndexAt(cx+5, tipY-10); got != 1 {
 		t.Fatalf("pointer shoulder color = %d, want 1", got)
+	}
+	if got := img.ColorIndexAt(cx, tipY-12); got != wheelBetaSliceColorIndexes[0] {
+		t.Fatalf("pointer body color = %d, want current slice color %d", got, wheelBetaSliceColorIndexes[0])
 	}
 	if got := img.ColorIndexAt(cx+5, tipY); got == 1 {
 		t.Fatalf("pointer tip is too wide at color index %d", got)
