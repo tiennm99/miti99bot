@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"image"
-	"image/color"
 	"image/gif"
 	"math"
 	"math/rand/v2"
@@ -13,7 +12,7 @@ import (
 	"time"
 
 	"github.com/go-telegram/bot/models"
-	"golang.org/x/image/font/sfnt"
+	"github.com/tdewolff/canvas"
 
 	"github.com/tiennm99/miti99bot/internal/modules"
 	"github.com/tiennm99/miti99bot/internal/storage"
@@ -427,25 +426,6 @@ func TestWheelOfNamesBeta_RotatesOptionLabelsWithSlices(t *testing.T) {
 	}
 }
 
-func TestWheelOfNamesBeta_RotatedLabelIgnoresFaintMaskPixels(t *testing.T) {
-	img := image.NewPaletted(image.Rect(0, 0, 7, 7), wheelBetaPalette)
-	mask := image.NewAlpha(image.Rect(0, 0, 3, 1))
-	mask.SetAlpha(0, 0, color.Alpha{A: wheelBetaSliceLabelAlphaThreshold - 1})
-	mask.SetAlpha(1, 0, color.Alpha{A: wheelBetaSliceLabelAlphaThreshold})
-	mask.SetAlpha(2, 0, color.Alpha{A: 255})
-
-	stampRotatedTextMask(img, mask, 3, 3, 0, wheelBetaInkColorIndex, wheelBetaSliceLabelAlphaThreshold)
-
-	if got := img.ColorIndexAt(2, 3); got == wheelBetaInkColorIndex {
-		t.Fatalf("faint mask pixel became ink color %d", got)
-	}
-	for _, x := range []int{3, 4} {
-		if got := img.ColorIndexAt(x, 3); got != wheelBetaInkColorIndex {
-			t.Fatalf("strong mask pixel at x=%d color = %d, want ink color %d", x, got, wheelBetaInkColorIndex)
-		}
-	}
-}
-
 func TestWheelOfNamesBeta_DisplayTextPreservesVietnamese(t *testing.T) {
 	input := "Tiếng Việt Đặng"
 	got := wheelBetaDisplayText(input, 32)
@@ -458,30 +438,26 @@ func TestWheelOfNamesBeta_DisplayTextPreservesVietnamese(t *testing.T) {
 }
 
 func TestWheelOfNamesBeta_FontUsesNormalWeight(t *testing.T) {
-	subfamily, err := wheelBetaTextFont.Name(nil, sfnt.NameIDSubfamily)
-	if err != nil {
-		t.Fatalf("font subfamily: %v", err)
+	if got := wheelBetaTextFont.Style().Weight(); got != canvas.FontRegular {
+		t.Fatalf("font weight = %v, want regular non-bold face", got)
 	}
-	normalized := strings.ToLower(subfamily)
-	if strings.Contains(normalized, "bold") {
-		t.Fatalf("font subfamily = %q, want normal non-bold face", subfamily)
-	}
-	if normalized != "book" && normalized != "regular" {
-		t.Fatalf("font subfamily = %q, want normal face such as Book or Regular", subfamily)
+	if wheelBetaTextFont.Style().Italic() {
+		t.Fatalf("font style = %v, want non-italic regular face", wheelBetaTextFont.Style())
 	}
 }
 
 func TestWheelOfNamesBeta_FontSupportsVietnameseGlyphs(t *testing.T) {
+	face := newWheelBetaTextFace(wheelBetaInkColorIndex)
 	for _, r := range "Tiếng Việt Đặng Ơ Ư ấ ệ" {
 		if r == ' ' {
 			continue
 		}
-		glyphIndex, err := wheelBetaTextFont.GlyphIndex(nil, r)
-		if err != nil {
-			t.Fatalf("GlyphIndex(%q): %v", r, err)
+		glyphs := face.Glyphs(string(r))
+		if len(glyphs) == 0 {
+			t.Fatalf("Glyphs(%q) is empty, want Vietnamese glyph support", r)
 		}
-		if glyphIndex == 0 {
-			t.Fatalf("GlyphIndex(%q) = 0, want Vietnamese glyph support", r)
+		if glyphs[0].ID == 0 {
+			t.Fatalf("Glyphs(%q)[0].ID = 0, want Vietnamese glyph support", r)
 		}
 	}
 }
