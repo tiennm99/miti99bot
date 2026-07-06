@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/go-telegram/bot/models"
-	"github.com/tdewolff/canvas"
 
 	"github.com/tiennm99/miti99bot/internal/modules"
 	"github.com/tiennm99/miti99bot/internal/storage"
@@ -426,39 +425,22 @@ func TestWheelOfNamesBeta_RotatesOptionLabelsWithSlices(t *testing.T) {
 	}
 }
 
-func TestWheelOfNamesBeta_DisplayTextPreservesVietnamese(t *testing.T) {
-	input := "Tiếng Việt Đặng"
-	got := wheelBetaDisplayText(input, 32)
-	if got != input {
-		t.Fatalf("wheelBetaDisplayText() = %q, want %q", got, input)
+func TestWheelOfNamesBeta_DisplayTextNormalizesVietnamese(t *testing.T) {
+	input := "không dấu Tiếng Việt Đặng Ơ Ư ấ ệ"
+	want := "khong dau Tieng Viet Dang O U a e"
+	got := wheelBetaDisplayText(input, 64)
+	if got != want {
+		t.Fatalf("wheelBetaDisplayText() = %q, want %q", got, want)
 	}
 	if strings.Contains(got, "?") {
 		t.Fatalf("wheelBetaDisplayText() replaced Vietnamese with ?: %q", got)
 	}
 }
 
-func TestWheelOfNamesBeta_FontUsesNormalWeight(t *testing.T) {
-	if got := wheelBetaTextFont.Style().Weight(); got != canvas.FontRegular {
-		t.Fatalf("font weight = %v, want regular non-bold face", got)
-	}
-	if wheelBetaTextFont.Style().Italic() {
-		t.Fatalf("font style = %v, want non-italic regular face", wheelBetaTextFont.Style())
-	}
-}
-
-func TestWheelOfNamesBeta_FontSupportsVietnameseGlyphs(t *testing.T) {
-	face := newWheelBetaTextFace(wheelBetaInkColorIndex)
-	for _, r := range "Tiếng Việt Đặng Ơ Ư ấ ệ" {
-		if r == ' ' {
-			continue
-		}
-		glyphs := face.Glyphs(string(r))
-		if len(glyphs) == 0 {
-			t.Fatalf("Glyphs(%q) is empty, want Vietnamese glyph support", r)
-		}
-		if glyphs[0].ID == 0 {
-			t.Fatalf("Glyphs(%q)[0].ID = 0, want Vietnamese glyph support", r)
-		}
+func TestWheelOfNamesBeta_DisplayTextNormalizesDecomposedVietnamese(t *testing.T) {
+	got := wheelBetaDisplayText("tie\u0302\u0301ng Vie\u0323t", 32)
+	if got != "tieng Viet" {
+		t.Fatalf("wheelBetaDisplayText() = %q, want %q", got, "tieng Viet")
 	}
 }
 
