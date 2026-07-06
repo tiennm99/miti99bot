@@ -425,6 +425,32 @@ func TestWheelOfNamesBeta_RotatesOptionLabelsWithSlices(t *testing.T) {
 	}
 }
 
+func TestWheelOfNamesBeta_DisplayTextPreservesVietnamese(t *testing.T) {
+	input := "Tiếng Việt Đặng"
+	got := wheelBetaDisplayText(input, 32)
+	if got != input {
+		t.Fatalf("wheelBetaDisplayText() = %q, want %q", got, input)
+	}
+	if strings.Contains(got, "?") {
+		t.Fatalf("wheelBetaDisplayText() replaced Vietnamese with ?: %q", got)
+	}
+}
+
+func TestWheelOfNamesBeta_FontSupportsVietnameseGlyphs(t *testing.T) {
+	for _, r := range "Tiếng Việt Đặng Ơ Ư ấ ệ" {
+		if r == ' ' {
+			continue
+		}
+		glyphIndex, err := wheelBetaTextFont.GlyphIndex(nil, r)
+		if err != nil {
+			t.Fatalf("GlyphIndex(%q): %v", r, err)
+		}
+		if glyphIndex == 0 {
+			t.Fatalf("GlyphIndex(%q) = 0, want Vietnamese glyph support", r)
+		}
+	}
+}
+
 func countColorIndex(img *image.Paletted, bounds image.Rectangle, colorIndex byte) int {
 	bounds = bounds.Intersect(img.Bounds())
 	count := 0
