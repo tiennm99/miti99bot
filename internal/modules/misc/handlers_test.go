@@ -36,6 +36,13 @@ func installMisc(t *testing.T, ownerID int64) (*testutil.RecordingBot, storage.D
 	return rb, store
 }
 
+func withoutWheelDraftDelay(t *testing.T) {
+	t.Helper()
+	prev := wheelDraftFrameDelay
+	wheelDraftFrameDelay = 0
+	t.Cleanup(func() { wheelDraftFrameDelay = prev })
+}
+
 func TestPing_RepliesPongAndWritesStore(t *testing.T) {
 	rb, store := installMisc(t, 999)
 	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(999, "/ping"))
@@ -89,6 +96,48 @@ func TestPingStats_DeniedToNonAdmin(t *testing.T) {
 	}
 }
 
+func TestRandom_UsageWhenMissingOptions(t *testing.T) {
+	for _, text := range []string{"/random", "/random , ,"} {
+		t.Run(text, func(t *testing.T) {
+			rb, _ := installMisc(t, 999)
+			rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(7, text))
+
+			if got := rb.LastSent().Text(); got != randomUsage {
+				t.Errorf("random reply = %q, want usage %q", got, randomUsage)
+			}
+		})
+	}
+}
+
+func TestRandom_SingleOption(t *testing.T) {
+	rb, _ := installMisc(t, 999)
+	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(7, "/random Alice"))
+
+	if got := rb.LastSent().Text(); got != "Alice" {
+		t.Errorf("random reply = %q, want Alice", got)
+	}
+}
+
+func TestRandom_PicksFromTrimmedOptions(t *testing.T) {
+	rb, _ := installMisc(t, 999)
+	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(7, "/random Alice, Bob, Carol"))
+
+	got := rb.LastSent().Text()
+	if got != "Alice" && got != "Bob" && got != "Carol" {
+		t.Errorf("random reply = %q, want one of Alice/Bob/Carol", got)
+	}
+}
+
+func TestRandom_IgnoresEmptySegments(t *testing.T) {
+	rb, _ := installMisc(t, 999)
+	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(7, "/random , Alice , , Bob ,"))
+
+	got := rb.LastSent().Text()
+	if got != "Alice" && got != "Bob" {
+		t.Errorf("random reply = %q, want Alice or Bob", got)
+	}
+}
+
 func TestWheelOfNames_UsageWhenMissingOptions(t *testing.T) {
 	for _, text := range []string{"/wheelofnames", "/wheelofnames , ,"} {
 		t.Run(text, func(t *testing.T) {
@@ -103,6 +152,7 @@ func TestWheelOfNames_UsageWhenMissingOptions(t *testing.T) {
 }
 
 func TestWheelOfNames_SingleOption(t *testing.T) {
+	withoutWheelDraftDelay(t)
 	rb, _ := installMisc(t, 999)
 	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(7, "/wheelofnames Alice"))
 
@@ -112,6 +162,7 @@ func TestWheelOfNames_SingleOption(t *testing.T) {
 }
 
 func TestWheelOfNames_PicksFromTrimmedOptions(t *testing.T) {
+	withoutWheelDraftDelay(t)
 	rb, _ := installMisc(t, 999)
 	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(7, "/wheelofnames Alice, Bob, Carol"))
 
@@ -122,12 +173,56 @@ func TestWheelOfNames_PicksFromTrimmedOptions(t *testing.T) {
 }
 
 func TestWheelOfNames_IgnoresEmptySegments(t *testing.T) {
+	withoutWheelDraftDelay(t)
 	rb, _ := installMisc(t, 999)
 	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(7, "/wheelofnames , Alice , , Bob ,"))
 
 	got := rb.LastSent().Text()
 	if got != "Alice" && got != "Bob" {
 		t.Errorf("wheelofnames reply = %q, want Alice or Bob", got)
+	}
+}
+
+func TestWheelOfNames_StreamsDraftsBeforeFinalInPrivateChat(t *testing.T) {
+	withoutWheelDraftDelay(t)
+	rb, _ := installMisc(t, 999)
+	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(7, "/wheelofnames Alice"))
+
+	calls := rb.Sent()
+	if len(calls) != 7 {
+		t.Fatalf("calls = %d, want 6 drafts + final sendMessage: %+v", len(calls), calls)
+	}
+	draftID := ""
+	for i := 0; i < 6; i++ {
+		if calls[i].Method != "sendMessageDraft" {
+			t.Fatalf("call %d method = %q, want sendMessageDraft", i, calls[i].Method)
+		}
+		if !strings.Contains(calls[i].Text(), "Alice") {
+			t.Errorf("draft %d text = %q, want to preview Alice", i, calls[i].Text())
+		}
+		if got := calls[i].Form["draft_id"]; got == "" || got == "0" {
+			t.Fatalf("draft %d id = %q, want non-zero", i, got)
+		} else if draftID == "" {
+			draftID = got
+		} else if got != draftID {
+			t.Fatalf("draft %d id = %q, want same draft id %q", i, got, draftID)
+		}
+	}
+	if calls[6].Method != "sendMessage" || calls[6].Text() != "Alice" {
+		t.Fatalf("final call = %+v, want sendMessage Alice", calls[6])
+	}
+}
+
+func TestWheelOfNames_GroupSkipsDraftsButSendsFinal(t *testing.T) {
+	rb, _ := installMisc(t, 999)
+	rb.Bot.ProcessUpdate(context.Background(), testutil.NewGroupMessage(-100, 7, "/wheelofnames Alice"))
+
+	calls := rb.Sent()
+	if len(calls) != 1 {
+		t.Fatalf("calls = %d, want only final sendMessage in groups: %+v", len(calls), calls)
+	}
+	if calls[0].Method != "sendMessage" || calls[0].Text() != "Alice" {
+		t.Fatalf("group call = %+v, want sendMessage Alice", calls[0])
 	}
 }
 

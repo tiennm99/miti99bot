@@ -9,8 +9,12 @@
       "description": "Health check; replies pong"
     },
     {
-      "command": "wheelofnames",
+      "command": "random",
       "description": "Pick one random comma-separated option"
+    },
+    {
+      "command": "wheelofnames",
+      "description": "Spin a suspenseful wheel for comma-separated options"
     },
     {
       "command": "trongtruonghop",
