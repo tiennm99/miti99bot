@@ -14,6 +14,8 @@ in-memory storage in tests. Read `README.md` before implementation work.
 - Use `gofmt` on changed Go files.
 - Run focused tests for touched packages, then `go test ./...` and `go vet ./...`
   for command, storage, migration, or shared behavior changes.
+- Before committing code changes, run the CI lint gate locally with
+  `golangci-lint run` when the binary is available.
 - Do not commit secrets, tokens, dotenv files, private keys, or production data.
 
 ## Command Changes
