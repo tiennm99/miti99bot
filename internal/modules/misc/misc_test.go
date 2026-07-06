@@ -8,9 +8,8 @@ import (
 	"github.com/tiennm99/miti99bot/internal/storage"
 )
 
-// We test the per-command store behaviour directly — the bot/Telegram side is
-// thin (single SendMessage) and exercising it would require a fake bot HTTP
-// server. The store interaction is the part with logic worth locking down.
+// Store behaviour is tested directly here; Telegram command dispatch is covered
+// in handlers_test.go with a recording bot.
 
 // newMiscStore returns a fresh in-memory typed lastPing store for tests.
 func newMiscStore() storage.DocStore[lastPing] {
@@ -24,6 +23,7 @@ func TestNew_RegistersExpectedCommands(t *testing.T) {
 	want := map[string]modules.Visibility{
 		"ping":           modules.VisibilityPublic,
 		"ping_stats":     modules.VisibilityProtected,
+		"random":         modules.VisibilityPublic,
 		"wheelofnames":   modules.VisibilityPublic,
 		"the_answer":     modules.VisibilityPrivate,
 		"trongtruonghop": modules.VisibilityPublic,

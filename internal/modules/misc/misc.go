@@ -1,7 +1,7 @@
 // Package misc is a small stub module that proves the framework end-to-end:
 // /ping (public, exercises KV write), /ping_stats (protected, exercises KV
-// read), /wheelofnames (public random picker), /the_answer (private easter
-// egg).
+// read), /random (public random picker), /wheelofnames (public streaming
+// random picker), /the_answer (private easter egg).
 package misc
 
 import (
@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"html"
-	"math/rand/v2"
 	"strings"
 	"time"
 
@@ -33,8 +32,6 @@ const defaultTarget = "VNG"
 // %s slots: target (escaped), sender mention, sender mention.
 const trongTruongHopTemplate = "Trong trường hợp nhóm này bị điều tra bởi %s, %s khẳng định không liên quan tới nhóm hoặc những cá nhân khác trong nhóm này. %s không rõ tại sao lại có mặt ở đây vào thời điểm này, có lẽ tài khoản đã được thêm bởi một bên thứ ba."
 
-const wheelOfNamesUsage = "Usage: /wheelofnames <option1>, <option2>, ..."
-
 // lastPing is the value stored at the `last_ping` key: { at: <ms-since-epoch> }.
 // int64 ms-epoch (not time.Time → RFC3339) keeps the on-disk shape compact
 // and consistent with every other timestamp field in the bot's KV.
@@ -50,6 +47,7 @@ func New(deps modules.Deps) modules.Module {
 		Commands: []modules.Command{
 			pingCommand(store),
 			pingStatsCommand(store),
+			randomCommand(),
 			wheelOfNamesCommand(),
 			theAnswerCommand(),
 			trongTruongHopCommand("trongtruonghop"),
@@ -100,35 +98,6 @@ func pingStatsCommand(store storage.DocStore[lastPing]) modules.Command {
 				text = "Could not load stats. Try again later."
 			}
 			return chathelper.Reply(ctx, b, update.Message, text)
-		},
-	}
-}
-
-func splitWheelOptions(arg string) []string {
-	parts := strings.Split(arg, ",")
-	out := make([]string, 0, len(parts))
-	for _, part := range parts {
-		if option := strings.TrimSpace(part); option != "" {
-			out = append(out, option)
-		}
-	}
-	return out
-}
-
-func wheelOfNamesCommand() modules.Command {
-	return modules.Command{
-		Name:        "wheelofnames",
-		Visibility:  modules.VisibilityPublic,
-		Description: "Pick one random comma-separated option",
-		Handler: func(ctx context.Context, b *bot.Bot, update *models.Update) error {
-			if update.Message == nil {
-				return nil
-			}
-			options := splitWheelOptions(chathelper.ArgAfterCommand(update.Message.Text))
-			if len(options) == 0 {
-				return chathelper.Reply(ctx, b, update.Message, wheelOfNamesUsage)
-			}
-			return chathelper.Reply(ctx, b, update.Message, options[rand.N(len(options))])
 		},
 	}
 }
