@@ -31,7 +31,7 @@ func wheelOfNamesBetaCommand() modules.Command {
 				return chathelper.Reply(ctx, b, update.Message, wheelOfNamesBetaUsage)
 			}
 			winner := pickWheelOption(options)
-			data, err := renderWheelOfNamesBetaGIF(options, winner)
+			animation, err := renderWheelOfNamesBetaAnimation(ctx, options, winner)
 			if err != nil {
 				log.Error("wheelofnamesbeta render failed", "err", err)
 				return chathelper.Reply(ctx, b, update.Message, options[winner])
@@ -41,11 +41,11 @@ func wheelOfNamesBetaCommand() modules.Command {
 				MessageThreadID: update.Message.MessageThreadID,
 				Animation: &models.InputFileUpload{
 					Filename: wheelBetaFilename,
-					Data:     bytes.NewReader(data),
+					Data:     bytes.NewReader(animation.Data),
 				},
-				Duration: wheelBetaDuration,
-				Width:    wheelBetaSize,
-				Height:   wheelBetaSize,
+				Duration: animation.Duration,
+				Width:    animation.Width,
+				Height:   animation.Height,
 				Caption:  "Spinning...",
 			})
 			if err != nil {
