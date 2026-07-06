@@ -386,10 +386,29 @@ func TestWheelOfNamesBeta_DrawsOptionLabelsInsideSlices(t *testing.T) {
 	segment := 2 * math.Pi / float64(len(options))
 	angle := rotation + segment/2
 	centerX := wheelBetaSize/2 + int(math.Round(math.Cos(angle)*float64(wheelBetaSliceLabelRadius)))
-	baselineY := wheelBetaSize/2 + int(math.Round(math.Sin(angle)*float64(wheelBetaSliceLabelRadius))) + wheelBetaSliceLabelBaselineOffset
-	bounds := image.Rect(centerX-28, baselineY-14, centerX+28, baselineY+2)
+	centerY := wheelBetaSize/2 + int(math.Round(math.Sin(angle)*float64(wheelBetaSliceLabelRadius)))
+	bounds := image.Rect(centerX-28, centerY-28, centerX+28, centerY+28)
 	if got := countColorIndex(img, bounds, 1); got == 0 {
 		t.Fatalf("slice label dark pixels = %d, want > 0", got)
+	}
+}
+
+func TestWheelOfNamesBeta_RotatesOptionLabelsWithSlices(t *testing.T) {
+	options := []string{"Rotate", "Teacher", "Parent", "Staff"}
+	rotation := -3 * math.Pi / 4
+	img := renderWheelBetaFrame(options, 0, rotation, false)
+
+	segment := 2 * math.Pi / float64(len(options))
+	angle := rotation + segment/2
+	centerX := wheelBetaSize/2 + int(math.Round(math.Cos(angle)*float64(wheelBetaSliceLabelRadius)))
+	centerY := wheelBetaSize/2 + int(math.Round(math.Sin(angle)*float64(wheelBetaSliceLabelRadius)))
+	searchBounds := image.Rect(centerX-28, centerY-32, centerX+28, centerY+32)
+	labelBounds, ok := colorIndexBounds(img, searchBounds, wheelBetaInkColorIndex)
+	if !ok {
+		t.Fatalf("slice label dark pixels missing in %v", searchBounds)
+	}
+	if labelBounds.Dy() <= labelBounds.Dx() {
+		t.Fatalf("slice label bounds = %v, want taller than wide for rotated label", labelBounds)
 	}
 }
 
@@ -404,6 +423,37 @@ func countColorIndex(img *image.Paletted, bounds image.Rectangle, colorIndex byt
 		}
 	}
 	return count
+}
+
+func colorIndexBounds(img *image.Paletted, bounds image.Rectangle, colorIndex byte) (image.Rectangle, bool) {
+	bounds = bounds.Intersect(img.Bounds())
+	minX, minY := bounds.Max.X, bounds.Max.Y
+	maxX, maxY := bounds.Min.X, bounds.Min.Y
+	found := false
+	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
+		for x := bounds.Min.X; x < bounds.Max.X; x++ {
+			if img.ColorIndexAt(x, y) != colorIndex {
+				continue
+			}
+			found = true
+			if x < minX {
+				minX = x
+			}
+			if y < minY {
+				minY = y
+			}
+			if x+1 > maxX {
+				maxX = x + 1
+			}
+			if y+1 > maxY {
+				maxY = y + 1
+			}
+		}
+	}
+	if !found {
+		return image.Rectangle{}, false
+	}
+	return image.Rect(minX, minY, maxX, maxY), true
 }
 
 func TestWheelOfNamesBeta_SendsAnimationWithoutSpoilingCaption(t *testing.T) {
