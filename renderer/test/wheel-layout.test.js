@@ -4,6 +4,8 @@ import {
   getFinalWheelRotationDegrees,
   getSliceCenterDegrees,
   getSliceDegrees,
+  getSpinProgress,
+  getWheelRotationDegrees,
   rightPointerClipPath,
 } from '../src/remotion/wheel-layout.js';
 
@@ -41,6 +43,25 @@ describe('wheel layout', () => {
     expect(getRenderedStartDegrees(90)).toBe(90);
     expect(getRenderedStartDegrees(180)).toBe(180);
     expect(getRenderedStartDegrees(270)).toBe(270);
+  });
+
+  test('eases spin progress once across the spin duration', () => {
+    expect(getSpinProgress(0, 100)).toBe(0);
+    expect(getSpinProgress(25, 100)).toBeCloseTo(0.578125);
+    expect(getSpinProgress(50, 100)).toBeCloseTo(0.875);
+    expect(getSpinProgress(100, 100)).toBe(1);
+    expect(getSpinProgress(125, 100)).toBe(1);
+  });
+
+  test('maps eased spin progress to wheel rotation', () => {
+    const rotation = getWheelRotationDegrees({
+      finalRotationDegrees: 696,
+      frame: 25,
+      spinFrames: 100,
+      startRotationDegrees: -24,
+    });
+
+    expect(rotation).toBeCloseTo(392.25);
   });
 
   test('defines a right-side pointer that points into the wheel', () => {

@@ -35,3 +35,35 @@ export const getFinalWheelRotationDegrees = (optionCount, winnerIndex, fullTurns
  * @returns {number}
  */
 export const cssDegreesToPieRadians = (cssDegrees) => ((cssDegrees - 270) * Math.PI) / 180;
+
+/**
+ * @param {number} value
+ * @param {number} min
+ * @param {number} max
+ * @returns {number}
+ */
+const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
+
+/**
+ * @param {number} frame
+ * @param {number} spinFrames
+ * @returns {number}
+ */
+export const getSpinProgress = (frame, spinFrames) => {
+  const safeSpinFrames = Math.max(1, spinFrames);
+  const progress = clamp(frame / safeSpinFrames, 0, 1);
+
+  return 1 - (1 - progress) ** 3;
+};
+
+/**
+ * @param {object} input
+ * @param {number} input.frame
+ * @param {number} input.spinFrames
+ * @param {number} input.startRotationDegrees
+ * @param {number} input.finalRotationDegrees
+ * @returns {number}
+ */
+export const getWheelRotationDegrees = ({frame, spinFrames, startRotationDegrees, finalRotationDegrees}) =>
+  startRotationDegrees +
+  (finalRotationDegrees - startRotationDegrees) * getSpinProgress(frame, spinFrames);

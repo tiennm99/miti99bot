@@ -6,6 +6,7 @@ import {
   getFinalWheelRotationDegrees,
   getSliceCenterDegrees,
   getSliceDegrees,
+  getWheelRotationDegrees,
   rightPointerClipPath,
 } from './wheel-layout.js';
 import {getContrastingTextColor, getRadialLabelLayout} from './wheel-label-layout.js';
@@ -27,11 +28,6 @@ export const WheelComposition = (props) => {
   const theme = getTheme(props.theme);
   const spinFrames = Math.max(1, durationInFrames - Math.round((props.holdMs / 1000) * fps));
   const holdStartFrame = spinFrames;
-  const progress = interpolate(frame, [0, spinFrames], [0, 1], {
-    easing: Easing.out(Easing.cubic),
-    extrapolateLeft: 'clamp',
-    extrapolateRight: 'clamp',
-  });
   const settle = interpolate(frame, [holdStartFrame, durationInFrames - 1], [0, 1], {
     easing: Easing.out(Easing.sin),
     extrapolateLeft: 'clamp',
@@ -47,8 +43,11 @@ export const WheelComposition = (props) => {
   const sliceDegrees = getSliceDegrees(props.options.length);
   const finalRotation = getFinalWheelRotationDegrees(props.options.length, props.winnerIndex);
   const startRotation = -24;
-  const rotation = interpolate(progress, [0, 1], [startRotation, finalRotation], {
-    easing: Easing.out(Easing.cubic),
+  const rotation = getWheelRotationDegrees({
+    finalRotationDegrees: finalRotation,
+    frame,
+    spinFrames,
+    startRotationDegrees: startRotation,
   });
 
   return (
