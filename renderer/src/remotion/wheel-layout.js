@@ -1,4 +1,5 @@
 export const fullTurnDegrees = 360;
+export const rightPointerClipPath = 'polygon(0 50%, 100% 0, 100% 100%)';
 
 /**
  * @param {number} optionCount

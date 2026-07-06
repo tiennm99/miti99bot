@@ -8,21 +8,26 @@ import {
 } from '../src/remotion/wheel-label-layout.js';
 
 describe('wheel label layout', () => {
-  test('places radial labels so the text track ends near the outer rim', () => {
+  test('centers radial label tracks on the slice center angle', () => {
+    const center = 256;
     const radius = 210;
     const hubRadius = 46;
+    const centerDegrees = 45;
     const layout = getRadialLabelLayout({
-      center: 256,
+      center,
       radius,
       hubRadius,
-      centerDegrees: 0,
+      centerDegrees,
       optionCount: 8,
       text: 'alice',
     });
     const track = getLabelTrack(radius, hubRadius);
+    const radians = (centerDegrees * Math.PI) / 180;
 
-    expect(layout.x + layout.width / 2).toBeCloseTo(256 + track.endRadius);
-    expect(layout.rotation).toBe(0);
+    expect(layout.x).toBeCloseTo(center + Math.cos(radians) * track.midRadius);
+    expect(layout.y).toBeCloseTo(center + Math.sin(radians) * track.midRadius);
+    expect(layout.width).toBe(track.width);
+    expect(layout.rotation).toBe(centerDegrees);
   });
 
   test('keeps left-side text aligned with the slice instead of flipping it upright', () => {

@@ -3,6 +3,7 @@ import {
   getFinalWheelRotationDegrees,
   getSliceCenterDegrees,
   getSliceDegrees,
+  rightPointerClipPath,
 } from '../src/remotion/wheel-layout.js';
 
 describe('wheel layout', () => {
@@ -23,5 +24,9 @@ describe('wheel layout', () => {
     const screenAngle = ((winnerCenter + rotation) % 360 + 360) % 360;
 
     expect(screenAngle).toBe(0);
+  });
+
+  test('defines a right-side pointer that points into the wheel', () => {
+    expect(rightPointerClipPath).toBe('polygon(0 50%, 100% 0, 100% 100%)');
   });
 });
