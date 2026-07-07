@@ -2,7 +2,7 @@
 // /ping (public, exercises KV write), /ping_stats (protected, exercises KV
 // read), /random (public random picker), /wheelofnames (public streaming
 // random picker), /wheelofnamesbeta (public GIF wheel picker), /the_answer
-// (private easter egg).
+// (private easter egg), and small public disclaimer commands.
 package misc
 
 import (
@@ -26,12 +26,16 @@ import (
 const lastPingKey = "last_ping"
 
 // defaultTarget is the substituted "investigator" name when /trongtruonghop is
-// invoked without an argument.
-const defaultTarget = "VNG"
+// invoked without an argument. The command keeps a custom-arg override.
+const defaultTarget = "các cơ quan trực thuộc Bộ CA hoặc các tổ chức chính trị tương tự phục vụ cho nhà nước CHXHCNVN"
 
 // trongTruongHopTemplate is the disclaimer rendered by /trongtruonghop. Three
 // %s slots: target (escaped), sender mention, sender mention.
 const trongTruongHopTemplate = "Trong trường hợp nhóm này bị điều tra bởi %s, %s khẳng định không liên quan tới nhóm hoặc những cá nhân khác trong nhóm này. %s không rõ tại sao lại có mặt ở đây vào thời điểm này, có lẽ tài khoản đã được thêm bởi một bên thứ ba."
+
+// trongTruongHopVNGTemplate is the fixed-target disclaimer rendered by
+// /trongtruonghopvng. Two %s slots: sender mention, sender mention.
+const trongTruongHopVNGTemplate = "Trong trường hợp nhóm này bị điều tra bởi công ty cổ phần tập đoàn VNG nói chung và công ty 2morebits nói riêng, %s khẳng định không liên quan tới nhóm hoặc những cá nhân khác trong nhóm này. %s không rõ tại sao lại có mặt ở đây vào thời điểm này, có lẽ tài khoản đã được thêm bởi một bên thứ ba."
 
 // lastPing is the value stored at the `last_ping` key: { at: <ms-since-epoch> }.
 // int64 ms-epoch (not time.Time → RFC3339) keeps the on-disk shape compact
@@ -54,6 +58,8 @@ func New(deps modules.Deps) modules.Module {
 			theAnswerCommand(),
 			trongTruongHopCommand("trongtruonghop"),
 			trongTruongHopCommand("tth"),
+			trongTruongHopVNGCommand("trongtruonghopvng"),
+			trongTruongHopVNGCommand("tthvng"),
 		},
 	}
 }
@@ -104,11 +110,9 @@ func pingStatsCommand(store storage.DocStore[lastPing]) modules.Command {
 	}
 }
 
-// senderMention renders the mention used inside the trongtruonghop template.
-// Prefer @username (Telegram resolves it server-side and enforces a safe
-// charset). Fall back to a tg://user?id link with the user's display name when
-// the account has no username; escape the name because first/last names can
-// legitimately contain '<' or '&'.
+// senderMention renders the mention used inside disclaimer templates. Prefer
+// @username; when absent, link the sender's display name so Telegram still
+// mentions the account.
 func senderMention(u *models.User) string {
 	if u == nil {
 		return "thành viên"
@@ -127,9 +131,9 @@ func trongTruongHopCommand(name string) modules.Command {
 	return modules.Command{
 		Name:        name,
 		Visibility:  modules.VisibilityPublic,
-		Description: "Phát biểu disclaimer cho thành viên hiện tại",
+		Description: "Phát biểu disclaimer mặc định",
 		Handler: func(ctx context.Context, b *bot.Bot, update *models.Update) error {
-			if update.Message == nil || update.Message.From == nil {
+			if update.Message == nil {
 				return nil
 			}
 			arg := strings.TrimSpace(chathelper.ArgAfterCommand(update.Message.Text))
@@ -138,6 +142,22 @@ func trongTruongHopCommand(name string) modules.Command {
 			}
 			mention := senderMention(update.Message.From)
 			text := fmt.Sprintf(trongTruongHopTemplate, html.EscapeString(arg), mention, mention)
+			return chathelper.ReplyHTML(ctx, b, update.Message, text)
+		},
+	}
+}
+
+func trongTruongHopVNGCommand(name string) modules.Command {
+	return modules.Command{
+		Name:        name,
+		Visibility:  modules.VisibilityPublic,
+		Description: "Phát biểu disclaimer VNG mặc định",
+		Handler: func(ctx context.Context, b *bot.Bot, update *models.Update) error {
+			if update.Message == nil {
+				return nil
+			}
+			mention := senderMention(update.Message.From)
+			text := fmt.Sprintf(trongTruongHopVNGTemplate, mention, mention)
 			return chathelper.ReplyHTML(ctx, b, update.Message, text)
 		},
 	}
