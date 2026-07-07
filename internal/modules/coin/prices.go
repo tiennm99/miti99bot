@@ -13,6 +13,7 @@ const (
 	binanceDefaultURL   = "https://data-api.binance.vision/api/v3/ticker/price"
 	coinbaseDefaultURL  = "https://api.coinbase.com/v2/exchange-rates"
 	coinGeckoDefaultURL = "https://api.coingecko.com/api/v3/simple/price"
+	coinGeckoSearchURL  = "https://api.coingecko.com/api/v3/search"
 	// coinHTTPTimeout caps a single provider call, kept under the handler
 	// deadline so one slow provider cannot starve the Telegram reply budget
 	// (see chathelper.FetchContext).
