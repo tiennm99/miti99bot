@@ -3,6 +3,7 @@ package coin
 import (
 	"errors"
 	"strings"
+	"unicode"
 )
 
 var ErrUnsupportedCoin = errors.New("coin: unsupported coin")
@@ -12,25 +13,37 @@ type CoinSymbol struct {
 	CoinGeckoID string
 }
 
-var supportedCoins = map[string]CoinSymbol{
-	"BTC":  {Symbol: "BTC", CoinGeckoID: "bitcoin"},
-	"ETH":  {Symbol: "ETH", CoinGeckoID: "ethereum"},
-	"SOL":  {Symbol: "SOL", CoinGeckoID: "solana"},
-	"BNB":  {Symbol: "BNB", CoinGeckoID: "binancecoin"},
-	"XRP":  {Symbol: "XRP", CoinGeckoID: "ripple"},
-	"ADA":  {Symbol: "ADA", CoinGeckoID: "cardano"},
-	"DOGE": {Symbol: "DOGE", CoinGeckoID: "dogecoin"},
-	"TON":  {Symbol: "TON", CoinGeckoID: "the-open-network"},
+const maxCoinSymbolLength = 20
+
+var knownCoinGeckoIDs = map[string]string{
+	"BTC":  "bitcoin",
+	"ETH":  "ethereum",
+	"SOL":  "solana",
+	"BNB":  "binancecoin",
+	"XRP":  "ripple",
+	"ADA":  "cardano",
+	"DOGE": "dogecoin",
+	"TON":  "the-open-network",
 }
 
 func ResolveCoinSymbol(input string) (CoinSymbol, error) {
 	symbol := strings.ToUpper(strings.TrimSpace(input))
-	if symbol == "" {
+	if !validCoinSymbol(symbol) {
 		return CoinSymbol{}, ErrUnsupportedCoin
 	}
-	coin, ok := supportedCoins[symbol]
-	if !ok {
-		return CoinSymbol{}, ErrUnsupportedCoin
+	return CoinSymbol{Symbol: symbol, CoinGeckoID: knownCoinGeckoIDs[symbol]}, nil
+}
+
+func validCoinSymbol(symbol string) bool {
+	if symbol == "" || len(symbol) > maxCoinSymbolLength {
+		return false
 	}
-	return coin, nil
+	hasLetter := false
+	for _, r := range symbol {
+		if r > unicode.MaxASCII || (!unicode.IsLetter(r) && !unicode.IsDigit(r)) {
+			return false
+		}
+		hasLetter = hasLetter || unicode.IsLetter(r)
+	}
+	return hasLetter
 }

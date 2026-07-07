@@ -72,7 +72,7 @@ func isSafeUSD(n float64) bool {
 
 func (s *state) replyPriceError(ctx context.Context, b *bot.Bot, update *models.Update, err error) error {
 	if errors.Is(err, ErrUnsupportedCoin) {
-		return chathelper.Reply(ctx, b, update.Message, "Unsupported coin. Supported: BTC, ETH, SOL, BNB, XRP, ADA, DOGE, TON.")
+		return chathelper.Reply(ctx, b, update.Message, "Invalid coin ticker. Use 1-20 letters/numbers, with at least one letter.")
 	}
 	if errors.Is(err, ErrNoCoinPrice) {
 		return chathelper.Reply(ctx, b, update.Message, "No coin price available.")

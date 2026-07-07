@@ -61,9 +61,45 @@ func TestResolveCoinSymbol(t *testing.T) {
 	if err != nil || coin.Symbol != "BTC" || coin.CoinGeckoID != "bitcoin" {
 		t.Fatalf("ResolveCoinSymbol btc = %+v, %v", coin, err)
 	}
-	if _, err := ResolveCoinSymbol("NOPE"); !errors.Is(err, ErrUnsupportedCoin) {
+	coin, err = ResolveCoinSymbol("ena")
+	if err != nil || coin.Symbol != "ENA" || coin.CoinGeckoID != "" {
+		t.Fatalf("ResolveCoinSymbol ena = %+v, %v", coin, err)
+	}
+	for _, input := range []string{"", "123", "BAD-COIN", strings.Repeat("A", maxCoinSymbolLength+1)} {
+		if _, err := ResolveCoinSymbol(input); !errors.Is(err, ErrUnsupportedCoin) {
+			t.Fatalf("ResolveCoinSymbol(%q) got %v, want ErrUnsupportedCoin", input, err)
+		}
+	}
+}
+
+func TestHandlePriceAllowsUnlistedTicker(t *testing.T) {
+	s := newTestState(map[string]CoinPrice{"ENA": {USD: 0.08, Source: "Binance"}}, nil)
+	rb := testutil.NewRecordingBot(t)
+	if err := s.handlePrice(context.Background(), rb.Bot, testutil.NewPrivateMessage(7, "/coin_price ena")); err != nil {
+		t.Fatalf("handlePrice: %v", err)
+	}
+	rb.AssertSentText(t, "ENA price: $0.08 (Binance)")
+}
+
+func TestHandlePriceReturnsNoPriceForUnlistedTickerWhenProvidersFail(t *testing.T) {
+	s := newTestState(nil, nil)
+	rb := testutil.NewRecordingBot(t)
+	if err := s.handlePrice(context.Background(), rb.Bot, testutil.NewPrivateMessage(7, "/coin_price nope")); err != nil {
+		t.Fatalf("handlePrice: %v", err)
+	}
+	rb.AssertSentText(t, "No coin price available")
+}
+
+func TestHandlePriceRejectsMalformedCoinTicker(t *testing.T) {
+	s := newTestState(nil, nil)
+	rb := testutil.NewRecordingBot(t)
+	if err := s.handlePrice(context.Background(), rb.Bot, testutil.NewPrivateMessage(7, "/coin_price bad-coin")); err != nil {
+		t.Fatalf("handlePrice: %v", err)
+	}
+	if _, err := ResolveCoinSymbol("bad-coin"); !errors.Is(err, ErrUnsupportedCoin) {
 		t.Fatalf("got %v, want ErrUnsupportedCoin", err)
 	}
+	rb.AssertSentText(t, "Invalid coin ticker")
 }
 
 func TestModuleRegistersExpectedCommands(t *testing.T) {
@@ -86,15 +122,6 @@ func TestHandlePrice(t *testing.T) {
 		t.Fatalf("handlePrice: %v", err)
 	}
 	rb.AssertSentText(t, "BTC price: $67,000.00 (Binance)")
-}
-
-func TestHandlePriceRejectsUnsupportedCoin(t *testing.T) {
-	s := newTestState(nil, nil)
-	rb := testutil.NewRecordingBot(t)
-	if err := s.handlePrice(context.Background(), rb.Bot, testutil.NewPrivateMessage(7, "/coin_price nope")); err != nil {
-		t.Fatalf("handlePrice: %v", err)
-	}
-	rb.AssertSentText(t, "Unsupported coin")
 }
 
 func TestHandleTopup(t *testing.T) {

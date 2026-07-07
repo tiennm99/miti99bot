@@ -24,8 +24,9 @@ type CoinbaseProvider struct {
 }
 
 type CoinGeckoProvider struct {
-	HTTP *http.Client
-	URL  string
+	HTTP      *http.Client
+	URL       string
+	SearchURL string
 }
 
 type binanceResponse struct {
@@ -42,6 +43,16 @@ type coinbaseResponse struct {
 
 type coinGeckoQuote struct {
 	USD float64 `json:"usd"`
+}
+
+type coinGeckoSearchResponse struct {
+	Coins []coinGeckoSearchCoin `json:"coins"`
+}
+
+type coinGeckoSearchCoin struct {
+	ID            string `json:"id"`
+	Symbol        string `json:"symbol"`
+	MarketCapRank *int   `json:"market_cap_rank"`
 }
 
 func (p *BinanceProvider) FetchUSD(ctx context.Context, coin CoinSymbol) (CoinPrice, error) {
@@ -127,12 +138,34 @@ func (p *CoinbaseProvider) baseURL() string {
 }
 
 func (p *CoinGeckoProvider) FetchUSD(ctx context.Context, coin CoinSymbol) (CoinPrice, error) {
+	if coin.CoinGeckoID != "" {
+		return p.fetchID(ctx, coin, coin.CoinGeckoID)
+	}
+	price, err := p.fetchID(ctx, coin, strings.ToLower(coin.Symbol))
+	if err == nil {
+		return price, nil
+	}
+	if !errors.Is(err, ErrNoCoinPrice) {
+		return CoinPrice{}, err
+	}
+	id, err := p.searchID(ctx, coin.Symbol)
+	if err != nil {
+		return CoinPrice{}, err
+	}
+	return p.fetchID(ctx, coin, id)
+}
+
+func (p *CoinGeckoProvider) fetchID(ctx context.Context, coin CoinSymbol, id string) (CoinPrice, error) {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return CoinPrice{}, ErrNoCoinPrice
+	}
 	endpoint := p.baseURL()
 	if err := validateEndpoint(endpoint); err != nil {
 		return CoinPrice{}, err
 	}
 	q := url.Values{}
-	q.Set("ids", coin.CoinGeckoID)
+	q.Set("ids", id)
 	q.Set("vs_currencies", "usd")
 	q.Set("include_last_updated_at", "true")
 	resp, err := getJSON(ctx, p.HTTP, endpoint+"?"+q.Encode())
@@ -147,11 +180,55 @@ func (p *CoinGeckoProvider) FetchUSD(ctx context.Context, coin CoinSymbol) (Coin
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 		return CoinPrice{}, fmt.Errorf("coin: CoinGecko decode: %w", err)
 	}
-	quote := body[coin.CoinGeckoID]
+	quote := body[id]
 	if quote.USD <= 0 {
 		return CoinPrice{}, ErrNoCoinPrice
 	}
 	return CoinPrice{Symbol: coin.Symbol, USD: quote.USD, Source: "CoinGecko"}, nil
+}
+
+func (p *CoinGeckoProvider) searchID(ctx context.Context, symbol string) (string, error) {
+	endpoint := p.searchURL()
+	if err := validateEndpoint(endpoint); err != nil {
+		return "", err
+	}
+	q := url.Values{}
+	q.Set("query", symbol)
+	resp, err := getJSON(ctx, p.HTTP, endpoint+"?"+q.Encode())
+	if err != nil {
+		return "", fmt.Errorf("coin: CoinGecko search request: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return "", ErrNoCoinPrice
+	}
+	var body coinGeckoSearchResponse
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		return "", fmt.Errorf("coin: CoinGecko search decode: %w", err)
+	}
+	best := coinGeckoSearchCoin{}
+	for _, candidate := range body.Coins {
+		if candidate.ID == "" || !strings.EqualFold(candidate.Symbol, symbol) {
+			continue
+		}
+		if best.ID == "" || betterCoinGeckoSearchMatch(candidate, best) {
+			best = candidate
+		}
+	}
+	if best.ID == "" {
+		return "", ErrNoCoinPrice
+	}
+	return best.ID, nil
+}
+
+func betterCoinGeckoSearchMatch(candidate, current coinGeckoSearchCoin) bool {
+	if candidate.MarketCapRank == nil {
+		return false
+	}
+	if current.MarketCapRank == nil {
+		return true
+	}
+	return *candidate.MarketCapRank < *current.MarketCapRank
 }
 
 func (p *CoinGeckoProvider) baseURL() string {
@@ -159,6 +236,13 @@ func (p *CoinGeckoProvider) baseURL() string {
 		return strings.TrimSpace(p.URL)
 	}
 	return coinGeckoDefaultURL
+}
+
+func (p *CoinGeckoProvider) searchURL() string {
+	if strings.TrimSpace(p.SearchURL) != "" {
+		return strings.TrimSpace(p.SearchURL)
+	}
+	return coinGeckoSearchURL
 }
 
 func getJSON(ctx context.Context, client *http.Client, endpoint string) (*http.Response, error) {

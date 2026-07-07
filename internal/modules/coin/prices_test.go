@@ -28,6 +28,24 @@ func TestBinanceProviderFetchUSD(t *testing.T) {
 	}
 }
 
+func TestBinanceProviderFetchesUnlistedTicker(t *testing.T) {
+	coin := CoinSymbol{Symbol: "ENA"}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.URL.Query().Get("symbol"); got != "ENAUSDT" {
+			t.Fatalf("symbol = %q, want ENAUSDT", got)
+		}
+		_, _ = w.Write([]byte(`{"symbol":"ENAUSDT","price":"0.077"}`))
+	}))
+	defer srv.Close()
+	price, err := (&BinanceProvider{URL: srv.URL}).FetchUSD(context.Background(), coin)
+	if err != nil {
+		t.Fatalf("FetchUSD: %v", err)
+	}
+	if price.USD != 0.077 || price.Source != "Binance" || price.Symbol != "ENA" {
+		t.Fatalf("price = %+v", price)
+	}
+}
+
 func TestBinanceRateLimitDoesNotTrySecondPair(t *testing.T) {
 	var hits atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -75,6 +93,61 @@ func TestCoinGeckoProviderFetchUSD(t *testing.T) {
 	}
 	if price.USD != 150.75 || price.Source != "CoinGecko" {
 		t.Fatalf("price = %+v", price)
+	}
+}
+
+func TestCoinGeckoProviderFetchesUnmappedTickerByLowercaseID(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.URL.Query().Get("ids"); got != "re" {
+			t.Fatalf("ids = %q, want re", got)
+		}
+		_, _ = w.Write([]byte(`{"re":{"usd":0.64}}`))
+	}))
+	defer srv.Close()
+	price, err := (&CoinGeckoProvider{URL: srv.URL}).FetchUSD(context.Background(), CoinSymbol{Symbol: "RE"})
+	if err != nil {
+		t.Fatalf("FetchUSD: %v", err)
+	}
+	if price.USD != 0.64 || price.Source != "CoinGecko" {
+		t.Fatalf("price = %+v", price)
+	}
+}
+
+func TestCoinGeckoProviderSearchesUnmappedTickerWhenIDDiffers(t *testing.T) {
+	var simpleIDs []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/simple":
+			id := r.URL.Query().Get("ids")
+			simpleIDs = append(simpleIDs, id)
+			if id == "ethena" {
+				_, _ = w.Write([]byte(`{"ethena":{"usd":0.077}}`))
+				return
+			}
+			_, _ = w.Write([]byte(`{}`))
+		case "/search":
+			if got := r.URL.Query().Get("query"); got != "ENA" {
+				t.Fatalf("query = %q, want ENA", got)
+			}
+			_, _ = w.Write([]byte(`{"coins":[{"id":"ethena-usde","symbol":"USDE","market_cap_rank":27},{"id":"ethena","symbol":"ENA","market_cap_rank":85}]}`))
+		default:
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+	}))
+	defer srv.Close()
+
+	price, err := (&CoinGeckoProvider{
+		URL:       srv.URL + "/simple",
+		SearchURL: srv.URL + "/search",
+	}).FetchUSD(context.Background(), CoinSymbol{Symbol: "ENA"})
+	if err != nil {
+		t.Fatalf("FetchUSD: %v", err)
+	}
+	if price.USD != 0.077 || price.Source != "CoinGecko" {
+		t.Fatalf("price = %+v", price)
+	}
+	if len(simpleIDs) != 2 || simpleIDs[0] != "ena" || simpleIDs[1] != "ethena" {
+		t.Fatalf("simple ids = %v, want [ena ethena]", simpleIDs)
 	}
 }
 
