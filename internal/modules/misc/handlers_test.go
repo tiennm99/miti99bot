@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"image"
 	"image/gif"
 	"math"
@@ -638,17 +639,15 @@ func trongTruongHopUpdate(t *testing.T, text string, from *models.User) *models.
 	return u
 }
 
-func TestTrongTruongHop_DefaultArgUsesVNG(t *testing.T) {
+func TestTrongTruongHop_DefaultText(t *testing.T) {
 	rb, _ := installMisc(t, 999)
 	rb.Bot.ProcessUpdate(context.Background(), trongTruongHopUpdate(t, "/trongtruonghop",
 		&models.User{ID: 7, Username: "boss", FirstName: "Boss"}))
 
 	got := rb.LastSent().Text()
-	if !strings.Contains(got, "VNG") {
-		t.Errorf("reply missing default target VNG: %q", got)
-	}
-	if n := strings.Count(got, "@boss"); n != 2 {
-		t.Errorf("reply mentions @boss %d times, want 2: %q", n, got)
+	want := fmt.Sprintf(trongTruongHopTemplate, defaultTarget, "@boss", "@boss")
+	if got != want {
+		t.Errorf("reply = %q, want %q", got, want)
 	}
 }
 
@@ -661,8 +660,11 @@ func TestTrongTruongHop_CustomArg(t *testing.T) {
 	if !strings.Contains(got, "Acme Corp") {
 		t.Errorf("reply missing custom arg Acme Corp: %q", got)
 	}
-	if strings.Contains(got, "VNG") {
-		t.Errorf("reply unexpectedly contains default VNG: %q", got)
+	if strings.Contains(got, defaultTarget) {
+		t.Errorf("reply unexpectedly contains default target: %q", got)
+	}
+	if n := strings.Count(got, "@boss"); n != 2 {
+		t.Errorf("reply mentions @boss %d times, want 2: %q", n, got)
 	}
 }
 
@@ -694,27 +696,51 @@ func TestTrongTruongHop_HTMLEscapesArg(t *testing.T) {
 	}
 }
 
-func TestTrongTruongHop_NoUsernameFallsBackToLink(t *testing.T) {
+func TestTrongTruongHopVNG_DefaultText(t *testing.T) {
 	rb, _ := installMisc(t, 999)
-	rb.Bot.ProcessUpdate(context.Background(), trongTruongHopUpdate(t, "/trongtruonghop",
-		&models.User{ID: 42, FirstName: "Anh"})) // no Username
+	rb.Bot.ProcessUpdate(context.Background(), trongTruongHopUpdate(t, "/trongtruonghopvng ignored arg",
+		&models.User{ID: 7, Username: "boss", FirstName: "Boss"}))
 
 	got := rb.LastSent().Text()
-	wantLink := `<a href="tg://user?id=42">Anh</a>`
-	if n := strings.Count(got, wantLink); n != 2 {
-		t.Errorf("reply contains link %q %d times, want 2: %q", wantLink, n, got)
+	want := fmt.Sprintf(trongTruongHopVNGTemplate, "@boss", "@boss")
+	if got != want {
+		t.Errorf("reply = %q, want %q", got, want)
 	}
 }
 
-func TestTrongTruongHop_EmptyDisplayNameFallsBackToThanhVien(t *testing.T) {
+func TestTTHVNGAlias_DefaultText(t *testing.T) {
 	rb, _ := installMisc(t, 999)
-	rb.Bot.ProcessUpdate(context.Background(), trongTruongHopUpdate(t, "/trongtruonghop",
-		&models.User{ID: 42})) // no Username, no FirstName/LastName
+	rb.Bot.ProcessUpdate(context.Background(), trongTruongHopUpdate(t, "/tthvng ignored arg",
+		&models.User{ID: 7, Username: "boss", FirstName: "Boss"}))
 
 	got := rb.LastSent().Text()
-	wantLink := `<a href="tg://user?id=42">thành viên</a>`
+	want := fmt.Sprintf(trongTruongHopVNGTemplate, "@boss", "@boss")
+	if got != want {
+		t.Errorf("reply = %q, want %q", got, want)
+	}
+}
+
+func TestTrongTruongHop_NoUsernameFallsBackToDisplayNameMention(t *testing.T) {
+	rb, _ := installMisc(t, 999)
+	rb.Bot.ProcessUpdate(context.Background(), trongTruongHopUpdate(t, "/trongtruonghop",
+		&models.User{ID: 42, FirstName: "Anh", LastName: "Le"}))
+
+	got := rb.LastSent().Text()
+	wantLink := `<a href="tg://user?id=42">Anh Le</a>`
 	if n := strings.Count(got, wantLink); n != 2 {
-		t.Errorf("reply contains fallback link %d times, want 2: %q", n, got)
+		t.Errorf("reply contains display-name mention %q %d times, want 2: %q", wantLink, n, got)
+	}
+}
+
+func TestTrongTruongHopVNG_NoUsernameFallsBackToDisplayNameMention(t *testing.T) {
+	rb, _ := installMisc(t, 999)
+	rb.Bot.ProcessUpdate(context.Background(), trongTruongHopUpdate(t, "/trongtruonghopvng ignored arg",
+		&models.User{ID: 42, FirstName: "Anh", LastName: "Le"}))
+
+	got := rb.LastSent().Text()
+	wantLink := `<a href="tg://user?id=42">Anh Le</a>`
+	if n := strings.Count(got, wantLink); n != 2 {
+		t.Errorf("reply contains display-name mention %q %d times, want 2: %q", wantLink, n, got)
 	}
 }
 
