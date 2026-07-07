@@ -22,11 +22,19 @@
     },
     {
       "command": "trongtruonghop",
-      "description": "Phát biểu disclaimer cho thành viên hiện tại"
+      "description": "Phát biểu disclaimer mặc định"
     },
     {
       "command": "tth",
       "description": "Alias for /trongtruonghop"
+    },
+    {
+      "command": "trongtruonghopvng",
+      "description": "Phát biểu disclaimer VNG mặc định"
+    },
+    {
+      "command": "tthvng",
+      "description": "Alias for /trongtruonghopvng"
     },
     {
       "command": "wordle",
