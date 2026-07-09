@@ -36,8 +36,14 @@ type RecordingBot struct {
 	Bot    *bot.Bot
 	Server *httptest.Server
 
-	mu    sync.Mutex
-	calls []SentCall
+	mu       sync.Mutex
+	calls    []SentCall
+	failures map[string]failureResponse
+}
+
+type failureResponse struct {
+	status int
+	body   string
 }
 
 // NewRecordingBot constructs a recording bot. The bot uses a synthetic token
@@ -87,6 +93,23 @@ func (rb *RecordingBot) Reset() {
 	rb.mu.Unlock()
 }
 
+// FailMethod makes the recording server return a Telegram API error for a
+// specific method while still recording the attempted call.
+func (rb *RecordingBot) FailMethod(method string, status int, body string) {
+	rb.mu.Lock()
+	defer rb.mu.Unlock()
+	if rb.failures == nil {
+		rb.failures = map[string]failureResponse{}
+	}
+	if status == 0 {
+		status = http.StatusInternalServerError
+	}
+	if body == "" {
+		body = `{"ok":false,"description":"forced test failure"}`
+	}
+	rb.failures[method] = failureResponse{status: status, body: body}
+}
+
 // handle is the httptest server's request handler. Path shape is
 // "/bot<token>/<method>" per the go-telegram/bot URL builder. We extract the
 // method, parse the multipart form, record, and respond with a minimal-ok
@@ -109,9 +132,15 @@ func (rb *RecordingBot) handle(w http.ResponseWriter, r *http.Request) {
 
 	rb.mu.Lock()
 	rb.calls = append(rb.calls, SentCall{Method: method, Form: form})
+	failure, shouldFail := rb.failures[method]
 	rb.mu.Unlock()
 
 	w.Header().Set("Content-Type", "application/json")
+	if shouldFail {
+		w.WriteHeader(failure.status)
+		_, _ = w.Write([]byte(failure.body))
+		return
+	}
 	_, _ = w.Write([]byte(okResponseFor(method)))
 }
 

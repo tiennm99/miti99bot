@@ -3,6 +3,7 @@ package misc
 import (
 	"bytes"
 	"context"
+	"errors"
 	"html"
 
 	"github.com/go-telegram/bot"
@@ -23,7 +24,7 @@ func wheelOfNamesCommand() modules.Command {
 	return modules.Command{
 		Name:        "wheelofnames",
 		Visibility:  modules.VisibilityPublic,
-		Description: "Spin an animated wheel GIF for comma-separated options",
+		Description: "Pick one comma-separated option with wheel GIF when configured",
 		Handler: func(ctx context.Context, b *bot.Bot, update *models.Update) error {
 			if update.Message == nil {
 				return nil
@@ -35,8 +36,10 @@ func wheelOfNamesCommand() modules.Command {
 			winner := pickWheelOption(options)
 			animation, err := renderWheelOfNamesAnimation(ctx, options, winner)
 			if err != nil {
-				log.Error("wheelofnames render failed", "err", err)
-				return chathelper.ReplyHTML(ctx, b, update.Message, wheelResultCaption(options[winner]))
+				if !errors.Is(err, errWheelAPINotConfigured) {
+					log.Warn("wheelofnames remote render failed", "err", err)
+				}
+				return chathelper.Reply(ctx, b, update.Message, options[winner])
 			}
 			_, err = b.SendAnimation(ctx, &bot.SendAnimationParams{
 				ChatID:          update.Message.Chat.ID,
@@ -53,7 +56,7 @@ func wheelOfNamesCommand() modules.Command {
 			})
 			if err != nil {
 				log.Warn("wheelofnames send animation failed", "chat", update.Message.Chat.ID, "err", err)
-				return chathelper.ReplyHTML(ctx, b, update.Message, wheelResultCaption(options[winner]))
+				return chathelper.Reply(ctx, b, update.Message, options[winner])
 			}
 			return nil
 		},
