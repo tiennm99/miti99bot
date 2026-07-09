@@ -25,17 +25,17 @@ import (
 // lastPingKey is the per-module store key /ping writes and /ping_stats reads.
 const lastPingKey = "last_ping"
 
+// trongTruongHopTemplate is the disclaimer rendered by the public disclaimer
+// commands. Three %s slots: target (escaped), sender mention, sender mention.
+const trongTruongHopTemplate = "Trong trường hợp nhóm này bị điều tra bởi %s, %s khẳng định không liên quan tới nhóm hoặc những cá nhân khác trong nhóm này. %s không rõ tại sao lại có mặt ở đây vào thời điểm này, có lẽ tài khoản đã được thêm bởi một bên thứ ba."
+
 // defaultTarget is the substituted "investigator" name when /trongtruonghop is
 // invoked without an argument. The command keeps a custom-arg override.
 const defaultTarget = "các cơ quan trực thuộc Bộ CA hoặc các tổ chức chính trị tương tự phục vụ cho nhà nước CHXHCNVN"
 
-// trongTruongHopTemplate is the disclaimer rendered by /trongtruonghop. Three
-// %s slots: target (escaped), sender mention, sender mention.
-const trongTruongHopTemplate = "Trong trường hợp nhóm này bị điều tra bởi %s, %s khẳng định không liên quan tới nhóm hoặc những cá nhân khác trong nhóm này. %s không rõ tại sao lại có mặt ở đây vào thời điểm này, có lẽ tài khoản đã được thêm bởi một bên thứ ba."
-
-// trongTruongHopVNGTemplate is the fixed-target disclaimer rendered by
-// /trongtruonghopvng. Two %s slots: sender mention, sender mention.
-const trongTruongHopVNGTemplate = "Trong trường hợp nhóm này bị điều tra bởi công ty cổ phần tập đoàn VNG nói chung và công ty 2morebits nói riêng, %s khẳng định không liên quan tới nhóm hoặc những cá nhân khác trong nhóm này. %s không rõ tại sao lại có mặt ở đây vào thời điểm này, có lẽ tài khoản đã được thêm bởi một bên thứ ba."
+// vngTarget is the fixed substituted "investigator" name for
+// /trongtruonghopvng. That command intentionally ignores custom args.
+const vngTarget = "công ty cổ phần tập đoàn VNG nói chung và công ty 2morebits nói riêng"
 
 // lastPing is the value stored at the `last_ping` key: { at: <ms-since-epoch> }.
 // int64 ms-epoch (not time.Time → RFC3339) keeps the on-disk shape compact
@@ -56,10 +56,10 @@ func New(deps modules.Deps) modules.Module {
 			wheelOfNamesCommand(),
 			wheelOfNamesBetaCommand(),
 			theAnswerCommand(),
-			trongTruongHopCommand("trongtruonghop"),
-			trongTruongHopCommand("tth"),
-			trongTruongHopVNGCommand("trongtruonghopvng"),
-			trongTruongHopVNGCommand("tthvng"),
+			disclaimerCommand("trongtruonghop", "Phát biểu disclaimer mặc định", defaultTarget, true),
+			disclaimerCommand("tth", "Phát biểu disclaimer mặc định", defaultTarget, true),
+			disclaimerCommand("trongtruonghopvng", "Phát biểu disclaimer VNG mặc định", vngTarget, false),
+			disclaimerCommand("tthvng", "Phát biểu disclaimer VNG mặc định", vngTarget, false),
 		},
 	}
 }
@@ -127,37 +127,24 @@ func senderMention(u *models.User) string {
 	return fmt.Sprintf(`<a href="tg://user?id=%d">%s</a>`, u.ID, html.EscapeString(name))
 }
 
-func trongTruongHopCommand(name string) modules.Command {
+func disclaimerCommand(name, description, defaultTarget string, allowCustomTarget bool) modules.Command {
 	return modules.Command{
 		Name:        name,
 		Visibility:  modules.VisibilityPublic,
-		Description: "Phát biểu disclaimer mặc định",
+		Description: description,
 		Handler: func(ctx context.Context, b *bot.Bot, update *models.Update) error {
 			if update.Message == nil {
 				return nil
 			}
-			arg := strings.TrimSpace(chathelper.ArgAfterCommand(update.Message.Text))
-			if arg == "" {
-				arg = defaultTarget
+			target := defaultTarget
+			if allowCustomTarget {
+				arg := strings.TrimSpace(chathelper.ArgAfterCommand(update.Message.Text))
+				if arg != "" {
+					target = arg
+				}
 			}
 			mention := senderMention(update.Message.From)
-			text := fmt.Sprintf(trongTruongHopTemplate, html.EscapeString(arg), mention, mention)
-			return chathelper.ReplyHTML(ctx, b, update.Message, text)
-		},
-	}
-}
-
-func trongTruongHopVNGCommand(name string) modules.Command {
-	return modules.Command{
-		Name:        name,
-		Visibility:  modules.VisibilityPublic,
-		Description: "Phát biểu disclaimer VNG mặc định",
-		Handler: func(ctx context.Context, b *bot.Bot, update *models.Update) error {
-			if update.Message == nil {
-				return nil
-			}
-			mention := senderMention(update.Message.From)
-			text := fmt.Sprintf(trongTruongHopVNGTemplate, mention, mention)
+			text := fmt.Sprintf(trongTruongHopTemplate, html.EscapeString(target), mention, mention)
 			return chathelper.ReplyHTML(ctx, b, update.Message, text)
 		},
 	}
