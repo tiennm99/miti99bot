@@ -26,9 +26,6 @@ type usageEntry struct {
 	Username string `json:"user,omitempty" bson:"user,omitempty"`
 	N        int64  `json:"n" bson:"n"`
 	Deleted  bool   `json:"deleted,omitempty" bson:"deleted,omitempty"`
-	// MergedFrom is temporary startup-migration bookkeeping. Completed
-	// migrations clear it so normal stats documents stay compact.
-	MergedFrom []string `json:"mergedFrom,omitempty" bson:"mergedFrom,omitempty"`
 }
 
 type usageUser struct {
