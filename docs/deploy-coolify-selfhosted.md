@@ -99,11 +99,11 @@ Successful GIF replies include the result behind Telegram spoiler formatting.
 > `updatedAt` is a BSON Date.
 >
 > The `stats` collection uses queryable aggregate documents for command/user
-> counts and creates indexes on startup. Renamed command rows are merged into the
-> current command name. Deleted legacy command rows are retained with
-> `deleted: true`; `/stats` queries filter those rows from visible results. A
-> historical `system` collection may remain in MongoDB with completed migration
-> records and can be reused if a future one-time startup migration is needed.
+> counts and creates indexes on startup. Deleted legacy command rows are
+> retained with `deleted: true`; `/stats` queries filter those rows from visible
+> results. A historical `system` collection may remain in MongoDB with completed
+> migration records and can be reused if a future one-time startup migration is
+> needed.
 
 ## 2. Coolify
 
