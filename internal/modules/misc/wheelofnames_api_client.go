@@ -13,11 +13,12 @@ import (
 	"os"
 	"strings"
 	"time"
-
-	"github.com/tiennm99/miti99bot/internal/log"
 )
 
 const (
+	// The standard renderer is a deployment of
+	// https://github.com/tiennm99/wheelofnames. Operators may point this to any
+	// service that implements the same /api/gif contract.
 	wheelOfNamesAPIURLEnv   = "WHEELOFNAMES_API_URL"
 	wheelOfNamesAPITokenEnv = "WHEELOFNAMES_API_TOKEN"
 
@@ -163,25 +164,14 @@ func isWheelGIF(data []byte) bool {
 
 func renderWheelOfNamesAnimation(ctx context.Context, options []string, winner int) (wheelAnimation, error) {
 	client := newWheelAPIClientFromEnv()
-	if data, err := client.Render(ctx, options, winner); err == nil {
-		return wheelAnimation{
-			Data:     data,
-			Duration: wheelRemoteDuration,
-			Width:    wheelRemoteSize,
-			Height:   wheelRemoteSize,
-		}, nil
-	} else if !errors.Is(err, errWheelAPINotConfigured) {
-		log.Warn("wheelofnames remote render failed", "err", err)
-	}
-
-	data, err := renderWheelOfNamesGIF(options, winner)
+	data, err := client.Render(ctx, options, winner)
 	if err != nil {
 		return wheelAnimation{}, err
 	}
 	return wheelAnimation{
 		Data:     data,
-		Duration: wheelDuration,
-		Width:    wheelSize,
-		Height:   wheelSize,
+		Duration: wheelRemoteDuration,
+		Width:    wheelRemoteSize,
+		Height:   wheelRemoteSize,
 	}, nil
 }

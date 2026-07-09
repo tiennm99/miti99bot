@@ -1,7 +1,7 @@
 // Package misc is a small stub module that proves the framework end-to-end:
 // /ping (public, exercises KV write), /ping_stats (protected, exercises KV
-// read), /random (public random picker), /wheelofnames (public GIF wheel
-// picker), /the_answer (private easter egg), and small public disclaimer
+// read), /random (public random picker), /wheelofnames (public wheel picker
+// with optional GIF), /the_answer (private easter egg), and small public disclaimer
 // commands.
 package misc
 

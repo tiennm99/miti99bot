@@ -14,7 +14,7 @@
     },
     {
       "command": "wheelofnames",
-      "description": "Send an animated wheel GIF for comma-separated options"
+      "description": "Pick one option with wheel GIF when configured"
     },
     {
       "command": "trongtruonghop",

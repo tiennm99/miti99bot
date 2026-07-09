@@ -46,10 +46,12 @@ overrides are not supported in runtime env; modules use coded defaults.
 
 ### Optional wheelofnames renderer
 
-`/wheelofnames` uses the built-in Go GIF renderer when
-`WHEELOFNAMES_API_URL` is unset. If a self-hosted `wheelofnames` Remotion
-service is available, set the URL to its full GIF endpoint and set the token to
-the same value as the service `API_TOKEN`:
+`/wheelofnames` uses a remote GIF renderer when `WHEELOFNAMES_API_URL` is set.
+The standard renderer is a deployment of
+[`tiennm99/wheelofnames`](https://github.com/tiennm99/wheelofnames), but any
+service that implements the same `/api/gif` contract can be used. Set the URL
+to the full GIF endpoint and set the token to the same value as the service
+`API_TOKEN`:
 
 ```env
 WHEELOFNAMES_API_URL=http://wheelofnames:3000/api/gif
@@ -66,9 +68,9 @@ WHEELOFNAMES_API_TOKEN=<same value as wheelofnames API_TOKEN>
 
 The bot sends outbound HTTP only; no public bot ingress is required. Remote
 renders use `512px`, `20fps`, and `7` seconds total by default. If the remote
-service is unset, unavailable, unauthorized, or returns a non-GIF response, the
-bot falls back to the local renderer. The GIF caption includes the result behind
-Telegram spoiler formatting.
+service is unset, unavailable, unauthorized, or returns a non-GIF response,
+`/wheelofnames` falls back to the same plain text winner reply as `/random`.
+Successful GIF replies include the result behind Telegram spoiler formatting.
 
 ## 1. MongoDB Atlas (M0)
 
@@ -97,9 +99,10 @@ Telegram spoiler formatting.
 > `updatedAt` is a BSON Date.
 >
 > The `stats` collection uses queryable aggregate documents for command/user
-> counts and creates indexes on startup. Deleted legacy command rows are retained
-> with `deleted: true`; `/stats` queries filter those rows from visible results.
-> A historical `system` collection may remain in MongoDB with completed migration
+> counts and creates indexes on startup. Renamed command rows are merged into the
+> current command name. Deleted legacy command rows are retained with
+> `deleted: true`; `/stats` queries filter those rows from visible results. A
+> historical `system` collection may remain in MongoDB with completed migration
 > records and can be reused if a future one-time startup migration is needed.
 
 ## 2. Coolify
