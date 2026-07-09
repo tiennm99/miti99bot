@@ -34,7 +34,7 @@ Copy [`.env.example`](../.env.example) → `.env` (gitignored) and fill in.
 | `OWNER_ID` | optional | owner-only commands (renamed from `BOT_OWNER_ID`) |
 | `ADMIN_IDS` | optional | CSV of admin ids (renamed from `ADMIN_USER_IDS`) |
 | `WC_FOOTBALL_DATA_TOKEN` | optional | football-data.org token for the `wc` module |
-| `WHEELOFNAMES_API_URL` | optional | full `/api/gif` endpoint for remote `/wheelofnamesbeta` GIF rendering |
+| `WHEELOFNAMES_API_URL` | optional | full `/api/gif` endpoint for remote `/wheelofnames` GIF rendering |
 | `WHEELOFNAMES_API_TOKEN` | optional | bearer token matching the wheelofnames service `API_TOKEN` |
 
 **Leave UNSET on self-host:** `KV_PROVIDER`, `PORT`,
@@ -46,7 +46,7 @@ overrides are not supported in runtime env; modules use coded defaults.
 
 ### Optional wheelofnames renderer
 
-`/wheelofnamesbeta` uses the built-in Go GIF renderer when
+`/wheelofnames` uses the built-in Go GIF renderer when
 `WHEELOFNAMES_API_URL` is unset. If a self-hosted `wheelofnames` Remotion
 service is available, set the URL to its full GIF endpoint and set the token to
 the same value as the service `API_TOKEN`:
@@ -67,8 +67,8 @@ WHEELOFNAMES_API_TOKEN=<same value as wheelofnames API_TOKEN>
 The bot sends outbound HTTP only; no public bot ingress is required. Remote
 renders use `512px`, `20fps`, and `7` seconds total by default. If the remote
 service is unset, unavailable, unauthorized, or returns a non-GIF response, the
-bot falls back to the local renderer without revealing the winner in the GIF
-caption.
+bot falls back to the local renderer. The GIF caption includes the result behind
+Telegram spoiler formatting.
 
 ## 1. MongoDB Atlas (M0)
 
