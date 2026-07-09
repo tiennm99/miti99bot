@@ -8,7 +8,7 @@ Atlas via long polling and an in-process cron scheduler.
 | Module | What it does |
 |---|---|
 | `util` | `/help`, `/info`, `/stickerid` |
-| `misc` | `/ping`, `/ping_stats`, `/random`, `/wheelofnames`, `/wheelofnamesbeta`, `/the_answer`, `/trongtruonghop` + `/tth`, `/trongtruonghopvng` + `/tthvng` disclaimers |
+| `misc` | `/ping`, `/ping_stats`, `/random`, `/wheelofnames`, `/the_answer`, `/trongtruonghop` + `/tth`, `/trongtruonghopvng` + `/tthvng` disclaimers |
 | `wordle` | Daily Wordle game |
 | `loldle` | League-of-Legends "guess the champion" |
 | `lol` | Pro-match schedule (`/lol`, `/lol_tomorrow`, `/lol_this_week`, `/lol_next_week`) + daily push |

@@ -14,27 +14,27 @@ import (
 )
 
 const (
-	wheelBetaSliceLabelRadius = 64
+	wheelSliceLabelRadius = 64
 )
 
 func drawWheelSliceLabels(img *image.Paletted, options []string, rotation float64) {
 	if len(options) == 0 {
 		return
 	}
-	cx, cy := wheelBetaSize/2, wheelBetaSize/2
+	cx, cy := wheelSize/2, wheelSize/2
 	segment := 2 * math.Pi / float64(len(options))
-	limit := wheelBetaSliceLabelLimit(len(options))
+	limit := wheelSliceLabelLimit(len(options))
 	for idx, option := range options {
 		angle := rotation + (float64(idx)+0.5)*segment
-		centerX := cx + int(math.Round(math.Cos(angle)*float64(wheelBetaSliceLabelRadius)))
-		centerY := cy + int(math.Round(math.Sin(angle)*float64(wheelBetaSliceLabelRadius)))
-		text := wheelBetaDisplayText(option, limit)
-		drawRotatedCenteredTextAt(img, text, centerX+1, centerY+1, angle, wheelBetaPaperColorIndex)
-		drawRotatedCenteredTextAt(img, text, centerX, centerY, angle, wheelBetaInkColorIndex)
+		centerX := cx + int(math.Round(math.Cos(angle)*float64(wheelSliceLabelRadius)))
+		centerY := cy + int(math.Round(math.Sin(angle)*float64(wheelSliceLabelRadius)))
+		text := wheelDisplayText(option, limit)
+		drawRotatedCenteredTextAt(img, text, centerX+1, centerY+1, angle, wheelPaperColorIndex)
+		drawRotatedCenteredTextAt(img, text, centerX, centerY, angle, wheelInkColorIndex)
 	}
 }
 
-func wheelBetaSliceLabelLimit(optionCount int) int {
+func wheelSliceLabelLimit(optionCount int) int {
 	switch {
 	case optionCount <= 2:
 		return 14
@@ -60,8 +60,8 @@ func drawCircle(img *image.Paletted, cx, cy, radius int, colorIndex byte) {
 }
 
 func drawWheelDropShadow(img *image.Paletted, cx, cy int) {
-	rx := wheelBetaRadius + 9
-	ry := wheelBetaRadius + 5
+	rx := wheelRadius + 9
+	ry := wheelRadius + 5
 	shadowCY := cy + 8
 	limit := rx * rx * ry * ry
 	for y := shadowCY - ry; y <= shadowCY+ry; y++ {
@@ -69,28 +69,28 @@ func drawWheelDropShadow(img *image.Paletted, cx, cy int) {
 			dx := x - cx
 			dy := y - shadowCY
 			if dx*dx*ry*ry+dy*dy*rx*rx <= limit {
-				setWheelBetaPixel(img, x, y, wheelBetaShadowColorIndex)
+				setWheelPixel(img, x, y, wheelShadowColorIndex)
 			}
 		}
 	}
 }
 
 func drawWheelLighting(img *image.Paletted, cx, cy int) {
-	outer := wheelBetaRadius * wheelBetaRadius
-	edgeStart := wheelBetaRadius - 13
+	outer := wheelRadius * wheelRadius
+	edgeStart := wheelRadius - 13
 	edge := edgeStart * edgeStart
-	for y := cy - wheelBetaRadius; y <= cy+wheelBetaRadius; y++ {
-		for x := cx - wheelBetaRadius; x <= cx+wheelBetaRadius; x++ {
+	for y := cy - wheelRadius; y <= cy+wheelRadius; y++ {
+		for x := cx - wheelRadius; x <= cx+wheelRadius; x++ {
 			dx, dy := x-cx, y-cy
 			d2 := dx*dx + dy*dy
 			if d2 > outer || d2 < edge {
 				continue
 			}
-			if dx+dy > wheelBetaRadius/3 {
-				img.SetColorIndex(x, y, wheelBetaBevelColorIndex)
+			if dx+dy > wheelRadius/3 {
+				img.SetColorIndex(x, y, wheelBevelColorIndex)
 			}
-			if dx+dy < -wheelBetaRadius {
-				img.SetColorIndex(x, y, wheelBetaHighlightColorIndex)
+			if dx+dy < -wheelRadius {
+				img.SetColorIndex(x, y, wheelHighlightColorIndex)
 			}
 		}
 	}
@@ -105,16 +105,16 @@ func drawHighlightOval(img *image.Paletted, cx, cy, rx, ry int) {
 			dx := x - cx
 			dy := y - cy
 			if dx*dx*ry*ry+dy*dy*rx*rx <= limit {
-				setWheelBetaPixel(img, x, y, wheelBetaHighlightColorIndex)
+				setWheelPixel(img, x, y, wheelHighlightColorIndex)
 			}
 		}
 	}
 }
 
 func drawWheelRim(img *image.Paletted, cx, cy int) {
-	drawCircleOutline(img, cx, cy, wheelBetaRadius, 3, wheelBetaInkColorIndex)
-	drawCircleOutline(img, cx, cy, wheelBetaRadius-5, 1, wheelBetaBevelColorIndex)
-	drawCircleOutline(img, cx, cy, wheelBetaRadius-8, 1, wheelBetaHighlightColorIndex)
+	drawCircleOutline(img, cx, cy, wheelRadius, 3, wheelInkColorIndex)
+	drawCircleOutline(img, cx, cy, wheelRadius-5, 1, wheelBevelColorIndex)
+	drawCircleOutline(img, cx, cy, wheelRadius-8, 1, wheelHighlightColorIndex)
 }
 
 func drawCircleOutline(img *image.Paletted, cx, cy, radius, thickness int, colorIndex byte) {
@@ -137,7 +137,7 @@ func drawPointer(img *image.Paletted, tipX, cy int, fillColorIndex byte) {
 		half := xOffset / 2
 		x := tipX + xOffset
 		for y := cy - half; y <= cy+half; y++ {
-			setWheelBetaPixel(img, x, y, wheelBetaInkColorIndex)
+			setWheelPixel(img, x, y, wheelInkColorIndex)
 		}
 	}
 	for xOffset := 3; xOffset < 30; xOffset++ {
@@ -147,7 +147,7 @@ func drawPointer(img *image.Paletted, tipX, cy int, fillColorIndex byte) {
 		}
 		x := tipX + xOffset
 		for y := cy - half; y <= cy+half; y++ {
-			setWheelBetaPixel(img, x, y, fillColorIndex)
+			setWheelPixel(img, x, y, fillColorIndex)
 		}
 	}
 }
@@ -157,24 +157,24 @@ func drawWinnerCelebration(img *image.Paletted, step int) {
 		return
 	}
 
-	cx, cy := wheelBetaSize/2, wheelBetaSize/2
-	phase := step % wheelBetaCelebrateFrames
+	cx, cy := wheelSize/2, wheelSize/2
+	phase := step % wheelCelebrateFrames
 	ringRadius := 34 + phase*5
-	if ringRadius < wheelBetaRadius-8 {
-		drawCircleOutline(img, cx, cy, ringRadius, 1, wheelBetaSparkColorIndex)
+	if ringRadius < wheelRadius-8 {
+		drawCircleOutline(img, cx, cy, ringRadius, 1, wheelSparkColorIndex)
 	}
 
 	for i := 0; i < 14; i++ {
 		angle := (float64(i)/14)*2*math.Pi + float64(phase)*0.31
-		inner := float64(wheelBetaRadius + 9 + phase%3)
+		inner := float64(wheelRadius + 9 + phase%3)
 		outer := inner + 7 + float64(phase%4)
 		x1 := cx + int(math.Round(math.Cos(angle)*inner))
 		y1 := cy + int(math.Round(math.Sin(angle)*inner))
 		x2 := cx + int(math.Round(math.Cos(angle)*outer))
 		y2 := cy + int(math.Round(math.Sin(angle)*outer))
-		colorIndex := wheelBetaSliceColorIndexes[(i+phase)%len(wheelBetaSliceColorIndexes)]
+		colorIndex := wheelSliceColorIndexes[(i+phase)%len(wheelSliceColorIndexes)]
 		if i%5 == 0 {
-			colorIndex = wheelBetaSparkColorIndex
+			colorIndex = wheelSparkColorIndex
 		}
 		drawPalettedLine(img, x1, y1, x2, y2, colorIndex)
 		drawSpark(img, x2, y2, colorIndex)
@@ -183,25 +183,25 @@ func drawWinnerCelebration(img *image.Paletted, step int) {
 
 func drawStatusBand(img *image.Paletted, label, value string) {
 	for y := 235; y < 286; y++ {
-		for x := 31; x < wheelBetaSize-25; x++ {
-			img.SetColorIndex(x, y, wheelBetaShadowColorIndex)
+		for x := 31; x < wheelSize-25; x++ {
+			img.SetColorIndex(x, y, wheelShadowColorIndex)
 		}
 	}
 	for y := 230; y < 282; y++ {
-		for x := 28; x < wheelBetaSize-28; x++ {
-			img.SetColorIndex(x, y, wheelBetaPaperColorIndex)
+		for x := 28; x < wheelSize-28; x++ {
+			img.SetColorIndex(x, y, wheelPaperColorIndex)
 		}
 	}
-	for x := 28; x < wheelBetaSize-28; x++ {
-		img.SetColorIndex(x, 230, wheelBetaHighlightColorIndex)
-		img.SetColorIndex(x, 281, wheelBetaBevelColorIndex)
+	for x := 28; x < wheelSize-28; x++ {
+		img.SetColorIndex(x, 230, wheelHighlightColorIndex)
+		img.SetColorIndex(x, 281, wheelBevelColorIndex)
 	}
-	drawCenteredText(img, label, 250, wheelBetaInkColorIndex)
-	drawCenteredText(img, value, 270, wheelBetaInkColorIndex)
+	drawCenteredText(img, label, 250, wheelInkColorIndex)
+	drawCenteredText(img, value, 270, wheelInkColorIndex)
 }
 
 func drawCenteredText(img *image.Paletted, text string, baselineY int, colorIndex byte) {
-	drawCenteredTextAt(img, text, wheelBetaSize/2, baselineY, colorIndex)
+	drawCenteredTextAt(img, text, wheelSize/2, baselineY, colorIndex)
 }
 
 func drawCenteredTextAt(img *image.Paletted, text string, centerX, baselineY int, colorIndex byte) {
@@ -210,7 +210,7 @@ func drawCenteredTextAt(img *image.Paletted, text string, centerX, baselineY int
 	x := centerX - width/2
 	drawer := font.Drawer{
 		Dst:  img,
-		Src:  image.NewUniform(wheelBetaPalette[colorIndex]),
+		Src:  image.NewUniform(wheelPalette[colorIndex]),
 		Face: face,
 		Dot:  fixed.P(x, baselineY),
 	}
@@ -244,12 +244,12 @@ func drawRotatedCenteredTextAt(img *image.Paletted, text string, centerX, center
 			localY := float64(y) - sourceCenterY
 			targetX := centerX + int(math.Round(localX*cos-localY*sin))
 			targetY := centerY + int(math.Round(localX*sin+localY*cos))
-			setWheelBetaPixel(img, targetX, targetY, colorIndex)
+			setWheelPixel(img, targetX, targetY, colorIndex)
 		}
 	}
 }
 
-func wheelBetaDisplayText(s string, limit int) string {
+func wheelDisplayText(s string, limit int) string {
 	var b strings.Builder
 	count := 0
 	for _, r := range norm.NFD.String(s) {
@@ -259,7 +259,7 @@ func wheelBetaDisplayText(s string, limit int) string {
 		if count >= limit {
 			break
 		}
-		r = wheelBetaASCIIRune(r)
+		r = wheelASCIIRune(r)
 		if unicode.IsControl(r) {
 			b.WriteByte('?')
 			count++
@@ -280,7 +280,7 @@ func wheelBetaDisplayText(s string, limit int) string {
 	return out
 }
 
-func wheelBetaASCIIRune(r rune) rune {
+func wheelASCIIRune(r rune) rune {
 	switch r {
 	case 'đ':
 		return 'd'
@@ -295,7 +295,7 @@ func drawSpark(img *image.Paletted, cx, cy int, colorIndex byte) {
 	for y := cy - 1; y <= cy+1; y++ {
 		for x := cx - 1; x <= cx+1; x++ {
 			if x == cx || y == cy {
-				setWheelBetaPixel(img, x, y, colorIndex)
+				setWheelPixel(img, x, y, colorIndex)
 			}
 		}
 	}
@@ -314,7 +314,7 @@ func drawPalettedLine(img *image.Paletted, x0, y0, x1, y1 int, colorIndex byte) 
 	}
 	err := dx + dy
 	for {
-		setWheelBetaPixel(img, x0, y0, colorIndex)
+		setWheelPixel(img, x0, y0, colorIndex)
 		if x0 == x1 && y0 == y1 {
 			return
 		}
@@ -330,7 +330,7 @@ func drawPalettedLine(img *image.Paletted, x0, y0, x1, y1 int, colorIndex byte) 
 	}
 }
 
-func setWheelBetaPixel(img *image.Paletted, x, y int, colorIndex byte) {
+func setWheelPixel(img *image.Paletted, x, y int, colorIndex byte) {
 	if image.Pt(x, y).In(img.Rect) {
 		img.SetColorIndex(x, y, colorIndex)
 	}

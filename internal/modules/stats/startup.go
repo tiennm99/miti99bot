@@ -23,6 +23,9 @@ const (
 	renameLolNextWeekStatsKey = "stats:command-rename:lol_nextweek-to-lol_next_week"
 	oldLolNextWeekCommand     = "lol_nextweek"
 	newLolNextWeekCommand     = "lol_next_week"
+
+	deleteLegacyWheelOfNamesStatsKey = "stats:command-delete:wheelofnamesbeta"
+	deletedLegacyWheelOfNamesCommand = "wheelofnamesbeta"
 )
 
 // InitStore performs stats collection startup maintenance. It is safe to call
@@ -35,6 +38,9 @@ func InitStore(ctx context.Context, statsColl, systemColl storage.Collection) er
 		}
 	}
 	if err := migrateCommandRename(ctx, statsColl, systemColl, oldLolNextWeekCommand, newLolNextWeekCommand, renameLolNextWeekStatsKey); err != nil {
+		return err
+	}
+	if err := markCommandDeleted(ctx, statsColl, systemColl, deletedLegacyWheelOfNamesCommand, deleteLegacyWheelOfNamesStatsKey); err != nil {
 		return err
 	}
 	return nil
@@ -110,6 +116,53 @@ func migrateCommandRename(ctx context.Context, statsColl, systemColl storage.Col
 		UpdatedAt:   now,
 	}); err != nil {
 		return fmt.Errorf("stats command rename marker put %s: %w", markerKey, err)
+	}
+	return nil
+}
+
+func markCommandDeleted(ctx context.Context, statsColl, systemColl storage.Collection, cmd, markerKey string) error {
+	state := systemstate.New(systemColl)
+	if rec, ok, err := state.Get(ctx, markerKey); err != nil {
+		return fmt.Errorf("stats command delete marker %s: %w", markerKey, err)
+	} else if ok && rec.Status == "complete" {
+		return nil
+	}
+
+	docs := storage.Typed[usageEntry](statsColl)
+	keys, err := docs.List(ctx, cmd)
+	if err != nil {
+		return fmt.Errorf("stats command delete list %s: %w", cmd, err)
+	}
+
+	var marked int64
+	for _, key := range keys {
+		if key != cmd && !strings.HasPrefix(key, cmd+":") {
+			continue
+		}
+		entry, _, err := docs.Get(ctx, key)
+		if err != nil {
+			return fmt.Errorf("stats command delete get %s: %w", key, err)
+		}
+		if entry.Cmd != cmd || entry.Deleted {
+			continue
+		}
+		entry.Deleted = true
+		if err := docs.Put(ctx, key, entry); err != nil {
+			return fmt.Errorf("stats command delete put %s: %w", key, err)
+		}
+		marked += entry.N
+	}
+
+	now := time.Now().UTC().UnixMilli()
+	if err := state.Put(ctx, markerKey, systemstate.Record{
+		Kind:        "migration",
+		Name:        markerKey,
+		Status:      "complete",
+		Count:       marked,
+		CompletedAt: now,
+		UpdatedAt:   now,
+	}); err != nil {
+		return fmt.Errorf("stats command delete marker put %s: %w", markerKey, err)
 	}
 	return nil
 }
