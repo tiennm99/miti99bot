@@ -6,12 +6,12 @@ import (
 )
 
 const (
-	wheelBetaMinRevolutions        = 7
-	wheelBetaRandomRevolutionRange = 5
-	wheelBetaMaxLandingOffset      = 0.34
+	wheelMinRevolutions        = 7
+	wheelRandomRevolutionRange = 5
+	wheelMaxLandingOffset      = 0.34
 )
 
-type wheelBetaSpinProfile struct {
+type wheelSpinProfile struct {
 	startRotation   float64
 	finalRotation   float64
 	accelEnd        float64
@@ -21,31 +21,31 @@ type wheelBetaSpinProfile struct {
 	wobblePhase     float64
 }
 
-func newWheelBetaSpinProfile(optionCount, winner int, rng *rand.Rand) wheelBetaSpinProfile {
+func newWheelSpinProfile(optionCount, winner int, rng *rand.Rand) wheelSpinProfile {
 	segment := 2 * math.Pi / float64(optionCount)
-	landingOffset := (wheelBetaRandFloat64(rng)*2 - 1) * wheelBetaMaxLandingOffset
+	landingOffset := (wheelRandFloat64(rng)*2 - 1) * wheelMaxLandingOffset
 	finalRotation := finalWheelRotationWithOffset(optionCount, winner, landingOffset)
-	revolutions := wheelBetaMinRevolutions + wheelBetaRandIntN(rng, wheelBetaRandomRevolutionRange)
-	accelEnd := 0.20 + wheelBetaRandFloat64(rng)*0.1
-	return wheelBetaSpinProfile{
+	revolutions := wheelMinRevolutions + wheelRandIntN(rng, wheelRandomRevolutionRange)
+	accelEnd := 0.20 + wheelRandFloat64(rng)*0.1
+	return wheelSpinProfile{
 		startRotation:   finalRotation - float64(revolutions)*2*math.Pi,
 		finalRotation:   finalRotation,
 		accelEnd:        accelEnd,
-		decelSharpness:  3.6 + wheelBetaRandFloat64(rng)*1.8,
-		wobbleAmplitude: math.Min(segment*0.075, 0.09) * (0.55 + wheelBetaRandFloat64(rng)*0.45),
-		wobbleCycles:    3.5 + wheelBetaRandFloat64(rng)*2.5,
-		wobblePhase:     wheelBetaRandFloat64(rng) * 2 * math.Pi,
+		decelSharpness:  3.6 + wheelRandFloat64(rng)*1.8,
+		wobbleAmplitude: math.Min(segment*0.075, 0.09) * (0.55 + wheelRandFloat64(rng)*0.45),
+		wobbleCycles:    3.5 + wheelRandFloat64(rng)*2.5,
+		wobblePhase:     wheelRandFloat64(rng) * 2 * math.Pi,
 	}
 }
 
-func (p wheelBetaSpinProfile) rotationAt(t float64) float64 {
-	t = clampWheelBetaProgress(t)
+func (p wheelSpinProfile) rotationAt(t float64) float64 {
+	t = clampWheelProgress(t)
 	progress := p.progressAt(t)
 	rotation := p.startRotation + (p.finalRotation-p.startRotation)*progress
 	return rotation + p.wobbleAt(t)
 }
 
-func (p wheelBetaSpinProfile) statusAt(t float64) string {
+func (p wheelSpinProfile) statusAt(t float64) string {
 	switch {
 	case t < p.accelEnd:
 		return "BUILDING SPEED"
@@ -58,8 +58,8 @@ func (p wheelBetaSpinProfile) statusAt(t float64) string {
 	}
 }
 
-func (p wheelBetaSpinProfile) progressAt(t float64) float64 {
-	t = clampWheelBetaProgress(t)
+func (p wheelSpinProfile) progressAt(t float64) float64 {
+	t = clampWheelProgress(t)
 	if t == 0 || t == 1 {
 		return t
 	}
@@ -85,7 +85,7 @@ func (p wheelBetaSpinProfile) progressAt(t float64) float64 {
 	return accelDistance + (1-accelDistance)*decelProgress
 }
 
-func (p wheelBetaSpinProfile) wobbleAt(t float64) float64 {
+func (p wheelSpinProfile) wobbleAt(t float64) float64 {
 	if t <= p.accelEnd || t >= 1 {
 		return 0
 	}
@@ -94,7 +94,7 @@ func (p wheelBetaSpinProfile) wobbleAt(t float64) float64 {
 	return p.wobbleAmplitude * envelope * math.Sin(p.wobblePhase+u*p.wobbleCycles*2*math.Pi)
 }
 
-func clampWheelBetaProgress(t float64) float64 {
+func clampWheelProgress(t float64) float64 {
 	switch {
 	case t < 0:
 		return 0
@@ -105,14 +105,14 @@ func clampWheelBetaProgress(t float64) float64 {
 	}
 }
 
-func wheelBetaRandFloat64(rng *rand.Rand) float64 {
+func wheelRandFloat64(rng *rand.Rand) float64 {
 	if rng != nil {
 		return rng.Float64()
 	}
 	return rand.Float64()
 }
 
-func wheelBetaRandIntN(rng *rand.Rand, n int) int {
+func wheelRandIntN(rng *rand.Rand, n int) int {
 	if n <= 0 {
 		return 0
 	}

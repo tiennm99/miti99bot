@@ -14,10 +14,6 @@
     },
     {
       "command": "wheelofnames",
-      "description": "Spin a suspenseful wheel for comma-separated options"
-    },
-    {
-      "command": "wheelofnamesbeta",
       "description": "Send an animated wheel GIF for comma-separated options"
     },
     {
