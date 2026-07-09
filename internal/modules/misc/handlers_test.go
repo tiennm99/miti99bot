@@ -46,13 +46,6 @@ func installMisc(t *testing.T, ownerID int64) (*testutil.RecordingBot, storage.D
 	return rb, store
 }
 
-func withoutWheelDraftDelay(t *testing.T) {
-	t.Helper()
-	prev := wheelDraftFrameDelay
-	wheelDraftFrameDelay = 0
-	t.Cleanup(func() { wheelDraftFrameDelay = prev })
-}
-
 func TestPing_RepliesPongAndWritesStore(t *testing.T) {
 	rb, store := installMisc(t, 999)
 	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(999, "/ping"))
@@ -161,139 +154,51 @@ func TestWheelOfNames_UsageWhenMissingOptions(t *testing.T) {
 	}
 }
 
-func TestWheelOfNames_SingleOption(t *testing.T) {
-	withoutWheelDraftDelay(t)
-	rb, _ := installMisc(t, 999)
-	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(7, "/wheelofnames Alice"))
-
-	if got := rb.LastSent().Text(); got != "Alice" {
-		t.Errorf("wheelofnames reply = %q, want Alice", got)
-	}
-}
-
-func TestWheelOfNames_PicksFromTrimmedOptions(t *testing.T) {
-	withoutWheelDraftDelay(t)
-	rb, _ := installMisc(t, 999)
-	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(7, "/wheelofnames Alice, Bob, Carol"))
-
-	got := rb.LastSent().Text()
-	if got != "Alice" && got != "Bob" && got != "Carol" {
-		t.Errorf("wheelofnames reply = %q, want one of Alice/Bob/Carol", got)
-	}
-}
-
-func TestWheelOfNames_IgnoresEmptySegments(t *testing.T) {
-	withoutWheelDraftDelay(t)
-	rb, _ := installMisc(t, 999)
-	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(7, "/wheelofnames , Alice , , Bob ,"))
-
-	got := rb.LastSent().Text()
-	if got != "Alice" && got != "Bob" {
-		t.Errorf("wheelofnames reply = %q, want Alice or Bob", got)
-	}
-}
-
-func TestWheelOfNames_StreamsDraftsBeforeFinalInPrivateChat(t *testing.T) {
-	withoutWheelDraftDelay(t)
-	rb, _ := installMisc(t, 999)
-	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(7, "/wheelofnames Alice"))
-
-	calls := rb.Sent()
-	if len(calls) != 7 {
-		t.Fatalf("calls = %d, want 6 drafts + final sendMessage: %+v", len(calls), calls)
-	}
-	draftID := ""
-	for i := 0; i < 6; i++ {
-		if calls[i].Method != "sendMessageDraft" {
-			t.Fatalf("call %d method = %q, want sendMessageDraft", i, calls[i].Method)
-		}
-		if !strings.Contains(calls[i].Text(), "Alice") {
-			t.Errorf("draft %d text = %q, want to preview Alice", i, calls[i].Text())
-		}
-		if got := calls[i].Form["draft_id"]; got == "" || got == "0" {
-			t.Fatalf("draft %d id = %q, want non-zero", i, got)
-		} else if draftID == "" {
-			draftID = got
-		} else if got != draftID {
-			t.Fatalf("draft %d id = %q, want same draft id %q", i, got, draftID)
-		}
-	}
-	if calls[6].Method != "sendMessage" || calls[6].Text() != "Alice" {
-		t.Fatalf("final call = %+v, want sendMessage Alice", calls[6])
-	}
-}
-
-func TestWheelOfNames_GroupSkipsDraftsButSendsFinal(t *testing.T) {
-	rb, _ := installMisc(t, 999)
-	rb.Bot.ProcessUpdate(context.Background(), testutil.NewGroupMessage(-100, 7, "/wheelofnames Alice"))
-
-	calls := rb.Sent()
-	if len(calls) != 1 {
-		t.Fatalf("calls = %d, want only final sendMessage in groups: %+v", len(calls), calls)
-	}
-	if calls[0].Method != "sendMessage" || calls[0].Text() != "Alice" {
-		t.Fatalf("group call = %+v, want sendMessage Alice", calls[0])
-	}
-}
-
-func TestWheelOfNamesBeta_UsageWhenMissingOptions(t *testing.T) {
-	for _, text := range []string{"/wheelofnamesbeta", "/wheelofnamesbeta , ,"} {
-		t.Run(text, func(t *testing.T) {
-			rb, _ := installMisc(t, 999)
-			rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(7, text))
-
-			if got := rb.LastSent().Text(); got != wheelOfNamesBetaUsage {
-				t.Errorf("wheelofnamesbeta reply = %q, want usage %q", got, wheelOfNamesBetaUsage)
-			}
-		})
-	}
-}
-
-func TestWheelOfNamesBeta_RenderGIFTiming(t *testing.T) {
-	data, err := renderWheelOfNamesBetaGIF([]string{"Alice", "Bob"}, 0)
+func TestWheelOfNames_RenderGIFTiming(t *testing.T) {
+	data, err := renderWheelOfNamesGIF([]string{"Alice", "Bob"}, 0)
 	if err != nil {
-		t.Fatalf("renderWheelOfNamesBetaGIF: %v", err)
+		t.Fatalf("renderWheelOfNamesGIF: %v", err)
 	}
 	decoded, err := gif.DecodeAll(bytes.NewReader(data))
 	if err != nil {
 		t.Fatalf("DecodeAll: %v", err)
 	}
-	if len(decoded.Image) != wheelBetaSpinFrames+wheelBetaHoldFrames {
-		t.Fatalf("frames = %d, want %d", len(decoded.Image), wheelBetaSpinFrames+wheelBetaHoldFrames)
+	if len(decoded.Image) != wheelSpinFrames+wheelHoldFrames {
+		t.Fatalf("frames = %d, want %d", len(decoded.Image), wheelSpinFrames+wheelHoldFrames)
 	}
 	totalDelay := 0
 	spinDelay := 0
 	holdDelay := 0
 	for i, delay := range decoded.Delay {
 		totalDelay += delay
-		if i < wheelBetaSpinFrames && delay != wheelBetaSpinDelay {
-			t.Fatalf("spin delay[%d] = %d, want %d", i, delay, wheelBetaSpinDelay)
+		if i < wheelSpinFrames && delay != wheelSpinDelay {
+			t.Fatalf("spin delay[%d] = %d, want %d", i, delay, wheelSpinDelay)
 		}
-		if i < wheelBetaSpinFrames {
+		if i < wheelSpinFrames {
 			spinDelay += delay
 			continue
 		}
-		if delay != wheelBetaHoldDelay {
-			t.Fatalf("hold delay[%d] = %d, want %d", i, delay, wheelBetaHoldDelay)
+		if delay != wheelHoldDelay {
+			t.Fatalf("hold delay[%d] = %d, want %d", i, delay, wheelHoldDelay)
 		}
 		holdDelay += delay
 	}
-	if spinDelay != wheelBetaSpinDuration*100 {
-		t.Fatalf("spin delay total = %dcs, want %dcs", spinDelay, wheelBetaSpinDuration*100)
+	if spinDelay != wheelSpinDuration*100 {
+		t.Fatalf("spin delay total = %dcs, want %dcs", spinDelay, wheelSpinDuration*100)
 	}
-	if holdDelay != wheelBetaHoldDuration*100 {
-		t.Fatalf("hold delay total = %dcs, want %dcs", holdDelay, wheelBetaHoldDuration*100)
+	if holdDelay != wheelHoldDuration*100 {
+		t.Fatalf("hold delay total = %dcs, want %dcs", holdDelay, wheelHoldDuration*100)
 	}
-	if totalDelay != wheelBetaDuration*100 {
-		t.Fatalf("total delay = %dcs, want %dcs", totalDelay, wheelBetaDuration*100)
+	if totalDelay != wheelDuration*100 {
+		t.Fatalf("total delay = %dcs, want %dcs", totalDelay, wheelDuration*100)
 	}
-	if equalPalettedFrames(decoded.Image[wheelBetaSpinFrames-1], decoded.Image[wheelBetaSpinFrames]) {
+	if equalPalettedFrames(decoded.Image[wheelSpinFrames-1], decoded.Image[wheelSpinFrames]) {
 		t.Fatalf("first result frame matches last spin frame, want visible RESULT transition")
 	}
-	if equalPalettedFrames(decoded.Image[wheelBetaSpinFrames], decoded.Image[wheelBetaSpinFrames+1]) {
+	if equalPalettedFrames(decoded.Image[wheelSpinFrames], decoded.Image[wheelSpinFrames+1]) {
 		t.Fatalf("first celebration frame matches second celebration frame, want visible result burst")
 	}
-	firstStableHoldFrame := wheelBetaSpinFrames + wheelBetaCelebrateFrames
+	firstStableHoldFrame := wheelSpinFrames + wheelCelebrateFrames
 	for i := firstStableHoldFrame + 1; i < len(decoded.Image); i++ {
 		if !equalPalettedFrames(decoded.Image[firstStableHoldFrame], decoded.Image[i]) {
 			t.Fatalf("stable result hold frame %d differs from frame %d", i, firstStableHoldFrame)
@@ -311,22 +216,22 @@ func equalPalettedFrames(a, b *image.Paletted) bool {
 	return bytes.Equal(a.Pix, b.Pix)
 }
 
-func TestWheelOfNamesBeta_CurrentOptionTracksPointer(t *testing.T) {
+func TestWheelOfNames_CurrentOptionTracksPointer(t *testing.T) {
 	for winner := range []string{"Alice", "Bob", "Carol", "Dana"} {
 		rotation := finalWheelRotation(4, winner)
-		if got := currentWheelBetaIndex(4, rotation); got != winner {
-			t.Fatalf("currentWheelBetaIndex at final rotation = %d, want %d", got, winner)
+		if got := currentWheelIndex(4, rotation); got != winner {
+			t.Fatalf("currentWheelIndex at final rotation = %d, want %d", got, winner)
 		}
 	}
 }
 
-func TestWheelOfNamesBeta_RandomSpinProfileKeepsWinnerUnderPointer(t *testing.T) {
+func TestWheelOfNames_RandomSpinProfileKeepsWinnerUnderPointer(t *testing.T) {
 	rng := rand.New(rand.NewPCG(1, 2))
 	for optionCount := 2; optionCount <= 10; optionCount++ {
 		for winner := 0; winner < optionCount; winner++ {
 			for spin := 0; spin < 20; spin++ {
-				profile := newWheelBetaSpinProfile(optionCount, winner, rng)
-				if got := currentWheelBetaIndex(optionCount, profile.finalRotation); got != winner {
+				profile := newWheelSpinProfile(optionCount, winner, rng)
+				if got := currentWheelIndex(optionCount, profile.finalRotation); got != winner {
 					t.Fatalf("optionCount=%d winner=%d spin=%d final index = %d", optionCount, winner, spin, got)
 				}
 				if got := profile.rotationAt(1); math.Abs(got-profile.finalRotation) > 1e-9 {
@@ -337,10 +242,10 @@ func TestWheelOfNamesBeta_RandomSpinProfileKeepsWinnerUnderPointer(t *testing.T)
 	}
 }
 
-func TestWheelOfNamesBeta_SpinProfileVariesBetweenSpins(t *testing.T) {
+func TestWheelOfNames_SpinProfileVariesBetweenSpins(t *testing.T) {
 	rng := rand.New(rand.NewPCG(10, 20))
-	first := newWheelBetaSpinProfile(5, 2, rng)
-	second := newWheelBetaSpinProfile(5, 2, rng)
+	first := newWheelSpinProfile(5, 2, rng)
+	second := newWheelSpinProfile(5, 2, rng)
 	if first.startRotation == second.startRotation &&
 		first.finalRotation == second.finalRotation &&
 		first.accelEnd == second.accelEnd &&
@@ -350,9 +255,9 @@ func TestWheelOfNamesBeta_SpinProfileVariesBetweenSpins(t *testing.T) {
 	}
 }
 
-func TestWheelOfNamesBeta_SpinProfileProgressIsMonotonic(t *testing.T) {
+func TestWheelOfNames_SpinProfileProgressIsMonotonic(t *testing.T) {
 	rng := rand.New(rand.NewPCG(30, 40))
-	profile := newWheelBetaSpinProfile(6, 4, rng)
+	profile := newWheelSpinProfile(6, 4, rng)
 	prev := -1.0
 	for i := 0; i <= 100; i++ {
 		progress := profile.progressAt(float64(i) / 100)
@@ -363,19 +268,19 @@ func TestWheelOfNamesBeta_SpinProfileProgressIsMonotonic(t *testing.T) {
 	}
 }
 
-func TestWheelOfNamesBeta_PointerPointsIntoWheel(t *testing.T) {
-	img := renderWheelBetaFrame([]string{"Alice", "Bob"}, 0, finalWheelRotation(2, 0), false)
-	cx := wheelBetaSize / 2
-	cy := wheelBetaSize / 2
-	tipX := cx + wheelBetaRadius
+func TestWheelOfNames_PointerPointsIntoWheel(t *testing.T) {
+	img := renderWheelFrame([]string{"Alice", "Bob"}, 0, finalWheelRotation(2, 0), false)
+	cx := wheelSize / 2
+	cy := wheelSize / 2
+	tipX := cx + wheelRadius
 	if got := img.ColorIndexAt(tipX, cy); got != 1 {
 		t.Fatalf("pointer tip color = %d, want 1", got)
 	}
 	if got := img.ColorIndexAt(tipX+10, cy+5); got != 1 {
 		t.Fatalf("pointer shoulder color = %d, want 1", got)
 	}
-	if got := img.ColorIndexAt(tipX+12, cy); got != wheelBetaSliceColorIndexes[0] {
-		t.Fatalf("pointer body color = %d, want current slice color %d", got, wheelBetaSliceColorIndexes[0])
+	if got := img.ColorIndexAt(tipX+12, cy); got != wheelSliceColorIndexes[0] {
+		t.Fatalf("pointer body color = %d, want current slice color %d", got, wheelSliceColorIndexes[0])
 	}
 	if got := img.ColorIndexAt(tipX, cy+5); got == 1 {
 		t.Fatalf("pointer tip is too tall at color index %d", got)
@@ -385,43 +290,43 @@ func TestWheelOfNamesBeta_PointerPointsIntoWheel(t *testing.T) {
 	}
 }
 
-func TestWheelOfNamesBeta_FinalSliceRendersAtRightPointer(t *testing.T) {
+func TestWheelOfNames_FinalSliceRendersAtRightPointer(t *testing.T) {
 	options := []string{"Alice", "Bob", "Carol", "Dana"}
 	winner := 2
-	img := renderWheelBetaFrame(options, winner, finalWheelRotation(len(options), winner), true)
-	x := wheelBetaSize/2 + wheelBetaRadius - 20
-	y := wheelBetaSize / 2
-	want := wheelBetaSliceColorIndexes[winner%len(wheelBetaSliceColorIndexes)]
+	img := renderWheelFrame(options, winner, finalWheelRotation(len(options), winner), true)
+	x := wheelSize/2 + wheelRadius - 20
+	y := wheelSize / 2
+	want := wheelSliceColorIndexes[winner%len(wheelSliceColorIndexes)]
 	if got := img.ColorIndexAt(x, y); got != want {
 		t.Fatalf("right pointer slice color = %d, want winner slice color %d", got, want)
 	}
 }
 
-func TestWheelOfNamesBeta_DrawsOptionLabelsInsideSlices(t *testing.T) {
+func TestWheelOfNames_DrawsOptionLabelsInsideSlices(t *testing.T) {
 	options := []string{"Student", "Teacher", "Parent", "Staff"}
 	rotation := 0.0
-	img := renderWheelBetaFrame(options, 0, rotation, false)
+	img := renderWheelFrame(options, 0, rotation, false)
 	segment := 2 * math.Pi / float64(len(options))
 	angle := rotation + segment/2
-	centerX := wheelBetaSize/2 + int(math.Round(math.Cos(angle)*float64(wheelBetaSliceLabelRadius)))
-	centerY := wheelBetaSize/2 + int(math.Round(math.Sin(angle)*float64(wheelBetaSliceLabelRadius)))
+	centerX := wheelSize/2 + int(math.Round(math.Cos(angle)*float64(wheelSliceLabelRadius)))
+	centerY := wheelSize/2 + int(math.Round(math.Sin(angle)*float64(wheelSliceLabelRadius)))
 	bounds := image.Rect(centerX-28, centerY-28, centerX+28, centerY+28)
 	if got := countColorIndex(img, bounds, 1); got == 0 {
 		t.Fatalf("slice label dark pixels = %d, want > 0", got)
 	}
 }
 
-func TestWheelOfNamesBeta_RotatesOptionLabelsWithSlices(t *testing.T) {
+func TestWheelOfNames_RotatesOptionLabelsWithSlices(t *testing.T) {
 	options := []string{"Rotate", "Teacher", "Parent", "Staff"}
 	rotation := -3 * math.Pi / 4
-	img := renderWheelBetaFrame(options, 0, rotation, false)
+	img := renderWheelFrame(options, 0, rotation, false)
 
 	segment := 2 * math.Pi / float64(len(options))
 	angle := rotation + segment/2
-	centerX := wheelBetaSize/2 + int(math.Round(math.Cos(angle)*float64(wheelBetaSliceLabelRadius)))
-	centerY := wheelBetaSize/2 + int(math.Round(math.Sin(angle)*float64(wheelBetaSliceLabelRadius)))
+	centerX := wheelSize/2 + int(math.Round(math.Cos(angle)*float64(wheelSliceLabelRadius)))
+	centerY := wheelSize/2 + int(math.Round(math.Sin(angle)*float64(wheelSliceLabelRadius)))
 	searchBounds := image.Rect(centerX-28, centerY-32, centerX+28, centerY+32)
-	labelBounds, ok := colorIndexBounds(img, searchBounds, wheelBetaInkColorIndex)
+	labelBounds, ok := colorIndexBounds(img, searchBounds, wheelInkColorIndex)
 	if !ok {
 		t.Fatalf("slice label dark pixels missing in %v", searchBounds)
 	}
@@ -430,22 +335,22 @@ func TestWheelOfNamesBeta_RotatesOptionLabelsWithSlices(t *testing.T) {
 	}
 }
 
-func TestWheelOfNamesBeta_DisplayTextNormalizesVietnamese(t *testing.T) {
+func TestWheelOfNames_DisplayTextNormalizesVietnamese(t *testing.T) {
 	input := "không dấu Tiếng Việt Đặng Ơ Ư ấ ệ"
 	want := "khong dau Tieng Viet Dang O U a e"
-	got := wheelBetaDisplayText(input, 64)
+	got := wheelDisplayText(input, 64)
 	if got != want {
-		t.Fatalf("wheelBetaDisplayText() = %q, want %q", got, want)
+		t.Fatalf("wheelDisplayText() = %q, want %q", got, want)
 	}
 	if strings.Contains(got, "?") {
-		t.Fatalf("wheelBetaDisplayText() replaced Vietnamese with ?: %q", got)
+		t.Fatalf("wheelDisplayText() replaced Vietnamese with ?: %q", got)
 	}
 }
 
-func TestWheelOfNamesBeta_DisplayTextNormalizesDecomposedVietnamese(t *testing.T) {
-	got := wheelBetaDisplayText("tie\u0302\u0301ng Vie\u0323t", 32)
+func TestWheelOfNames_DisplayTextNormalizesDecomposedVietnamese(t *testing.T) {
+	got := wheelDisplayText("tie\u0302\u0301ng Vie\u0323t", 32)
 	if got != "tieng Viet" {
-		t.Fatalf("wheelBetaDisplayText() = %q, want %q", got, "tieng Viet")
+		t.Fatalf("wheelDisplayText() = %q, want %q", got, "tieng Viet")
 	}
 }
 
@@ -493,19 +398,19 @@ func colorIndexBounds(img *image.Paletted, bounds image.Rectangle, colorIndex by
 	return image.Rect(minX, minY, maxX, maxY), true
 }
 
-func TestWheelOfNamesBeta_SendsAnimationWithoutSpoilingCaption(t *testing.T) {
+func TestWheelOfNames_SendsAnimationWithSpoilerCaption(t *testing.T) {
 	rb, _ := installMisc(t, 999)
-	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(7, "/wheelofnamesbeta Alice"))
+	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(7, "/wheelofnames Alice"))
 
 	call := rb.LastSent()
 	if call.Method != "sendAnimation" {
 		t.Fatalf("method = %q, want sendAnimation", call.Method)
 	}
-	if got := call.Form["caption"]; got != "Spinning..." {
-		t.Fatalf("caption = %q, want Spinning...", got)
+	if got := call.Form["caption"]; got != `Result: <span class="tg-spoiler">Alice</span>` {
+		t.Fatalf("caption = %q, want result spoiler", got)
 	}
-	if strings.Contains(call.Form["caption"], "Alice") {
-		t.Fatalf("caption spoils winner: %q", call.Form["caption"])
+	if got := call.Form["parse_mode"]; got != "HTML" {
+		t.Fatalf("parse_mode = %q, want HTML", got)
 	}
 	if got := call.Form["duration"]; got != "10" {
 		t.Fatalf("duration = %q, want 10", got)
@@ -518,8 +423,24 @@ func TestWheelOfNamesBeta_SendsAnimationWithoutSpoilingCaption(t *testing.T) {
 	}
 }
 
-func TestWheelOfNamesBeta_UsesRemoteAPIWhenConfigured(t *testing.T) {
-	var got wheelBetaAPIRequest
+func TestWheelOfNames_ResultCaptionEscapesHTML(t *testing.T) {
+	got := wheelResultCaption(`<Alice & Bob>`)
+	want := `Result: <span class="tg-spoiler">&lt;Alice &amp; Bob&gt;</span>`
+	if got != want {
+		t.Fatalf("wheelResultCaption() = %q, want %q", got, want)
+	}
+}
+
+func TestWheelOfNames_ResultCaptionTruncatesLongResult(t *testing.T) {
+	got := wheelResultCaption(strings.Repeat("a", wheelResultCaptionMaxRunes+1))
+	want := `Result: <span class="tg-spoiler">` + strings.Repeat("a", wheelResultCaptionMaxRunes) + `...</span>`
+	if got != want {
+		t.Fatalf("wheelResultCaption() length = %d, want truncated caption length %d", len(got), len(want))
+	}
+}
+
+func TestWheelOfNames_UsesRemoteAPIWhenConfigured(t *testing.T) {
+	var got wheelAPIRequest
 	var gotAuthorization string
 	var calls int
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -535,11 +456,11 @@ func TestWheelOfNamesBeta_UsesRemoteAPIWhenConfigured(t *testing.T) {
 		_, _ = w.Write([]byte("GIF89a-remote"))
 	}))
 	defer server.Close()
-	t.Setenv(wheelOfNamesBetaAPIURLEnv, server.URL+"/api/gif")
-	t.Setenv(wheelOfNamesBetaAPITokenEnv, "remote-token")
+	t.Setenv(wheelOfNamesAPIURLEnv, server.URL+"/api/gif")
+	t.Setenv(wheelOfNamesAPITokenEnv, "remote-token")
 
 	rb, _ := installMisc(t, 999)
-	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(7, "/wheelofnamesbeta Alice, Bob, Carol"))
+	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(7, "/wheelofnames Alice, Bob, Carol"))
 
 	if calls != 1 {
 		t.Fatalf("remote calls = %d, want 1", calls)
@@ -553,17 +474,18 @@ func TestWheelOfNamesBeta_UsesRemoteAPIWhenConfigured(t *testing.T) {
 	if got.WinnerIndex < 0 || got.WinnerIndex >= len(got.Options) {
 		t.Fatalf("winnerIndex = %d, want in range", got.WinnerIndex)
 	}
-	assertWheelBetaRemoteDefaults(t, got)
+	assertWheelRemoteDefaults(t, got)
 
 	call := rb.LastSent()
 	if call.Method != "sendAnimation" {
 		t.Fatalf("method = %q, want sendAnimation", call.Method)
 	}
-	if got := call.Form["caption"]; got != "Spinning..." {
-		t.Fatalf("caption = %q, want Spinning...", got)
+	wantCaption := wheelResultCaption(got.Options[got.WinnerIndex])
+	if got := call.Form["caption"]; got != wantCaption {
+		t.Fatalf("caption = %q, want %q", got, wantCaption)
 	}
-	if strings.Contains(call.Form["caption"], got.Options[got.WinnerIndex]) {
-		t.Fatalf("caption spoils winner: %q", call.Form["caption"])
+	if got := call.Form["parse_mode"]; got != "HTML" {
+		t.Fatalf("parse_mode = %q, want HTML", got)
 	}
 	if got := call.Form["duration"]; got != "7" {
 		t.Fatalf("duration = %q, want 7", got)
@@ -576,18 +498,18 @@ func TestWheelOfNamesBeta_UsesRemoteAPIWhenConfigured(t *testing.T) {
 	}
 }
 
-func TestWheelOfNamesBeta_RemoteFailureFallsBackToLocalAnimation(t *testing.T) {
+func TestWheelOfNames_RemoteFailureFallsBackToLocalAnimation(t *testing.T) {
 	var calls int
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls++
 		http.Error(w, "no", http.StatusInternalServerError)
 	}))
 	defer server.Close()
-	t.Setenv(wheelOfNamesBetaAPIURLEnv, server.URL+"/api/gif")
-	t.Setenv(wheelOfNamesBetaAPITokenEnv, "remote-token")
+	t.Setenv(wheelOfNamesAPIURLEnv, server.URL+"/api/gif")
+	t.Setenv(wheelOfNamesAPITokenEnv, "remote-token")
 
 	rb, _ := installMisc(t, 999)
-	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(7, "/wheelofnamesbeta Alice"))
+	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(7, "/wheelofnames Alice"))
 
 	if calls != 1 {
 		t.Fatalf("remote calls = %d, want 1", calls)
@@ -596,11 +518,11 @@ func TestWheelOfNamesBeta_RemoteFailureFallsBackToLocalAnimation(t *testing.T) {
 	if call.Method != "sendAnimation" {
 		t.Fatalf("method = %q, want sendAnimation", call.Method)
 	}
-	if got := call.Form["caption"]; got != "Spinning..." {
-		t.Fatalf("caption = %q, want Spinning...", got)
+	if got := call.Form["caption"]; got != `Result: <span class="tg-spoiler">Alice</span>` {
+		t.Fatalf("caption = %q, want result spoiler", got)
 	}
-	if strings.Contains(call.Form["caption"], "Alice") {
-		t.Fatalf("caption spoils winner: %q", call.Form["caption"])
+	if got := call.Form["parse_mode"]; got != "HTML" {
+		t.Fatalf("parse_mode = %q, want HTML", got)
 	}
 	if got := call.Form["duration"]; got != "10" {
 		t.Fatalf("duration = %q, want local duration 10", got)
@@ -613,9 +535,9 @@ func TestWheelOfNamesBeta_RemoteFailureFallsBackToLocalAnimation(t *testing.T) {
 	}
 }
 
-func TestWheelOfNamesBeta_ForwardsMessageThreadID(t *testing.T) {
+func TestWheelOfNames_ForwardsMessageThreadID(t *testing.T) {
 	rb, _ := installMisc(t, 999)
-	update := testutil.NewSupergroupMessage(-100, 7, "/wheelofnamesbeta Alice")
+	update := testutil.NewSupergroupMessage(-100, 7, "/wheelofnames Alice")
 	update.Message.MessageThreadID = 42
 	rb.Bot.ProcessUpdate(context.Background(), update)
 
