@@ -702,7 +702,7 @@ func TestTrongTruongHopVNG_DefaultText(t *testing.T) {
 		&models.User{ID: 7, Username: "boss", FirstName: "Boss"}))
 
 	got := rb.LastSent().Text()
-	want := fmt.Sprintf(trongTruongHopVNGTemplate, "@boss", "@boss")
+	want := fmt.Sprintf(trongTruongHopTemplate, vngTarget, "@boss", "@boss")
 	if got != want {
 		t.Errorf("reply = %q, want %q", got, want)
 	}
@@ -714,7 +714,7 @@ func TestTTHVNGAlias_DefaultText(t *testing.T) {
 		&models.User{ID: 7, Username: "boss", FirstName: "Boss"}))
 
 	got := rb.LastSent().Text()
-	want := fmt.Sprintf(trongTruongHopVNGTemplate, "@boss", "@boss")
+	want := fmt.Sprintf(trongTruongHopTemplate, vngTarget, "@boss", "@boss")
 	if got != want {
 		t.Errorf("reply = %q, want %q", got, want)
 	}
