@@ -127,25 +127,28 @@ export const WheelComposition = (props) => {
                     color: getContrastingTextColor(color),
                     display: 'flex',
                     fontSize: label.fontSize,
-                    fontWeight: 400,
-                    height: label.fontSize * 1.35,
+                    flexDirection: 'column',
+                    fontWeight: 700,
+                    height: label.height,
                     justifyContent: 'center',
                     left: label.x,
                     letterSpacing: 0,
                     lineHeight: 1,
                     overflow: 'hidden',
-                    padding: `0 ${Math.max(4, radius * 0.02)}px`,
+                    padding: `0 ${label.horizontalPadding}px`,
                     position: 'absolute',
                     textAlign: 'center',
-                    textOverflow: 'ellipsis',
                     top: label.y,
                     transform: `translate(-50%, -50%) rotate(${label.rotation}deg)`,
                     transformOrigin: '50% 50%',
-                    whiteSpace: 'nowrap',
                     width: label.width,
                   }}
                 >
-                  {option}
+                  {label.lines.map((line, lineIndex) => (
+                    <div key={`${line}-${lineIndex}`} style={{flex: '0 0 auto', whiteSpace: 'nowrap'}}>
+                      {line}
+                    </div>
+                  ))}
                 </div>
               </React.Fragment>
             );
