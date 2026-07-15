@@ -6,4 +6,5 @@ coverage/
 !.env.example
 .tmp/
 fixtures/*.gif
+/wheel.gif
 *.log

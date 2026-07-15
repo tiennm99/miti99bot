@@ -33,22 +33,73 @@ Response is `image/gif` with winner metadata headers:
 
 ## Local
 
+Install dependencies and Chromium once:
+
 ```sh
 pnpm install
+pnpm browser:ensure
+```
+
+Start the local API:
+
+```sh
 pnpm dev
 ```
 
-Smoke render:
+### Generate GIF files locally
+
+Generate the quick smoke fixture at the git-ignored path
+`fixtures/smoke.gif`:
 
 ```sh
-pnpm browser:ensure
 pnpm render:smoke
-pnpm api:smoke
 ```
 
-Quality gates:
+Generate the complete fixture set at `fixtures/smoke.gif`,
+`fixtures/vietnamese.gif`, and `fixtures/sixteen-options.gif`:
 
 ```sh
+pnpm render:fixtures
+```
+
+For a custom GIF, keep `pnpm dev` running in one terminal, then run one of
+these commands in another.
+
+PowerShell:
+
+```powershell
+$body = @{
+  options = @("Chiều nay uống CraneTea", "Chiều nay uống CraneTea", "Chiều nay uống CraneTea", "Chiều nay uống CraneTea")
+  winnerIndex = 1
+  durationMs = 6500
+  holdMs = 1200
+  fps = 15
+  size = 512
+  theme = "classic"
+} | ConvertTo-Json
+
+Invoke-WebRequest -Method Post -Uri http://localhost:3000/api/gif -ContentType "application/json" -Body $body -OutFile wheel.gif
+```
+
+macOS, Linux, or Git Bash:
+
+```sh
+curl --request POST http://localhost:3000/api/gif \
+  --header "Content-Type: application/json" \
+  --output wheel.gif \
+  --data '{"options":["Chiều nay uống CraneTea","Chiều nay uống CraneTea","Chiều nay uống CraneTea","Chiều nay uống CraneTea"],"winnerIndex":1,"durationMs":6500,"holdMs":1200,"fps":15,"size":512,"theme":"classic"}'
+```
+
+The local API does not need an authorization header by default. If you
+configure `API_TOKEN`, add `--header "Authorization: Bearer <token>"` to the
+request. Generated GIF files are git-ignored and safe to delete.
+
+### Verify
+
+Run the API smoke test and quality gates:
+
+```sh
+pnpm api:smoke
 pnpm lint
 pnpm typecheck
 pnpm test
