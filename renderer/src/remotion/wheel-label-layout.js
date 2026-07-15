@@ -21,6 +21,7 @@
 
 const minLabelWidth = 24;
 const minLabelFontSize = 8;
+const preferredLabelFontSize = 14;
 
 /**
  * @param {string} text
@@ -187,7 +188,7 @@ export const getRadialLabelLayout = ({center, radius, hubRadius, centerDegrees, 
   const contentWidth = Math.max(1, track.width - horizontalPadding * 2);
   const singleLine = getLabelLines(text, baseFontSize, contentWidth, 1);
   const singleLineFontSize = getLabelFontSize(radius, optionCount, singleLine[0], contentWidth);
-  const shouldWrap = maxLines > 1 && singleLineFontSize === minLabelFontSize;
+  const shouldWrap = maxLines > 1 && singleLineFontSize < preferredLabelFontSize;
   const lines = shouldWrap ? getLabelLines(text, baseFontSize, contentWidth, maxLines) : singleLine;
   const longestLine = lines.reduce(
     (longest, line) =>

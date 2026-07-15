@@ -9,6 +9,26 @@ import {
 } from '../src/remotion/wheel-label-layout.js';
 
 describe('wheel label layout', () => {
+  const readableExample = 'Chiều nay uống CraneTea';
+  const supportedSize = 512;
+  const supportedRadius = supportedSize * 0.41;
+  const supportedHubRadius = supportedSize * 0.09;
+
+  /**
+   * @param {object} [overrides]
+   * @param {number} [overrides.optionCount]
+   * @param {string} [overrides.text]
+   */
+  const get512Layout = ({optionCount = 8, text = readableExample} = {}) =>
+    getRadialLabelLayout({
+      center: supportedSize / 2,
+      radius: supportedRadius,
+      hubRadius: supportedHubRadius,
+      centerDegrees: 0,
+      optionCount,
+      text,
+    });
+
   test('centers radial label tracks on the slice center angle', () => {
     const center = 256;
     const radius = 210;
@@ -112,6 +132,59 @@ describe('wheel label layout', () => {
       getLabelFontSize(210, 8, 'a much longer wheel entry label', layout.contentWidth),
     );
     expect(layout.height).toBeLessThanOrEqual((2 * Math.PI * getLabelTrack(210, 46).midRadius) / 8);
+  });
+
+  test.each([2, 8, 12, 16])(
+    'wraps the Vietnamese readability example when geometry permits at %i options',
+    (optionCount) => {
+      const layout = get512Layout({optionCount});
+      const availableHeight =
+        (2 * Math.PI * getLabelTrack(supportedRadius, supportedHubRadius).midRadius) / optionCount;
+
+      expect(layout.lines.length).toBeGreaterThanOrEqual(2);
+      expect(layout.lines.join(' ')).toBe(readableExample);
+      expect(layout.fontSize).toBeGreaterThanOrEqual(14);
+      expect(layout.height).toBeLessThanOrEqual(availableHeight);
+      expect(layout.lines.every((line) => estimateTextWidth(line, layout.fontSize) <= layout.contentWidth)).toBe(true);
+    },
+  );
+
+  test.each([
+    [9, 'WWWWWWWWWWWWWWWW'],
+    [10, 'WWWWWWWWWWWWWW'],
+    [11, 'WWWWWWWWWWWWW'],
+    [12, 'WWWWWWWWWWWW'],
+    [13, 'WWWWWWWWWWW'],
+  ])('wraps an unbroken token whose one-line fit is %ipx', (oneLineFontSize, text) => {
+    const layout = get512Layout({text});
+    const track = getLabelTrack(supportedRadius, supportedHubRadius);
+    const contentWidth = track.width - Math.max(4, supportedRadius * 0.02) * 2;
+
+    expect(getLabelFontSize(supportedRadius, 8, text, contentWidth)).toBe(oneLineFontSize);
+    expect(layout.lines.length).toBeGreaterThanOrEqual(2);
+    expect(layout.lines.join('')).toBe(text);
+    expect(layout.fontSize).toBeGreaterThanOrEqual(14);
+    expect(layout.lines.every((line) => estimateTextWidth(line, layout.fontSize) <= layout.contentWidth)).toBe(true);
+  });
+
+  test('keeps an exactly 14px one-line fit on one line', () => {
+    const text = 'WWWWWWWWWW';
+    const layout = get512Layout({text});
+
+    expect(getLabelFontSize(supportedRadius, 8, text, layout.contentWidth)).toBe(14);
+    expect(layout.lines).toEqual([text]);
+    expect(layout.fontSize).toBe(14);
+  });
+
+  test.each([24, 32])('keeps the complete Vietnamese example bounded on one line at %i options', (optionCount) => {
+    const layout = get512Layout({optionCount});
+    const availableHeight =
+      (2 * Math.PI * getLabelTrack(supportedRadius, supportedHubRadius).midRadius) / optionCount;
+
+    expect(layout.lines).toEqual([readableExample]);
+    expect(layout.fontSize).toBeLessThan(14);
+    expect(layout.height).toBeLessThanOrEqual(availableHeight);
+    expect(estimateTextWidth(layout.lines[0] ?? '', layout.fontSize)).toBeLessThanOrEqual(layout.contentWidth);
   });
 
   test('keeps supported dense layouts to one bounded line', () => {
