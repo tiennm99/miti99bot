@@ -62,37 +62,33 @@ Generate the complete fixture set at `fixtures/smoke.gif`,
 pnpm render:fixtures
 ```
 
-For a custom GIF, keep `pnpm dev` running in one terminal, then run one of
-these commands in another.
-
-PowerShell:
+Render a custom GIF directly without starting the API server:
 
 ```powershell
-$body = @{
-  options = @("Chiều nay uống CraneTea", "Chiều nay uống CraneTea", "Chiều nay uống CraneTea", "Chiều nay uống CraneTea")
-  winnerIndex = 1
-  durationMs = 6500
-  holdMs = 1200
-  fps = 15
-  size = 512
-  theme = "classic"
-} | ConvertTo-Json
-
-Invoke-WebRequest -Method Post -Uri http://localhost:3000/api/gif -ContentType "application/json" -Body $body -OutFile wheel.gif
+pnpm render:local -- `
+  --output wheel.gif `
+  --option "Chiều nay uống CraneTea" `
+  --option "Chiều nay uống CraneTea" `
+  --option "Cà phê" `
+  --winner 1
 ```
 
 macOS, Linux, or Git Bash:
 
 ```sh
-curl --request POST http://localhost:3000/api/gif \
-  --header "Content-Type: application/json" \
+pnpm render:local -- \
   --output wheel.gif \
-  --data '{"options":["Chiều nay uống CraneTea","Chiều nay uống CraneTea","Chiều nay uống CraneTea","Chiều nay uống CraneTea"],"winnerIndex":1,"durationMs":6500,"holdMs":1200,"fps":15,"size":512,"theme":"classic"}'
+  --option "Chiều nay uống CraneTea" \
+  --option "Chiều nay uống CraneTea" \
+  --option "Cà phê" \
+  --winner 1
 ```
 
-The local API does not need an authorization header by default. If you
-configure `API_TOKEN`, add `--header "Authorization: Bearer <token>"` to the
-request. Generated GIF files are git-ignored and safe to delete.
+`--winner` is a zero-based index and is random when omitted. Run
+`pnpm render:local -- --help` for duration, hold, FPS, size, theme, and timeout
+options. The documented root `wheel.gif` and `fixtures/*.gif` outputs are
+git-ignored and safe to delete; custom output paths may need their own ignore
+rule.
 
 ### Verify
 

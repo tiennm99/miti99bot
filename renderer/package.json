@@ -14,6 +14,7 @@
     "test": "vitest run",
     "browser:ensure": "node scripts/ensure-browser.js",
     "api:smoke": "node scripts/api-smoke.js",
+    "render:local": "node scripts/render-local.js",
     "render:smoke": "node scripts/render-fixtures.js --smoke",
     "render:fixtures": "node scripts/render-fixtures.js"
   },
