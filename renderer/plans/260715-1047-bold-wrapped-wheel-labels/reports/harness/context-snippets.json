@@ -1,0 +1,27 @@
+{
+  "skill": "ck:code-review",
+  "mode": "review",
+  "task": "Independent re-review of the short-label wrapping fix",
+  "acceptanceCriteria": [
+    "labels use bold font weight",
+    "long labels wrap deterministically into balanced lines",
+    "font sizing uses the longest rendered line",
+    "short labels remain one line at every supported output size",
+    "multi-line content is clipped within a bounded label area",
+    "API schemas, routes, themes, slices, and radial geometry remain unchanged"
+  ],
+  "touchpoints": [
+    "src/remotion/wheel-label-layout.js",
+    "src/remotion/WheelComposition.jsx",
+    "test/wheel-label-layout.test.js"
+  ],
+  "publicContracts": [
+    "POST /api/gif request and response contract remains unchanged",
+    "getRadialLabelLayout supplies deterministic presentation metadata to the Remotion composition"
+  ],
+  "blastRadius": [
+    "wheel label line breaking, font sizing, padding, and clipping",
+    "Remotion label rendering at 384px, 480px, and 512px with 2-32 options"
+  ],
+  "scoutSummary": "The fix addresses the layout decision itself: it first computes a fitted one-line size and wraps only when that size reaches the existing 8px floor and slice height permits multiple lines. The padded content width is used for measurement while the unchanged track width remains the border-box width. No character-specific patch, API change, theme change, slice change, or radial-position change was found."
+}

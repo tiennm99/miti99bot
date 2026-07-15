@@ -1,0 +1,16 @@
+{
+  "highRisk": false,
+  "reasons": [
+    "presentation-only Remotion label layout change",
+    "the change retains the existing 8px font floor, three-line cap, track coordinates, slice geometry, contrast helper, and API contracts",
+    "candidate generation is bounded by the configured 40-character option limit and at most three lines"
+  ],
+  "autoStopRequired": false,
+  "humanApproved": true,
+  "largeDiff": false,
+  "sideEffects": [
+    "labels that cannot fit above the 8px floor may now wrap when slice height permits",
+    "label padding is now included inside the existing radial-track border box instead of increasing its rendered width",
+    "dense 32-option layouts remain one clipped line because their available slice height cannot support wrapping"
+  ]
+}
