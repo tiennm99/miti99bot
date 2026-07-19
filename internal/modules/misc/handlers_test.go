@@ -418,6 +418,36 @@ func TestTrongTruongHopVNG_NoUsernameFallsBackToDisplayNameMention(t *testing.T)
 	}
 }
 
+func TestFF_DeniedToNonAdmin(t *testing.T) {
+	rb, _ := installMisc(t, 999)
+
+	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(7, "/ff"))
+	if calls := rb.Sent(); len(calls) != 0 {
+		t.Errorf("non-admin /ff replied: %+v", calls)
+	}
+}
+
+func TestFF_RepliesTemplate(t *testing.T) {
+	rb, _ := installMisc(t, 999)
+
+	// Args are ignored — the reply is the same canned rant every time.
+	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(999, "/ff ignored arg"))
+	if got := rb.LastSent().Text(); got != ffTemplate {
+		t.Errorf("/ff reply = %q, want the ff template", got)
+	}
+}
+
+// The template signs off with an uppercase /FF, so tapping that link must reach
+// the same handler the lowercase form does.
+func TestFF_UppercaseFormDispatches(t *testing.T) {
+	rb, _ := installMisc(t, 999)
+
+	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(999, "/FF"))
+	if got := rb.LastSent().Text(); got != ffTemplate {
+		t.Errorf("/FF reply = %q, want the ff template", got)
+	}
+}
+
 func TestTheAnswer_OwnerOnly(t *testing.T) {
 	rb, _ := installMisc(t, 999)
 
