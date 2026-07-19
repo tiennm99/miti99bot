@@ -121,6 +121,12 @@ func logCommand(name string, update *models.Update, err error) {
 //
 // Telegram routes /cmd@otherbot only to otherbot, so an @suffix present in
 // the entity addresses *this* bot — no need to verify against our username.
+//
+// Matching is case-insensitive so /PING and /Ping reach the same handler as
+// /ping — mobile keyboards autocapitalize, and a typed command that silently
+// does nothing reads as the bot being broken. Registered names are lowercase by
+// validateCommand, so folding case can never make two commands collide, and the
+// canonical Command.Name still drives stats, metrics, hooks, and logs.
 func matchCommand(name string, update *models.Update) bool {
 	if update == nil || update.Message == nil {
 		return false
@@ -141,7 +147,7 @@ func matchCommand(name string, update *models.Update) bool {
 		if i := strings.IndexByte(tok, '@'); i >= 0 {
 			tok = tok[:i]
 		}
-		if tok == name {
+		if strings.EqualFold(tok, name) {
 			return true
 		}
 	}
