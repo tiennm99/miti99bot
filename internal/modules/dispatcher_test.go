@@ -117,6 +117,30 @@ func TestMatchCommand(t *testing.T) {
 			expect: true,
 		},
 		{
+			name:   "uppercase command matches",
+			want:   "help",
+			update: mkUpdate("/HELP", cmd(0, 5)),
+			expect: true,
+		},
+		{
+			name:   "mixed-case command matches",
+			want:   "help",
+			update: mkUpdate("/Help", cmd(0, 5)),
+			expect: true,
+		},
+		{
+			name:   "uppercase command with botname matches",
+			want:   "help",
+			update: mkUpdate("/HELP@miti99bot", cmd(0, 15)),
+			expect: true,
+		},
+		{
+			name:   "case folding does not match a different command",
+			want:   "help",
+			update: mkUpdate("/INFO", cmd(0, 5)),
+			expect: false,
+		},
+		{
 			name:   "nil update",
 			want:   "help",
 			update: nil,
