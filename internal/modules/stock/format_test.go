@@ -43,6 +43,23 @@ func TestFormatStock(t *testing.T) {
 	}
 }
 
+func TestFormatShareQuantity(t *testing.T) {
+	cases := []struct {
+		in   int64
+		want string
+	}{
+		{0, "0"},
+		{999, "999"},
+		{1000, "1.000"},
+		{9_007_199_254_740_993, "9.007.199.254.740.993"},
+	}
+	for _, c := range cases {
+		if got := formatShareQuantity(c.in); got != c.want {
+			t.Errorf("formatShareQuantity(%d): got %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
 func TestFormatPnL(t *testing.T) {
 	cases := []struct {
 		current, invested float64

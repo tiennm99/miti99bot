@@ -33,6 +33,29 @@ func FormatStock(n float64) string {
 	return strconv.FormatInt(int64(math.Floor(n)), 10)
 }
 
+// formatShareQuantity renders an exact whole-share quantity with Vietnamese
+// dot-thousands separators, without converting the int64 value through float64.
+func formatShareQuantity(n int64) string {
+	raw := strconv.FormatInt(n, 10)
+	digitStart := 0
+	if raw[0] == '-' {
+		digitStart = 1
+	}
+
+	var sb strings.Builder
+	sb.Grow(len(raw) + (len(raw)-digitStart-1)/3)
+	if digitStart == 1 {
+		sb.WriteByte('-')
+	}
+	for i := digitStart; i < len(raw); i++ {
+		if i > digitStart && (len(raw)-i)%3 == 0 {
+			sb.WriteByte('.')
+		}
+		sb.WriteByte(raw[i])
+	}
+	return sb.String()
+}
+
 // FormatPnL renders a signed VND delta + percentage line, e.g.
 // "+1.234 VND (+12.34%)" or "-500.000 VND (-5.00%)". When invested is zero
 // the percentage is reported as 0.00 to avoid division-by-zero.

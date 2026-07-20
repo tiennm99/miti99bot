@@ -11,17 +11,17 @@ import (
 )
 
 func TestInitStore_MongoCreatesIndexes(t *testing.T) {
-	ctx, statsColl := setupMongoStatsTest(t)
+	ctx, statsColl, systemColl := setupMongoStatsTest(t)
 
 	rawStatsColl, ok := storage.MongoCollection(statsColl)
 	if !ok {
 		t.Fatal("stats collection is not Mongo-backed")
 	}
 
-	if err := InitStore(ctx, statsColl); err != nil {
+	if err := InitStore(ctx, statsColl, systemColl); err != nil {
 		t.Fatalf("InitStore: %v", err)
 	}
-	if err := InitStore(ctx, statsColl); err != nil {
+	if err := InitStore(ctx, statsColl, systemColl); err != nil {
 		t.Fatalf("InitStore second run: %v", err)
 	}
 
@@ -51,7 +51,25 @@ func TestInitStore_MongoCreatesIndexes(t *testing.T) {
 	}
 }
 
-func setupMongoStatsTest(t *testing.T) (context.Context, storage.Collection) {
+func TestInitStore_MongoMigratesDividendStatsIdempotently(t *testing.T) {
+	ctx, statsColl, systemColl := setupMongoStatsTest(t)
+	docs := storage.Typed[usageEntry](statsColl)
+	seedUsageEntries(t, docs, map[string]usageEntry{
+		usageKey("stock_bonus", 0):          {Cmd: "stock_bonus", N: 4},
+		usageKey("stock_bonus", 7):          {Cmd: "stock_bonus", UserID: 7, Username: "alice", N: 5},
+		usageKey("stock_share_dividend", 7): {Cmd: "stock_share_dividend", UserID: 7, Username: "alice", N: 2},
+	})
+	if err := InitStore(ctx, statsColl, systemColl); err != nil {
+		t.Fatalf("InitStore: %v", err)
+	}
+	if err := InitStore(ctx, statsColl, systemColl); err != nil {
+		t.Fatalf("InitStore second run: %v", err)
+	}
+	assertUsageEntry(t, docs, usageKey("stock_share_dividend", 0), 4, "")
+	assertUsageEntry(t, docs, usageKey("stock_share_dividend", 7), 7, "alice")
+}
+
+func setupMongoStatsTest(t *testing.T) (context.Context, storage.Collection, storage.Collection) {
 	t.Helper()
 
 	uri := os.Getenv("MONGODB_TEST_URL")
@@ -76,5 +94,5 @@ func setupMongoStatsTest(t *testing.T) (context.Context, storage.Collection) {
 	})
 
 	provider := storage.NewMongoProvider(db)
-	return ctx, provider.Collection("stats")
+	return ctx, provider.Collection("stats"), provider.Collection("system")
 }
