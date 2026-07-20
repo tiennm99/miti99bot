@@ -19,6 +19,20 @@ Atlas via long polling and an in-process cron scheduler.
 
 Disable modules with the `MODULES` environment variable.
 
+### Stock dividend commands
+
+Stock dividends are manual portfolio adjustments:
+
+- `/stock_cash_dividend <vnd_per_share> <TICKER>` credits a positive whole-VND amount for each pre-event share held. Example: `/stock_cash_dividend 1500 TCB`.
+- `/stock_share_dividend <owned:new> <TICKER>` adds `floor(pre_event_shares × new / owned)` whole shares. Example: `/stock_share_dividend 100:10 TCB`.
+- `/stock_dividend <vnd_per_share> <owned:new> <TICKER>` applies both parts from the same pre-event holding and saves them together. Example: `/stock_dividend 1500 100:10 TCB`.
+
+Ratios use `owned:new` exactly as written in the issuer notice. Equivalent
+unreduced ratios are accepted and the entered ratio is preserved in the reply.
+The bot validates syntax, tickers, and arithmetic safety, but does not look up
+notices or prevent duplicate calls. The caller is responsible for verifying the
+notice and avoiding accidental repeated adjustments.
+
 ## Layout
 
 ```
