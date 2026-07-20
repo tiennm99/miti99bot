@@ -85,22 +85,6 @@
       "description": "Stop the daily LoL schedule digest"
     },
     {
-      "command": "wc",
-      "description": "World Cup matches for a date; supports dd, dd-mm, dd/mm, ddmm"
-    },
-    {
-      "command": "wc_this_week",
-      "description": "World Cup matches for this week"
-    },
-    {
-      "command": "wc_subscribe",
-      "description": "Get the daily World Cup schedule digest"
-    },
-    {
-      "command": "wc_unsubscribe",
-      "description": "Stop the daily World Cup schedule digest"
-    },
-    {
       "command": "stock_price",
       "description": "Show current VN stock price"
     },

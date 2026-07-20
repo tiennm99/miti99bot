@@ -25,7 +25,6 @@ import (
 	"github.com/tiennm99/miti99bot/internal/modules/stats"
 	"github.com/tiennm99/miti99bot/internal/modules/stock"
 	"github.com/tiennm99/miti99bot/internal/modules/util"
-	"github.com/tiennm99/miti99bot/internal/modules/wc"
 	"github.com/tiennm99/miti99bot/internal/modules/wordle"
 	"github.com/tiennm99/miti99bot/internal/server"
 	"github.com/tiennm99/miti99bot/internal/storage"
@@ -62,7 +61,6 @@ func factories() map[string]modules.Factory {
 		"wordle":           wordle.New,
 		"loldle":           loldle.New,
 		lol.CollectionName: lol.New,
-		"wc":               wc.New,
 		"coin":             coin.New,
 		"gold":             gold.New,
 		"stock":            stock.New,
