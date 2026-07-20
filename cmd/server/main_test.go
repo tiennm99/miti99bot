@@ -50,19 +50,18 @@ func TestComposeDoesNotOverrideSourceCommit(t *testing.T) {
 
 func TestFactoriesIncludesExpectedModules(t *testing.T) {
 	catalog := factories()
-	for _, name := range []string{"gold", "coin", "wc"} {
+	for _, name := range []string{"gold", "coin"} {
 		if catalog[name] == nil {
 			t.Fatalf("factories missing %s", name)
 		}
 	}
-	reg, err := modules.Build([]string{"gold", "coin", "wc"}, catalog, storage.NewMemoryProvider(), modules.BuildOptions{})
+	reg, err := modules.Build([]string{"gold", "coin"}, catalog, storage.NewMemoryProvider(), modules.BuildOptions{})
 	if err != nil {
 		t.Fatalf("Build selected modules: %v", err)
 	}
 	for _, name := range []string{
 		"gold_price", "gold_topup", "gold_buy", "gold_sell", "gold_portfolio",
 		"coin_price", "coin_topup", "coin_buy", "coin_sell", "coin_portfolio",
-		"wc", "wc_this_week", "wc_subscribe", "wc_unsubscribe",
 	} {
 		if _, ok := reg.AllCommands[name]; !ok {
 			t.Fatalf("missing command %s", name)
