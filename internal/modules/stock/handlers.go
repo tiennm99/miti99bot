@@ -249,7 +249,7 @@ func (s *state) handleSell(ctx context.Context, b *bot.Bot, update *models.Updat
 			"\nRemaining: "+FormatVND(p.Currency["VND"]))
 }
 
-func (s *state) handleBonus(ctx context.Context, b *bot.Bot, update *models.Update) error {
+func (s *state) handleCashDividend(ctx context.Context, b *bot.Bot, update *models.Update) error {
 	userID, ok := senderInfo(update)
 	if !ok {
 		return chathelper.Reply(ctx, b, update.Message,
@@ -258,11 +258,11 @@ func (s *state) handleBonus(ctx context.Context, b *bot.Bot, update *models.Upda
 	args := argsAfterCommand(update.Message.Text)
 	if len(args) != 2 {
 		return chathelper.Reply(ctx, b, update.Message,
-			"Usage: /stock_bonus <qty> <TICKER>\nExample: /stock_bonus 200 TCB")
+			"Usage: /stock_cash_dividend <vnd_per_share> <TICKER>\nExample: /stock_cash_dividend 1500 TCB")
 	}
-	qty, err := strconv.ParseInt(args[0], 10, 64)
-	if err != nil || qty <= 0 {
-		return chathelper.Reply(ctx, b, update.Message, "Quantity must be a positive whole number.")
+	vndPerShare, ok := parsePositiveWhole(args[0])
+	if !ok {
+		return chathelper.Reply(ctx, b, update.Message, "VND per share must be a positive whole number.")
 	}
 
 	symbol, err := normalizeStockSymbol(args[1])
@@ -282,18 +282,87 @@ func (s *state) handleBonus(ctx context.Context, b *bot.Bot, update *models.Upda
 		return chathelper.Reply(ctx, b, update.Message, "Could not load portfolio. Try again later.")
 	}
 	held := p.Assets[symbol]
-	if held == 0 {
+	if held <= 0 {
 		return chathelper.Reply(ctx, b, update.Message,
-			"You don't hold any "+symbol+" to receive bonus shares.")
+			"You don't hold any "+symbol+" to receive a cash dividend.")
 	}
-	p.AddAsset(symbol, qty)
+	total, err := cashDividendTotal(held, vndPerShare)
+	if err != nil {
+		return chathelper.Reply(ctx, b, update.Message, "Dividend amount is too large.")
+	}
+	balance, err := checkedVNDBalance(p.Currency["VND"], total)
+	if err != nil {
+		return chathelper.Reply(ctx, b, update.Message, "Dividend amount is too large.")
+	}
+	p.Currency["VND"] = balance
 	if err := SavePortfolio(ctx, s.store, userID, p); err != nil {
 		log.Error("stock_save_portfolio", "user", userID, "err", err)
 		return chathelper.Reply(ctx, b, update.Message, "Could not save portfolio. Try again later.")
 	}
 	return chathelper.Reply(ctx, b, update.Message,
-		"Bonus shares: +"+FormatStock(float64(qty))+" "+symbol+
-			"\nHolding: "+FormatStock(float64(held))+" → "+FormatStock(float64(p.Assets[symbol])))
+		"Cash dividend: "+FormatVND(float64(vndPerShare))+" × "+formatShareQuantity(held)+" "+symbol+
+			" = "+FormatVND(float64(total))+
+			"\nBalance: "+FormatVND(balance))
+}
+
+func (s *state) handleShareDividend(ctx context.Context, b *bot.Bot, update *models.Update) error {
+	userID, ok := senderInfo(update)
+	if !ok {
+		return chathelper.Reply(ctx, b, update.Message,
+			"Cannot identify user — stock only works in private/group chats with a sender.")
+	}
+	args := argsAfterCommand(update.Message.Text)
+	if len(args) != 2 {
+		return chathelper.Reply(ctx, b, update.Message,
+			"Usage: /stock_share_dividend <owned:new> <TICKER>\nExample: /stock_share_dividend 100:10 TCB")
+	}
+	ratio, ok := parseShareRatio(args[0])
+	if !ok {
+		return chathelper.Reply(ctx, b, update.Message, "Share ratio must use positive whole numbers in owned:new form.")
+	}
+
+	symbol, err := normalizeStockSymbol(args[1])
+	if err != nil {
+		if errors.Is(err, ErrUnknownTicker) {
+			return chathelper.Reply(ctx, b, update.Message,
+				"Unknown stock ticker \""+strings.ToUpper(args[1])+"\".")
+		}
+		return chathelper.Reply(ctx, b, update.Message, "Could not parse that ticker. Try again later.")
+	}
+
+	defer s.locks.Acquire(strconv.FormatInt(userID, 10))()
+
+	p, err := LoadPortfolio(ctx, s.store, userID, s.now().UnixMilli())
+	if err != nil {
+		log.Error("stock_load_portfolio", "user", userID, "err", err)
+		return chathelper.Reply(ctx, b, update.Message, "Could not load portfolio. Try again later.")
+	}
+	held := p.Assets[symbol]
+	if held <= 0 {
+		return chathelper.Reply(ctx, b, update.Message,
+			"You don't hold any "+symbol+" to receive a share dividend.")
+	}
+	newShares, err := shareDividendEntitlement(held, ratio)
+	if err != nil {
+		return chathelper.Reply(ctx, b, update.Message, "Share dividend is too large.")
+	}
+	if newShares == 0 {
+		minimum := minimumHoldingForShare(ratio)
+		return chathelper.Reply(ctx, b, update.Message,
+			"Share dividend "+ratio.raw+" rounds down to 0 for "+formatShareQuantity(held)+" "+symbol+". Minimum holding: "+formatShareQuantity(minimum)+".")
+	}
+	finalHolding, err := checkedHoldingAfterDividend(held, newShares)
+	if err != nil {
+		return chathelper.Reply(ctx, b, update.Message, "Share dividend is too large.")
+	}
+	p.Assets[symbol] = finalHolding
+	if err := SavePortfolio(ctx, s.store, userID, p); err != nil {
+		log.Error("stock_save_portfolio", "user", userID, "err", err)
+		return chathelper.Reply(ctx, b, update.Message, "Could not save portfolio. Try again later.")
+	}
+	return chathelper.Reply(ctx, b, update.Message,
+		"Share dividend ("+ratio.raw+"): +"+formatShareQuantity(newShares)+" "+symbol+
+			"\nHolding: "+formatShareQuantity(held)+" → "+formatShareQuantity(finalHolding))
 }
 
 func (s *state) handleDividend(ctx context.Context, b *bot.Bot, update *models.Update) error {
@@ -303,20 +372,23 @@ func (s *state) handleDividend(ctx context.Context, b *bot.Bot, update *models.U
 			"Cannot identify user — stock only works in private/group chats with a sender.")
 	}
 	args := argsAfterCommand(update.Message.Text)
-	if len(args) != 2 {
+	if len(args) != 3 {
 		return chathelper.Reply(ctx, b, update.Message,
-			"Usage: /stock_dividend <amount_per_share> <TICKER>\nExample: /stock_dividend 1500 TCB")
+			"Usage: /stock_dividend <vnd_per_share> <owned:new> <TICKER>\nExample: /stock_dividend 1500 100:10 TCB")
 	}
-	amountPerShare, ok := parsePositiveFinite(args[0])
+	vndPerShare, ok := parsePositiveWhole(args[0])
 	if !ok {
-		return chathelper.Reply(ctx, b, update.Message, "Amount per share must be a positive finite number.")
+		return chathelper.Reply(ctx, b, update.Message, "VND per share must be a positive whole number.")
 	}
-
-	symbol, err := normalizeStockSymbol(args[1])
+	ratio, ok := parseShareRatio(args[1])
+	if !ok {
+		return chathelper.Reply(ctx, b, update.Message, "Share ratio must use positive whole numbers in owned:new form.")
+	}
+	symbol, err := normalizeStockSymbol(args[2])
 	if err != nil {
 		if errors.Is(err, ErrUnknownTicker) {
 			return chathelper.Reply(ctx, b, update.Message,
-				"Unknown stock ticker \""+strings.ToUpper(args[1])+"\".")
+				"Unknown stock ticker \""+strings.ToUpper(args[2])+"\".")
 		}
 		return chathelper.Reply(ctx, b, update.Message, "Could not parse that ticker. Try again later.")
 	}
@@ -329,20 +401,39 @@ func (s *state) handleDividend(ctx context.Context, b *bot.Bot, update *models.U
 		return chathelper.Reply(ctx, b, update.Message, "Could not load portfolio. Try again later.")
 	}
 	held := p.Assets[symbol]
-	if held == 0 {
+	if held <= 0 {
 		return chathelper.Reply(ctx, b, update.Message,
-			"You don't hold any "+symbol+" to receive a cash dividend.")
+			"You don't hold any "+symbol+" to receive a dividend.")
 	}
-	total := amountPerShare * float64(held)
-	p.AddCurrency("VND", total)
+	total, err := cashDividendTotal(held, vndPerShare)
+	if err != nil {
+		return chathelper.Reply(ctx, b, update.Message, "Dividend amount is too large.")
+	}
+	newShares, err := shareDividendEntitlement(held, ratio)
+	if err != nil {
+		return chathelper.Reply(ctx, b, update.Message, "Share dividend is too large.")
+	}
+	finalHolding, err := checkedHoldingAfterDividend(held, newShares)
+	if err != nil {
+		return chathelper.Reply(ctx, b, update.Message, "Share dividend is too large.")
+	}
+	balance, err := checkedVNDBalance(p.Currency["VND"], total)
+	if err != nil {
+		return chathelper.Reply(ctx, b, update.Message, "Dividend amount is too large.")
+	}
+
+	p.Currency["VND"] = balance
+	p.Assets[symbol] = finalHolding
 	if err := SavePortfolio(ctx, s.store, userID, p); err != nil {
 		log.Error("stock_save_portfolio", "user", userID, "err", err)
 		return chathelper.Reply(ctx, b, update.Message, "Could not save portfolio. Try again later.")
 	}
 	return chathelper.Reply(ctx, b, update.Message,
-		"Cash dividend: "+FormatVND(amountPerShare)+" × "+FormatStock(float64(held))+" "+symbol+
-			" = "+FormatVND(total)+
-			"\nRemaining: "+FormatVND(p.Currency["VND"]))
+		"Dividend for "+symbol+" ("+ratio.raw+")"+
+			"\nCash: "+FormatVND(float64(vndPerShare))+" × "+formatShareQuantity(held)+" = "+FormatVND(float64(total))+
+			"\nShares: +"+formatShareQuantity(newShares)+
+			"\nHolding: "+formatShareQuantity(held)+" → "+formatShareQuantity(finalHolding)+
+			"\nBalance: "+FormatVND(balance))
 }
 
 // handleStats fetches current prices for held tickers and renders the

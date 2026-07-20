@@ -8,6 +8,8 @@ import (
 	"github.com/go-telegram/bot/models"
 
 	"github.com/tiennm99/miti99bot/internal/modules"
+	"github.com/tiennm99/miti99bot/internal/modules/stock"
+	"github.com/tiennm99/miti99bot/internal/storage"
 	"github.com/tiennm99/miti99bot/internal/testutil"
 )
 
@@ -43,6 +45,28 @@ func TestBotCommandMenu_UsesLoadedPublicCommandsInModuleOrder(t *testing.T) {
 		if got[i] != want[i] {
 			t.Fatalf("commands[%d] = %+v, want %+v", i, got[i], want[i])
 		}
+	}
+}
+
+func TestBotCommandMenu_StockDividendContracts(t *testing.T) {
+	mod := stock.New(modules.Deps{Store: storage.NewMemoryProvider().Collection("stock")})
+	mod.Name = "stock"
+	got := botCommandMenu(&modules.Registry{Modules: []modules.Module{mod}})
+
+	commands := make(map[string]string, len(got))
+	for _, command := range got {
+		commands[command.Command] = command.Description
+		if len(command.Description) > 256 {
+			t.Fatalf("description for %s exceeds Telegram limit", command.Command)
+		}
+	}
+	for _, name := range []string{"stock_cash_dividend", "stock_share_dividend", "stock_dividend"} {
+		if commands[name] == "" {
+			t.Fatalf("stock menu missing %s: %v", name, commands)
+		}
+	}
+	if _, exists := commands["stock_bonus"]; exists {
+		t.Fatalf("stock_bonus remains in public menu: %v", commands)
 	}
 }
 
