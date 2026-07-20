@@ -101,12 +101,16 @@
       "description": "Sell VN stock back to VND"
     },
     {
-      "command": "stock_bonus",
-      "description": "Record bonus shares"
+      "command": "stock_cash_dividend",
+      "description": "Record cash dividend (VND/share TICKER)"
+    },
+    {
+      "command": "stock_share_dividend",
+      "description": "Record share dividend (owned:new TICKER)"
     },
     {
       "command": "stock_dividend",
-      "description": "Record cash dividend per share"
+      "description": "Record cash and share dividend"
     },
     {
       "command": "stock_portfolio",
