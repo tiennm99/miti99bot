@@ -2,6 +2,7 @@ package chathelper
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -265,6 +266,15 @@ func TestWinRate(t *testing.T) {
 		got := WinRate(tt.wins, tt.played)
 		if got != tt.want {
 			t.Errorf("WinRate(%d,%d) = %d, want %d", tt.wins, tt.played, got, tt.want)
+		}
+	}
+}
+
+func TestMonospaceTableAlignsAndEscapesHTML(t *testing.T) {
+	got := MonospaceTable([]string{"Asset", "Qty"}, [][]string{{"<TCB>", "10"}, {"BTC", "2"}})
+	for _, want := range []string{"<pre>", "Asset", "&lt;TCB&gt;", "BTC    2", "</pre>"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("table missing %q in %q", want, got)
 		}
 	}
 }

@@ -20,7 +20,7 @@ func TestHandleBuyAcceptsCoinFirstOrder(t *testing.T) {
 
 	rb.AssertSentText(t, "Bought 0.0002 BTC")
 	p, _ := LoadPortfolio(ctx, s.store, 7, 999)
-	if p.USD != 990 || p.Assets["BTC"] != 0.0002 {
+	if p.USD != 990 || p.Assets["BTC"].Quantity != 0.0002 {
 		t.Fatalf("after coin-first buy = %+v", p)
 	}
 }

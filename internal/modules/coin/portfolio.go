@@ -1,11 +1,15 @@
 package coin
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
 	"strconv"
+
+	"go.mongodb.org/mongo-driver/v2/bson"
 
 	"github.com/tiennm99/miti99bot/internal/storage"
 )
@@ -13,14 +17,54 @@ import (
 const coinDustEpsilon = 1e-9
 const portfolioUpdateAttempts = 5
 
-// Store is the coin module's typed portfolio store.
 type Store = storage.DocStore[Portfolio]
 
+type AssetPosition struct {
+	Quantity          float64 `json:"quantity" bson:"quantity"`
+	Base              float64 `json:"base" bson:"base"`
+	DividendCheckedAt int64   `json:"dividendCheckedAt" bson:"dividendCheckedAt"`
+	legacyQuantity    bool
+}
+
+func (p *AssetPosition) UnmarshalJSON(data []byte) error {
+	data = bytes.TrimSpace(data)
+	if len(data) > 0 && data[0] == '{' {
+		type plain AssetPosition
+		return json.Unmarshal(data, (*plain)(p))
+	}
+	var quantity float64
+	if err := json.Unmarshal(data, &quantity); err != nil {
+		return fmt.Errorf("coin: decode legacy asset quantity: %w", err)
+	}
+	*p = AssetPosition{Quantity: quantity, legacyQuantity: true}
+	return nil
+}
+
+func (p *AssetPosition) UnmarshalBSONValue(valueType byte, data []byte) error {
+	raw := bson.RawValue{Type: bson.Type(valueType), Value: data}
+	if raw.Type == bson.TypeEmbeddedDocument {
+		type plain AssetPosition
+		return raw.Unmarshal((*plain)(p))
+	}
+	if quantity, ok := raw.DoubleOK(); ok {
+		*p = AssetPosition{Quantity: quantity, legacyQuantity: true}
+		return nil
+	}
+	if quantity, ok := raw.Int64OK(); ok {
+		*p = AssetPosition{Quantity: float64(quantity), legacyQuantity: true}
+		return nil
+	}
+	if quantity, ok := raw.Int32OK(); ok {
+		*p = AssetPosition{Quantity: float64(quantity), legacyQuantity: true}
+		return nil
+	}
+	return fmt.Errorf("coin: unsupported legacy asset BSON type %s", raw.Type)
+}
+
 type Portfolio struct {
-	USD       float64            `json:"usd" bson:"usd"`
-	Assets    map[string]float64 `json:"assets" bson:"assets"`
-	CostBasis map[string]float64 `json:"costBasis" bson:"costBasis"`
-	Meta      PortfolioMeta      `json:"meta" bson:"meta"`
+	USD    float64                  `json:"usd" bson:"usd"`
+	Assets map[string]AssetPosition `json:"assets" bson:"assets"`
+	Meta   PortfolioMeta            `json:"meta" bson:"meta"`
 }
 
 type PortfolioMeta struct {
@@ -29,16 +73,10 @@ type PortfolioMeta struct {
 }
 
 func NewPortfolio(now int64) Portfolio {
-	return Portfolio{
-		Assets:    map[string]float64{},
-		CostBasis: map[string]float64{},
-		Meta:      PortfolioMeta{CreatedAt: now},
-	}
+	return Portfolio{Assets: map[string]AssetPosition{}, Meta: PortfolioMeta{CreatedAt: now}}
 }
 
-func portfolioKey(userID int64) string {
-	return "user:" + strconv.FormatInt(userID, 10)
-}
+func portfolioKey(userID int64) string { return "user:" + strconv.FormatInt(userID, 10) }
 
 func LoadPortfolio(ctx context.Context, store Store, userID int64, now int64) (Portfolio, error) {
 	p, _, err := loadPortfolioForUpdate(ctx, store, portfolioKey(userID), now)
@@ -50,7 +88,7 @@ func LoadPortfolio(ctx context.Context, store Store, userID int64, now int64) (P
 
 func SavePortfolio(ctx context.Context, store Store, userID int64, p Portfolio) error {
 	p.normalize()
-	if err := p.ValidateCostBasis(); err != nil {
+	if err := p.Validate(); err != nil {
 		return fmt.Errorf("coin: save portfolio %d: %w", userID, err)
 	}
 	if err := store.Put(ctx, portfolioKey(userID), p); err != nil {
@@ -70,7 +108,7 @@ func UpdatePortfolio(ctx context.Context, store Store, userID int64, now int64, 
 			return p, err
 		}
 		p.normalize()
-		if err := p.ValidateCostBasis(); err != nil {
+		if err := p.Validate(); err != nil {
 			return Portfolio{}, err
 		}
 		if err := store.PutVersioned(ctx, key, version, p); err == nil {
@@ -86,20 +124,13 @@ func loadPortfolioForUpdate(ctx context.Context, store Store, key string, now in
 	p, version, err := store.Get(ctx, key)
 	switch {
 	case err == nil:
-		if err := p.validateStoredAssetQuantities(); err != nil {
-			return Portfolio{}, 0, err
-		}
-		p.normalize()
 		if p.Assets == nil {
-			p.Assets = map[string]float64{}
-		}
-		if p.CostBasis == nil {
-			p.CostBasis = map[string]float64{}
+			p.Assets = map[string]AssetPosition{}
 		}
 		if p.Meta.CreatedAt == 0 {
 			p.Meta.CreatedAt = now
 		}
-		if err := p.ValidateCostBasis(); err != nil {
+		if err := p.Validate(); err != nil {
 			return Portfolio{}, 0, err
 		}
 		return p, version, nil
@@ -110,10 +141,15 @@ func loadPortfolioForUpdate(ctx context.Context, store Store, key string, now in
 	}
 }
 
-func (p Portfolio) validateStoredAssetQuantities() error {
-	for symbol, qty := range p.Assets {
-		if math.IsNaN(qty) || math.IsInf(qty, 0) || qty < 0 {
-			return fmt.Errorf("coin: %s has invalid quantity", symbol)
+func (p Portfolio) Validate() error {
+	if math.IsNaN(p.USD) || math.IsInf(p.USD, 0) || p.USD < 0 {
+		return fmt.Errorf("coin: invalid USD balance")
+	}
+	for symbol, position := range p.Assets {
+		coin, err := ResolveCoinSymbol(symbol)
+		if err != nil || coin.Symbol != symbol || !isPositiveFinite(position.Quantity) ||
+			!isPositiveFinite(position.Base) || position.DividendCheckedAt <= 0 {
+			return fmt.Errorf("coin: %s has invalid position", symbol)
 		}
 	}
 	return nil
@@ -126,126 +162,60 @@ func (p *Portfolio) AddUSD(amount float64) {
 
 func (p *Portfolio) DeductUSD(amount float64) (ok bool, balance float64) {
 	p.normalize()
-	balance = p.USD
-	if balance+coinDustEpsilon < amount {
-		return false, balance
+	if p.USD+coinDustEpsilon < amount {
+		return false, p.USD
 	}
-	p.USD = balance - amount
-	p.normalize()
+	p.USD = normalizeAmount(p.USD - amount)
 	return true, p.USD
 }
 
-func (p *Portfolio) AddAsset(symbol string, amount float64) {
+func (p *Portfolio) BuyTicker(symbol string, quantity, base float64, now int64) error {
+	if !isPositiveFinite(quantity) || !isPositiveFinite(base) || now <= 0 {
+		return fmt.Errorf("coin: invalid purchase position")
+	}
 	if p.Assets == nil {
-		p.Assets = map[string]float64{}
+		p.Assets = map[string]AssetPosition{}
 	}
-	p.Assets[symbol] += amount
-	p.normalize()
-}
-
-func (p *Portfolio) AddCostBasis(symbol string, amount float64) error {
-	if !isPositiveFinite(amount) {
-		return fmt.Errorf("coin: invalid purchase cost basis")
+	position := p.Assets[symbol]
+	position.Quantity += quantity
+	position.Base += base
+	if !isPositiveFinite(position.Quantity) || !isPositiveFinite(position.Base) {
+		return fmt.Errorf("coin: position overflows")
 	}
-	if p.CostBasis == nil {
-		p.CostBasis = map[string]float64{}
+	if position.DividendCheckedAt == 0 {
+		position.DividendCheckedAt = now
 	}
-	next := p.CostBasis[symbol] + amount
-	if !isPositiveFinite(next) {
-		return fmt.Errorf("coin: cost basis overflows")
-	}
-	p.CostBasis[symbol] = next
+	p.Assets[symbol] = position
 	return nil
 }
 
-func (p *Portfolio) RemoveCostBasis(symbol string, sold, held float64, holdingRemains bool) (float64, error) {
-	if !isPositiveFinite(sold) || !isPositiveFinite(held) || sold > held+coinDustEpsilon {
-		return 0, fmt.Errorf("coin: invalid cost basis quantities")
+func (p *Portfolio) SellTicker(symbol string, quantity float64) (remaining, soldBase float64, ok bool, err error) {
+	position, exists := p.Assets[symbol]
+	if !exists || !isPositiveFinite(quantity) || position.Quantity+coinDustEpsilon < quantity {
+		return position.Quantity, 0, false, nil
 	}
-	basis := p.CostBasis[symbol]
-	if !isPositiveFinite(basis) {
-		return 0, fmt.Errorf("coin: missing cost basis for %s", symbol)
+	remaining = normalizeAmount(position.Quantity - quantity)
+	if remaining == 0 {
+		delete(p.Assets, symbol)
+		return 0, position.Base, true, nil
 	}
-	if !holdingRemains {
-		delete(p.CostBasis, symbol)
-		return basis, nil
+	soldBase = position.Base * (quantity / position.Quantity)
+	position.Quantity = remaining
+	position.Base -= soldBase
+	if !isPositiveFinite(soldBase) || !isPositiveFinite(position.Base) {
+		return 0, 0, false, fmt.Errorf("coin: invalid remaining cost basis")
 	}
-	removed := basis * (sold / held)
-	remaining := basis - removed
-	if !isPositiveFinite(removed) || !isPositiveFinite(remaining) {
-		return 0, fmt.Errorf("coin: invalid remaining cost basis")
-	}
-	p.CostBasis[symbol] = remaining
-	return removed, nil
-}
-
-func (p Portfolio) ValidateCostBasis() error {
-	for symbol, basis := range p.CostBasis {
-		if !isPositiveFinite(basis) {
-			return fmt.Errorf("coin: %s has invalid cost basis", symbol)
-		}
-		if p.Assets[symbol] <= 0 {
-			return fmt.Errorf("coin: %s has cost basis without a holding", symbol)
-		}
-	}
-	for symbol, qty := range p.Assets {
-		if qty <= 0 {
-			continue
-		}
-		if !isPositiveFinite(p.CostBasis[symbol]) {
-			return fmt.Errorf("coin: holding %s has missing or invalid cost basis", symbol)
-		}
-	}
-	return nil
-}
-
-func (p *Portfolio) DeductAsset(symbol string, amount float64) (ok bool, held float64) {
-	if p.Assets == nil {
-		p.Assets = map[string]float64{}
-	}
-	p.normalize()
-	held = p.Assets[symbol]
-	if held+coinDustEpsilon < amount {
-		return false, held
-	}
-	p.Assets[symbol] = held - amount
-	p.normalize()
-	return true, p.Assets[symbol]
+	p.Assets[symbol] = position
+	return remaining, soldBase, true, nil
 }
 
 func (p *Portfolio) normalize() {
 	p.USD = normalizeAmount(p.USD)
 	p.Meta.Invested = normalizeAmount(p.Meta.Invested)
-	if p.Assets == nil {
-		return
-	}
-	for symbol, amount := range p.Assets {
-		amount = normalizeAmount(amount)
-		if amount == 0 {
-			delete(p.Assets, symbol)
-		} else {
-			p.Assets[symbol] = amount
-		}
-	}
-	if p.CostBasis == nil {
-		p.CostBasis = map[string]float64{}
-	}
-	for symbol, basis := range p.CostBasis {
-		if basis == 0 {
-			continue
-		}
-		if math.IsNaN(basis) || math.IsInf(basis, 0) || basis < 0 {
-			continue
-		}
-		p.CostBasis[symbol] = basis
-	}
 }
 
 func normalizeAmount(n float64) float64 {
-	if math.IsNaN(n) || math.IsInf(n, 0) {
-		return 0
-	}
-	if math.Abs(n) < coinDustEpsilon {
+	if math.IsNaN(n) || math.IsInf(n, 0) || math.Abs(n) < coinDustEpsilon {
 		return 0
 	}
 	return n

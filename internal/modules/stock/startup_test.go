@@ -2,139 +2,94 @@ package stock
 
 import (
 	"context"
-	"errors"
 	"testing"
 
 	"github.com/tiennm99/miti99bot/internal/storage"
 	"github.com/tiennm99/miti99bot/internal/systemstate"
 )
 
-type migrationStockPrices struct {
-	quotes map[string]float64
-	err    error
-	calls  int
+type oldStockPortfolio struct {
+	Currency  map[string]float64 `json:"currency" bson:"currency"`
+	Assets    map[string]int64   `json:"assets" bson:"assets"`
+	CostBasis map[string]float64 `json:"costBasis" bson:"costBasis"`
+	Meta      PortfolioMeta      `json:"meta" bson:"meta"`
 }
 
-func (f *migrationStockPrices) FetchPrices(_ context.Context, _ []string) (map[string]float64, error) {
-	f.calls++
-	return f.quotes, f.err
-}
-
-func TestInitStoreMigratesLegacyStockBasisIdempotently(t *testing.T) {
+func TestInitStoreMigratesStockNestedAssetsAndVND(t *testing.T) {
 	ctx := context.Background()
 	provider := storage.NewMemoryProvider()
 	portfolioColl := provider.Collection(CollectionName)
 	systemColl := provider.Collection(systemstate.CollectionName)
-	docs := storage.Typed[Portfolio](portfolioColl)
-	legacy := NewPortfolio(1)
-	legacy.Assets["TCB"] = 100
-	legacy.Assets["FPT"] = 20
-	if err := docs.Put(ctx, "user:7", legacy); err != nil {
+	oldDocs := storage.Typed[oldStockPortfolio](portfolioColl)
+	if err := oldDocs.Put(ctx, "user:7", oldStockPortfolio{
+		Currency: map[string]float64{"VND": 2_000_000},
+		Assets:   map[string]int64{"TCB": 100}, CostBasis: map[string]float64{"TCB": 3_000_000},
+		Meta: PortfolioMeta{CreatedAt: 1},
+	}); err != nil {
 		t.Fatal(err)
 	}
-	prices := &migrationStockPrices{quotes: map[string]float64{"TCB": 30_000, "FPT": 120_000}}
-	if err := InitStore(ctx, portfolioColl, systemColl, prices); err != nil {
+	if err := InitStore(ctx, portfolioColl, systemColl); err != nil {
 		t.Fatalf("InitStore: %v", err)
 	}
-	got, _, err := docs.Get(ctx, "user:7")
+	got, err := LoadPortfolio(ctx, storage.Typed[Portfolio](portfolioColl), 7, 9)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.CostBasis["TCB"] != 3_000_000 || got.CostBasis["FPT"] != 2_400_000 {
-		t.Fatalf("CostBasis = %#v", got.CostBasis)
+	position := got.Assets["TCB"]
+	if got.VND != 2_000_000 || position.Quantity != 100 || position.Base != 3_000_000 || position.DividendCheckedAt <= 0 {
+		t.Fatalf("portfolio=%+v", got)
 	}
-	if err := InitStore(ctx, portfolioColl, systemColl, prices); err != nil {
-		t.Fatalf("InitStore second run: %v", err)
+	if err := InitStore(ctx, portfolioColl, systemColl); err != nil {
+		t.Fatalf("second InitStore: %v", err)
 	}
-	if prices.calls != 1 {
-		t.Fatalf("quote calls = %d, want 1", prices.calls)
-	}
-	marker, _, err := storage.Typed[systemstate.Record](systemColl).Get(ctx, costBasisMigrationKey)
-	if err != nil || marker.Status != "completed" {
-		t.Fatalf("marker = %+v, err=%v", marker, err)
+	marker, exists, err := systemstate.New(systemColl).Get(ctx, assetSchemaMarkerKey)
+	if err != nil || !exists || marker.Status != "completed" || marker.Count != 1 {
+		t.Fatalf("marker=%+v exists=%v err=%v", marker, exists, err)
 	}
 }
 
-func TestInitStoreStockRequiresCompleteQuotesBeforeWriting(t *testing.T) {
+func TestStockMigrationRejectsMissingBasis(t *testing.T) {
 	ctx := context.Background()
 	provider := storage.NewMemoryProvider()
-	portfolioColl := provider.Collection(CollectionName)
-	systemColl := provider.Collection(systemstate.CollectionName)
-	docs := storage.Typed[Portfolio](portfolioColl)
-	legacy := NewPortfolio(1)
-	legacy.Assets["TCB"] = 100
-	if err := docs.Put(ctx, "user:7", legacy); err != nil {
+	coll := provider.Collection(CollectionName)
+	if err := storage.Typed[oldStockPortfolio](coll).Put(ctx, "user:7", oldStockPortfolio{
+		Currency: map[string]float64{"VND": 1}, Assets: map[string]int64{"TCB": 100}, CostBasis: map[string]float64{},
+	}); err != nil {
 		t.Fatal(err)
 	}
-	if err := InitStore(ctx, portfolioColl, systemColl, &migrationStockPrices{quotes: map[string]float64{}}); err == nil {
-		t.Fatal("InitStore succeeded without a complete quote set")
-	}
-	got, _, _ := docs.Get(ctx, "user:7")
-	if len(got.CostBasis) != 0 {
-		t.Fatalf("partial migration wrote basis: %#v", got.CostBasis)
-	}
-	if _, _, err := storage.Typed[systemstate.Record](systemColl).Get(ctx, costBasisMigrationKey); !errors.Is(err, storage.ErrNotFound) {
-		t.Fatalf("marker err = %v, want ErrNotFound", err)
+	if err := InitStore(ctx, coll, provider.Collection(systemstate.CollectionName)); err == nil {
+		t.Fatal("InitStore accepted legacy holding without basis")
 	}
 }
 
-func TestStockWeightedAverageBasis(t *testing.T) {
-	p := NewPortfolio(1)
-	p.AddAsset("TCB", 100)
-	if err := p.AddCostBasis("TCB", 2_000_000); err != nil {
-		t.Fatal(err)
-	}
-	p.AddAsset("TCB", 50)
-	if err := p.AddCostBasis("TCB", 1_500_000); err != nil {
-		t.Fatal(err)
-	}
-	removed, err := p.RemoveCostBasis("TCB", 60, 150)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if removed != 1_400_000 || p.CostBasis["TCB"] != 2_100_000 {
-		t.Fatalf("removed=%v remaining=%v", removed, p.CostBasis["TCB"])
-	}
-}
-
-type conflictOnceStockMigrationStore struct {
-	Store
+type conflictOnceSchemaStore struct {
+	storage.DocStore[legacyPortfolio]
 	conflicted bool
 }
 
-func (s *conflictOnceStockMigrationStore) PutVersioned(ctx context.Context, key string, version int64, p Portfolio) error {
+func (s *conflictOnceSchemaStore) PutVersioned(ctx context.Context, key string, version int64, value legacyPortfolio) error {
 	if !s.conflicted {
 		s.conflicted = true
 		return storage.ErrConflict
 	}
-	return s.Store.PutVersioned(ctx, key, version, p)
+	return s.DocStore.PutVersioned(ctx, key, version, value)
 }
 
-func TestStockMigrationRetriesWriteConflictAndPreservesExistingBasis(t *testing.T) {
+func TestStockSchemaMigrationRetriesConflict(t *testing.T) {
 	ctx := context.Background()
-	base := newStockStore()
-	legacy := NewPortfolio(1)
-	legacy.Assets["TCB"] = 100
-	legacy.Assets["FPT"] = 10
-	legacy.CostBasis["TCB"] = 2_500_000
-	if err := base.Put(ctx, "user:7", legacy); err != nil {
+	provider := storage.NewMemoryProvider()
+	coll := provider.Collection(CollectionName)
+	if err := storage.Typed[oldStockPortfolio](coll).Put(ctx, "user:7", oldStockPortfolio{
+		Currency:  map[string]float64{"VND": 1},
+		Assets:    map[string]int64{"TCB": 10},
+		CostBasis: map[string]float64{"TCB": 300_000},
+	}); err != nil {
 		t.Fatal(err)
 	}
-	store := &conflictOnceStockMigrationStore{Store: base}
-	count, err := migrateLegacyPortfolio(ctx, store, "user:7", map[string]float64{"FPT": 120_000})
-	if err != nil || count != 1 || !store.conflicted {
-		t.Fatalf("count=%d conflicted=%v err=%v", count, store.conflicted, err)
-	}
-	got, _, _ := base.Get(ctx, "user:7")
-	if got.CostBasis["TCB"] != 2_500_000 || got.CostBasis["FPT"] != 1_200_000 {
-		t.Fatalf("CostBasis=%#v", got.CostBasis)
-	}
-}
-
-func TestStockMigrationRejectsNoncanonicalLegacySymbol(t *testing.T) {
-	p := NewPortfolio(1)
-	p.Assets["tcb"] = 100
-	if err := inspectLegacyPortfolio(p, map[string]bool{}); err == nil {
-		t.Fatal("inspectLegacyPortfolio accepted noncanonical symbol")
+	docs := storage.Typed[legacyPortfolio](coll)
+	store := &conflictOnceSchemaStore{DocStore: docs}
+	changed, err := migrateAssetSchema(ctx, store, "user:7", 123)
+	if err != nil || !changed || !store.conflicted {
+		t.Fatalf("changed=%v conflicted=%v err=%v", changed, store.conflicted, err)
 	}
 }
