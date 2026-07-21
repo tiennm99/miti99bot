@@ -47,8 +47,8 @@ jobs:
           go install golang.org/x/vuln/cmd/govulncheck@latest
           govulncheck ./...
 
-      # No DB emulator step: MongoDB integration tests skip gracefully when
-      # MONGODB_TEST_URL is unset. See README.md for the local Docker command.
+      # Testcontainers provisions MongoDB 8 through the runner's Docker daemon;
+      # MONGODB_TEST_URL is intentionally unset so CI exercises that path.
       - name: go test
         env:
           # Quiet test logs so real failures stand out.

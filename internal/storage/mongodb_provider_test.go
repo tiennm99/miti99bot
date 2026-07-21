@@ -29,13 +29,13 @@ func TestMongoProvider_Collection_RejectsInvalidName(t *testing.T) {
 		}
 	}
 	// Valid names pass validation against a real db in
-	// TestMongoProvider_CrossModuleIsolation (gated on MONGODB_TEST_URL); a nil
-	// db here would panic in the driver for a valid name.
+	// TestMongoProvider_CrossModuleIsolation (provided by Testcontainers or
+	// MONGODB_TEST_URL); a nil db here would panic for a valid name.
 }
 
 // TestMongoProvider_CrossModuleIsolation verifies collection-per-module
 // isolation: the same key written through two module stores yields independent
-// values. Gated on MONGODB_TEST_URL.
+// values against Testcontainers or the MONGODB_TEST_URL override.
 func TestMongoProvider_CrossModuleIsolation(t *testing.T) {
 	db, cleanup := mongoLocalSetup(t)
 	defer cleanup()
