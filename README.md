@@ -47,20 +47,35 @@ Stock dividends are manual portfolio adjustments:
 
 Ratios use `owned:new` exactly as written in the issuer notice. Equivalent
 unreduced ratios are accepted and the entered ratio is preserved in the reply.
-The bot validates syntax, tickers, and arithmetic safety, but does not look up
-notices or prevent duplicate calls. The caller is responsible for verifying the
-notice and avoiding accidental repeated adjustments.
+The bot validates syntax, tickers, and arithmetic safety. `/stock_portfolio`
+also checks SSI iBoard for cash and explicit share-dividend events published
+since each holding's last successful check. The portfolio is always sent first;
+each event then appears in its own message with an `Apply dividend` button. If
+no relevant event exists, no additional message is sent.
+
+Suggestions expire after 24 hours and are bound to the Telegram user who
+requested the portfolio, the originating chat, and the event message. Another
+group member cannot apply them. Acceptance calculates from the user's current
+holding at click time, records the provider event atomically with the portfolio
+change, and prevents the same SSI event from being applied twice. SSI iBoard is
+an undocumented, best-effort source; failures do not prevent the portfolio from
+being shown. The bot does not persist dated lots, so suggestions are not legal
+record-date entitlement calculations. Users should verify the issuer notice.
+
+The manual commands remain available, but they do not carry an SSI event ID.
+Applying an event manually and then accepting its button can therefore record
+the same dividend twice; use one method for a given event.
 
 ### Stock and coin P&L accounting
 
 Stock and coin portfolios embed each open position under `assets.<symbol>`.
 Both store `quantity` and total remaining `base`; stock positions additionally
-store `dividendCheckedAt`. Stock cash is stored directly as `vnd`; coin cash
-remains `usd`. Buys add their actual spend. Partial sells remove basis using the
-weighted-average method and report realized P&L; full sells remove the position
-and its basis. Stock share dividends add shares without adding cost, which
-lowers the derived average price, while cash dividends do not change position
-basis.
+store `dividendCheckedAt` and an `openedAt` lifecycle marker. Stock cash is
+stored directly as `vnd`; coin cash remains `usd`. Buys add their actual spend.
+Partial sells remove basis using the weighted-average method and report realized
+P&L; full sells remove the position and its basis. Stock share dividends add
+shares without adding cost, which lowers the derived average price, while cash
+dividends do not change position basis.
 
 `/stock_portfolio` and `/coin_portfolio` show aligned monospace tables with
 average entry price and unrealized P&L for each priced position. `Account P&L` remains the broader
@@ -68,11 +83,20 @@ account value minus all top-ups, so it also reflects realized proceeds,
 dividend cash, and idle cash. If any current quote is unavailable, totals are
 marked partial and numeric Account P&L is withheld.
 
-For stock positions, `dividendCheckedAt` is a future dividend-event cursor. It
-is initialized when a position is first bought, preserved across later buys and
-sells, and advanced when a stock dividend is recorded. A full exit removes the
+For stock positions, `dividendCheckedAt` is the dividend-event discovery cursor.
+It is initialized when a position is first bought, preserved across later buys
+and sells, and advanced after a successful event check or when a manual stock
+dividend is recorded. Failed checks do not advance it. A full exit removes the
 cursor; reopening the position starts it again. Coin positions do not store a
-dividend cursor.
+dividend cursor. Applied SSI event identities are retained in the stock
+portfolio as `appliedDividendEvents.<hashed_provider_event_id> =
+<applied_at_unix_milliseconds>` for idempotency and audit history. SSI queries
+overlap the previous Asia/Saigon calendar day to avoid missing provider rows
+whose publication time has only day precision; pending and applied provider IDs
+suppress duplicate suggestions. The stock-only `assets.<ticker>.openedAt`
+marker identifies the current position lifecycle and invalidates suggestion
+buttons after a full sale and later repurchase. Existing positions adopt this
+behavior without a startup migration.
 
 ## Layout
 
