@@ -52,7 +52,7 @@ func (s *state) handleTopup(ctx context.Context, b *bot.Bot, update *models.Upda
 	}
 	args := argsAfterCommand(update.Message.Text)
 	if len(args) != 1 {
-		return chathelper.Reply(ctx, b, update.Message, "Usage: /gold_topup <vnd_amount>\nExample: /gold_topup 5000000")
+		return chathelper.Reply(ctx, b, update.Message, "Usage: /gold_topup <vnd_amount>\nEg: /gold_topup 5000000")
 	}
 	amount, ok := parsePositiveFinite(args[0])
 	if !ok || !isSafeVND(amount) {
@@ -81,7 +81,7 @@ func (s *state) handleBuy(ctx context.Context, b *bot.Bot, update *models.Update
 	}
 	args := argsAfterCommand(update.Message.Text)
 	if len(args) != 1 {
-		return chathelper.Reply(ctx, b, update.Message, "Usage: /gold_buy <luong>\nExample: /gold_buy 1")
+		return chathelper.Reply(ctx, b, update.Message, "Usage: /gold_buy <luong>\nEg: /gold_buy 1")
 	}
 	qty, ok := parsePositiveFinite(args[0])
 	if !ok {
@@ -128,7 +128,7 @@ func (s *state) handleSell(ctx context.Context, b *bot.Bot, update *models.Updat
 	}
 	args := argsAfterCommand(update.Message.Text)
 	if len(args) != 1 {
-		return chathelper.Reply(ctx, b, update.Message, "Usage: /gold_sell <luong>\nExample: /gold_sell 0.5")
+		return chathelper.Reply(ctx, b, update.Message, "Usage: /gold_sell <luong>\nEg: /gold_sell 0.5")
 	}
 	qty, ok := parsePositiveFinite(args[0])
 	if !ok {

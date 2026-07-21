@@ -90,8 +90,8 @@ func TestHelp_RendersHTML(t *testing.T) {
 	if !strings.Contains(got.Text(), "/help. Show all available commands.") {
 		t.Errorf("/help body missing formatted command summary; got %q", got.Text())
 	}
-	if !strings.Contains(got.Text(), "<pre>/help</pre>") {
-		t.Errorf("/help body missing copyable example; got %q", got.Text())
+	if strings.Contains(got.Text(), "<code>/help</code>") || strings.Contains(got.Text(), "Eg:") {
+		t.Errorf("/help command has no parameters and should not show an example; got %q", got.Text())
 	}
 }
 

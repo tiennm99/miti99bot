@@ -17,13 +17,9 @@ func (c Command) InvocationSentence() string {
 	return withTerminalPunctuation(c.Invocation())
 }
 
-// ExampleInvocation returns the copyable example, defaulting to the command
-// itself for commands that take no parameters.
+// ExampleInvocation returns the explicitly registered copyable example.
 func (c Command) ExampleInvocation() string {
-	if example := strings.TrimSpace(c.Example); example != "" {
-		return example
-	}
-	return "/" + c.Name
+	return strings.TrimSpace(c.Example)
 }
 
 // SummarySentence normalizes a command summary to a sentence without
@@ -42,8 +38,10 @@ func (c Command) TelegramMenuDescription() string {
 		sb.WriteByte(' ')
 	}
 	sb.WriteString(c.SummarySentence())
-	sb.WriteString(" Example: ")
-	sb.WriteString(c.ExampleInvocation())
+	if example := c.ExampleInvocation(); example != "" {
+		sb.WriteString(" Eg: ")
+		sb.WriteString(example)
+	}
 	return sb.String()
 }
 

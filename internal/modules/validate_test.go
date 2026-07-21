@@ -56,8 +56,16 @@ func TestValidateCommand_RejectsInvalidPresentationMetadata(t *testing.T) {
 			command: Command{Name: "ok", Visibility: VisibilityPublic, Description: "d", Example: "/other", Handler: okHandler},
 		},
 		{
+			name:    "example without parameters",
+			command: Command{Name: "ok", Visibility: VisibilityPublic, Description: "d", Example: "/ok", Handler: okHandler},
+		},
+		{
+			name:    "parameters without example",
+			command: Command{Name: "ok", Visibility: VisibilityPublic, Description: "d", Parameters: "<value>", Handler: okHandler},
+		},
+		{
 			name:    "native description too long",
-			command: Command{Name: "ok", Visibility: VisibilityPublic, Description: strings.Repeat("x", 250), Handler: okHandler},
+			command: Command{Name: "ok", Visibility: VisibilityPublic, Description: strings.Repeat("x", 257), Handler: okHandler},
 		},
 	}
 
@@ -75,6 +83,20 @@ func TestValidateCommand_AcceptsLegalNames(t *testing.T) {
 		if err := validateCommand(Command{Name: name, Visibility: VisibilityPublic, Description: "d", Handler: okHandler}); err != nil {
 			t.Errorf("name %q: unexpected error %v", name, err)
 		}
+	}
+}
+
+func TestValidateCommand_AcceptsMatchedParametersAndExample(t *testing.T) {
+	command := Command{
+		Name:        "ok",
+		Visibility:  VisibilityPublic,
+		Description: "Do it",
+		Parameters:  "<value>",
+		Example:     "/ok demo",
+		Handler:     okHandler,
+	}
+	if err := validateCommand(command); err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 

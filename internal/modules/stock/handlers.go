@@ -79,7 +79,7 @@ func parsePositiveFinite(raw string) (float64, bool) {
 func (s *state) handlePrice(ctx context.Context, b *bot.Bot, update *models.Update) error {
 	args := argsAfterCommand(update.Message.Text)
 	if len(args) != 1 {
-		return chathelper.Reply(ctx, b, update.Message, "Usage: /stock_price <ticker>\nExample: /stock_price TCB")
+		return chathelper.Reply(ctx, b, update.Message, "Usage: /stock_price <ticker>\nEg: /stock_price TCB")
 	}
 	symbol, err := normalizeStockSymbol(args[0])
 	if err != nil {
@@ -109,7 +109,7 @@ func (s *state) handleTopup(ctx context.Context, b *bot.Bot, update *models.Upda
 	}
 	args := argsAfterCommand(update.Message.Text)
 	if len(args) != 1 {
-		return chathelper.Reply(ctx, b, update.Message, "Usage: /stock_topup <vnd_amount>\nExample: /stock_topup 5000000")
+		return chathelper.Reply(ctx, b, update.Message, "Usage: /stock_topup <vnd_amount>\nEg: /stock_topup 5000000")
 	}
 	amount, ok := parsePositiveFinite(args[0])
 	if !ok {
@@ -141,7 +141,7 @@ func (s *state) handleBuy(ctx context.Context, b *bot.Bot, update *models.Update
 	}
 	args := argsAfterCommand(update.Message.Text)
 	if len(args) != 2 {
-		return chathelper.Reply(ctx, b, update.Message, "Usage: /stock_buy <quantity> <ticker>\nExample: /stock_buy 100 TCB")
+		return chathelper.Reply(ctx, b, update.Message, "Usage: /stock_buy <quantity> <ticker>\nEg: /stock_buy 100 TCB")
 	}
 	qty, err := strconv.ParseInt(args[0], 10, 64)
 	if err != nil || qty <= 0 {
@@ -198,7 +198,7 @@ func (s *state) handleSell(ctx context.Context, b *bot.Bot, update *models.Updat
 	}
 	args := argsAfterCommand(update.Message.Text)
 	if len(args) != 2 {
-		return chathelper.Reply(ctx, b, update.Message, "Usage: /stock_sell <quantity> <ticker>\nExample: /stock_sell 100 TCB")
+		return chathelper.Reply(ctx, b, update.Message, "Usage: /stock_sell <quantity> <ticker>\nEg: /stock_sell 100 TCB")
 	}
 	qty, err := strconv.ParseInt(args[0], 10, 64)
 	if err != nil || qty <= 0 {
@@ -258,7 +258,7 @@ func (s *state) handleCashDividend(ctx context.Context, b *bot.Bot, update *mode
 	args := argsAfterCommand(update.Message.Text)
 	if len(args) != 2 {
 		return chathelper.Reply(ctx, b, update.Message,
-			"Usage: /stock_cash_dividend <vnd_per_share> <ticker>\nExample: /stock_cash_dividend 1500 TCB")
+			"Usage: /stock_cash_dividend <vnd_per_share> <ticker>\nEg: /stock_cash_dividend 1500 TCB")
 	}
 	vndPerShare, ok := parsePositiveWhole(args[0])
 	if !ok {
@@ -314,7 +314,7 @@ func (s *state) handleShareDividend(ctx context.Context, b *bot.Bot, update *mod
 	args := argsAfterCommand(update.Message.Text)
 	if len(args) != 2 {
 		return chathelper.Reply(ctx, b, update.Message,
-			"Usage: /stock_share_dividend <ratio(owned:new)> <ticker>\nExample: /stock_share_dividend 100:10 TCB")
+			"Usage: /stock_share_dividend <ratio(owned:new)> <ticker>\nEg: /stock_share_dividend 100:10 TCB")
 	}
 	ratio, ok := parseShareRatio(args[0])
 	if !ok {
@@ -374,7 +374,7 @@ func (s *state) handleDividend(ctx context.Context, b *bot.Bot, update *models.U
 	args := argsAfterCommand(update.Message.Text)
 	if len(args) != 3 {
 		return chathelper.Reply(ctx, b, update.Message,
-			"Usage: /stock_dividend <vnd_per_share> <ratio(owned:new)> <ticker>\nExample: /stock_dividend 1500 100:10 TCB")
+			"Usage: /stock_dividend <vnd_per_share> <ratio(owned:new)> <ticker>\nEg: /stock_dividend 1500 100:10 TCB")
 	}
 	vndPerShare, ok := parsePositiveWhole(args[0])
 	if !ok {

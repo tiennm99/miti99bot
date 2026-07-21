@@ -52,7 +52,6 @@ func TestRenderHelp_GroupsByModuleAndSkipsNonPublic(t *testing.T) {
 		"<b>alpha</b>",
 		"<b>beta</b>",
 		"/a_pub. alpha public.",
-		"<pre>/a_pub</pre>",
 		// HTML in user descriptions must be escaped.
 		"beta &lt;i&gt;desc&lt;/i&gt;",
 		// Locks html.EscapeString contract: & → &amp;, " → &#34;.
@@ -70,6 +69,9 @@ func TestRenderHelp_GroupsByModuleAndSkipsNonPublic(t *testing.T) {
 	if strings.Contains(out, "a_prot") {
 		t.Errorf("output leaked protected command\n---output---\n%s", out)
 	}
+	if strings.Contains(out, "<pre>/a_pub</pre>") || strings.Contains(out, "Eg:") {
+		t.Errorf("commands without parameters should not render examples\n---output---\n%s", out)
+	}
 }
 
 func TestRenderHelp_ShowsParametersAndCopyableExample(t *testing.T) {
@@ -78,7 +80,7 @@ func TestRenderHelp_ShowsParametersAndCopyableExample(t *testing.T) {
 		Visibility:  modules.VisibilityPublic,
 		Description: "Buy & hold",
 		Parameters:  "<quantity> <ticker>",
-		Example:     "/buy 100 TCB",
+		Example:     "/buy 100 TCB & hold",
 		Handler:     helpTestNoop,
 	}
 	reg, err := modules.Build(
@@ -95,8 +97,14 @@ func TestRenderHelp_ShowsParametersAndCopyableExample(t *testing.T) {
 	if !strings.Contains(out, "/buy &lt;quantity&gt; &lt;ticker&gt;. Buy &amp; hold.") {
 		t.Fatalf("help missing formatted invocation and summary:\n%s", out)
 	}
-	if !strings.Contains(out, "<pre>/buy 100 TCB</pre>") {
+	if !strings.Contains(out, "<code>/buy 100 TCB &amp; hold</code>") {
 		t.Fatalf("help missing copyable example:\n%s", out)
+	}
+	if !strings.Contains(out, "Buy &amp; hold. Eg: <code>/buy 100 TCB &amp; hold</code>") {
+		t.Fatalf("help missing short example label:\n%s", out)
+	}
+	if strings.Contains(out, "<pre>") {
+		t.Fatalf("help example should use inline code, not a pre block:\n%s", out)
 	}
 }
 

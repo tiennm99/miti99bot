@@ -20,7 +20,7 @@ var (
 func (s *state) handlePrice(ctx context.Context, b *bot.Bot, update *models.Update) error {
 	args := argsAfterCommand(update.Message.Text)
 	if len(args) != 1 {
-		return chathelper.Reply(ctx, b, update.Message, "Usage: /coin_price <coin>\nExample: /coin_price BTC")
+		return chathelper.Reply(ctx, b, update.Message, "Usage: /coin_price <coin>\nEg: /coin_price BTC")
 	}
 	coin, err := ResolveCoinSymbol(args[0])
 	if err != nil {
@@ -42,7 +42,7 @@ func (s *state) handleTopup(ctx context.Context, b *bot.Bot, update *models.Upda
 	}
 	args := argsAfterCommand(update.Message.Text)
 	if len(args) != 1 {
-		return chathelper.Reply(ctx, b, update.Message, "Usage: /coin_topup <usd_amount>\nExample: /coin_topup 1000")
+		return chathelper.Reply(ctx, b, update.Message, "Usage: /coin_topup <usd_amount>\nEg: /coin_topup 1000")
 	}
 	amount, ok := parsePositiveFinite(args[0])
 	if !ok || !isSafeUSD(amount) {
@@ -70,7 +70,7 @@ func (s *state) handleBuy(ctx context.Context, b *bot.Bot, update *models.Update
 	}
 	args := argsAfterCommand(update.Message.Text)
 	if len(args) != 2 {
-		return chathelper.Reply(ctx, b, update.Message, "Usage: /coin_buy <coin> <usd_to_spend>\nSpend USD to buy coin.\nAlternative: /coin_buy <usd_to_spend> <coin>\nExample: /coin_buy BTC 10")
+		return chathelper.Reply(ctx, b, update.Message, "Usage: /coin_buy <coin> <usd_to_spend>\nSpend USD to buy coin.\nAlternative: /coin_buy <usd_to_spend> <coin>\nEg: /coin_buy BTC 10")
 	}
 	parsed, err := parseCoinValueArgs(args, isSafeUSD, errInvalidUSDAmount)
 	if errors.Is(err, errInvalidUSDAmount) {
@@ -124,7 +124,7 @@ func (s *state) handleSell(ctx context.Context, b *bot.Bot, update *models.Updat
 	}
 	args := argsAfterCommand(update.Message.Text)
 	if len(args) != 2 {
-		return chathelper.Reply(ctx, b, update.Message, "Usage: /coin_sell <coin> <usd_to_receive>\nSell enough coin to receive USD.\nAlternative: /coin_sell <usd_to_receive> <coin>\nExample: /coin_sell BTC 10")
+		return chathelper.Reply(ctx, b, update.Message, "Usage: /coin_sell <coin> <usd_to_receive>\nSell enough coin to receive USD.\nAlternative: /coin_sell <usd_to_receive> <coin>\nEg: /coin_sell BTC 10")
 	}
 	parsed, err := parseCoinValueArgs(args, isSafeUSD, errInvalidUSDAmount)
 	if errors.Is(err, errInvalidUSDAmount) {
