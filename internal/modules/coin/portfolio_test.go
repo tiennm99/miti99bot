@@ -6,6 +6,8 @@ import (
 	"math"
 	"testing"
 
+	"go.mongodb.org/mongo-driver/v2/bson"
+
 	"github.com/tiennm99/miti99bot/internal/storage"
 )
 
@@ -16,35 +18,59 @@ func TestLoadPortfolioFirstTimeUser(t *testing.T) {
 	}
 }
 
-func TestCoinBuySellMathAndCursor(t *testing.T) {
+func TestPortfolioDropsLegacyDividendCursorOnBSONRoundTrip(t *testing.T) {
+	legacy, err := bson.Marshal(bson.M{
+		"usd": 100.0,
+		"assets": bson.M{"BTC": bson.M{
+			"quantity":          0.5,
+			"base":              25_000.0,
+			"dividendCheckedAt": int64(123),
+		}},
+		"meta": bson.M{"invested": 100.0, "createdAt": int64(1)},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var portfolio Portfolio
+	if err := bson.Unmarshal(legacy, &portfolio); err != nil {
+		t.Fatal(err)
+	}
+	if err := portfolio.Validate(); err != nil {
+		t.Fatalf("legacy cursor prevented load: %v", err)
+	}
+
+	current, err := bson.Marshal(portfolio)
+	if err != nil {
+		t.Fatal(err)
+	}
+	position := bson.Raw(current).Lookup("assets").Document().Lookup("BTC").Document()
+	if _, err := position.LookupErr("dividendCheckedAt"); err == nil {
+		t.Fatal("legacy dividend cursor survived current BSON encoding")
+	}
+}
+
+func TestCoinBuySellMath(t *testing.T) {
 	p := NewPortfolio(1)
 	p.AddUSD(1000)
 	p.Meta.Invested = 1000
 	if ok, balance := p.DeductUSD(250); !ok || balance != 750 {
 		t.Fatalf("balance=%v ok=%v", balance, ok)
 	}
-	if err := p.BuyTicker("BTC", 0.1, 250, 10); err != nil {
+	if err := p.BuyTicker("BTC", 0.1, 250); err != nil {
 		t.Fatal(err)
 	}
-	if err := p.BuyTicker("BTC", 0.05, 150, 20); err != nil {
+	if err := p.BuyTicker("BTC", 0.05, 150); err != nil {
 		t.Fatal(err)
-	}
-	position := p.Assets["BTC"]
-	if position.DividendCheckedAt != 10 {
-		t.Fatalf("cursor=%d", position.DividendCheckedAt)
 	}
 	remaining, soldBase, ok, err := p.SellTicker("BTC", 0.06)
 	if err != nil || !ok || math.Abs(remaining-0.09) > 1e-12 || math.Abs(soldBase-160) > 1e-9 {
 		t.Fatalf("remaining=%v soldBase=%v ok=%v err=%v", remaining, soldBase, ok, err)
 	}
-	if p.Assets["BTC"].DividendCheckedAt != 10 {
-		t.Fatal("sell changed dividend cursor")
-	}
 }
 
 func TestCoinFullSellRemovesTicker(t *testing.T) {
 	p := NewPortfolio(1)
-	_ = p.BuyTicker("BTC", 0.3, 12_000, 10)
+	_ = p.BuyTicker("BTC", 0.3, 12_000)
 	_, soldBase, ok, err := p.SellTicker("BTC", 0.3)
 	if err != nil || !ok || math.Abs(soldBase-12_000) > 1e-9 || len(p.Assets) != 0 {
 		t.Fatalf("portfolio=%+v soldBase=%v ok=%v err=%v", p, soldBase, ok, err)

@@ -1,64 +1,24 @@
 package coin
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
 	"strconv"
-
-	"go.mongodb.org/mongo-driver/v2/bson"
 
 	"github.com/tiennm99/miti99bot/internal/storage"
 )
 
 const coinDustEpsilon = 1e-9
 const portfolioUpdateAttempts = 5
+const CollectionName = "coin"
 
 type Store = storage.DocStore[Portfolio]
 
 type AssetPosition struct {
-	Quantity          float64 `json:"quantity" bson:"quantity"`
-	Base              float64 `json:"base" bson:"base"`
-	DividendCheckedAt int64   `json:"dividendCheckedAt" bson:"dividendCheckedAt"`
-	legacyQuantity    bool
-}
-
-func (p *AssetPosition) UnmarshalJSON(data []byte) error {
-	data = bytes.TrimSpace(data)
-	if len(data) > 0 && data[0] == '{' {
-		type plain AssetPosition
-		return json.Unmarshal(data, (*plain)(p))
-	}
-	var quantity float64
-	if err := json.Unmarshal(data, &quantity); err != nil {
-		return fmt.Errorf("coin: decode legacy asset quantity: %w", err)
-	}
-	*p = AssetPosition{Quantity: quantity, legacyQuantity: true}
-	return nil
-}
-
-func (p *AssetPosition) UnmarshalBSONValue(valueType byte, data []byte) error {
-	raw := bson.RawValue{Type: bson.Type(valueType), Value: data}
-	if raw.Type == bson.TypeEmbeddedDocument {
-		type plain AssetPosition
-		return raw.Unmarshal((*plain)(p))
-	}
-	if quantity, ok := raw.DoubleOK(); ok {
-		*p = AssetPosition{Quantity: quantity, legacyQuantity: true}
-		return nil
-	}
-	if quantity, ok := raw.Int64OK(); ok {
-		*p = AssetPosition{Quantity: float64(quantity), legacyQuantity: true}
-		return nil
-	}
-	if quantity, ok := raw.Int32OK(); ok {
-		*p = AssetPosition{Quantity: float64(quantity), legacyQuantity: true}
-		return nil
-	}
-	return fmt.Errorf("coin: unsupported legacy asset BSON type %s", raw.Type)
+	Quantity float64 `json:"quantity" bson:"quantity"`
+	Base     float64 `json:"base" bson:"base"`
 }
 
 type Portfolio struct {
@@ -148,7 +108,7 @@ func (p Portfolio) Validate() error {
 	for symbol, position := range p.Assets {
 		coin, err := ResolveCoinSymbol(symbol)
 		if err != nil || coin.Symbol != symbol || !isPositiveFinite(position.Quantity) ||
-			!isPositiveFinite(position.Base) || position.DividendCheckedAt <= 0 {
+			!isPositiveFinite(position.Base) {
 			return fmt.Errorf("coin: %s has invalid position", symbol)
 		}
 	}
@@ -169,8 +129,8 @@ func (p *Portfolio) DeductUSD(amount float64) (ok bool, balance float64) {
 	return true, p.USD
 }
 
-func (p *Portfolio) BuyTicker(symbol string, quantity, base float64, now int64) error {
-	if !isPositiveFinite(quantity) || !isPositiveFinite(base) || now <= 0 {
+func (p *Portfolio) BuyTicker(symbol string, quantity, base float64) error {
+	if !isPositiveFinite(quantity) || !isPositiveFinite(base) {
 		return fmt.Errorf("coin: invalid purchase position")
 	}
 	if p.Assets == nil {
@@ -181,9 +141,6 @@ func (p *Portfolio) BuyTicker(symbol string, quantity, base float64, now int64) 
 	position.Base += base
 	if !isPositiveFinite(position.Quantity) || !isPositiveFinite(position.Base) {
 		return fmt.Errorf("coin: position overflows")
-	}
-	if position.DividendCheckedAt == 0 {
-		position.DividendCheckedAt = now
 	}
 	p.Assets[symbol] = position
 	return nil

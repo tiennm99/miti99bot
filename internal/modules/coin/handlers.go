@@ -102,7 +102,7 @@ func (s *state) handleBuy(ctx context.Context, b *bot.Bot, update *models.Update
 			insufficientBalance = &balance
 			return errInsufficientUSD
 		}
-		return p.BuyTicker(coin.Symbol, qty, amount, now)
+		return p.BuyTicker(coin.Symbol, qty, amount)
 	})
 	if errors.Is(err, errInsufficientUSD) && insufficientBalance != nil {
 		return chathelper.Reply(ctx, b, update.Message,
