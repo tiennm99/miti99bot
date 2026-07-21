@@ -15,17 +15,40 @@ Atlas via long polling and an in-process cron scheduler.
 | `stock` | VN-stocks paper trading |
 | `gold` | Gold paper trading (opt-in; VNAppMob SJC buy/sell VND/luong) |
 | `coin` | Crypto paper trading in USD (Binance -> Coinbase -> CoinGecko price fallback) |
-| `stats` | `/stats` (top commands), `/stats users`, `/stats user <username>`, `/stats cmd <command>` |
+| `stats` | `/stats` (top commands), `/stats users`, `/stats user <username>`, `/stats cmd <command_name>` |
 
 Disable modules with the `MODULES` environment variable.
+
+## Command discovery
+
+Public command registrations share their description plus optional `Parameters`
+and `Example` metadata between Telegram's native `/` menu and the bot's `/help`
+response. Telegram renders the `/command` separately, and its native description
+field supports only single-line plain text—no copyable code block. For
+`/stock_buy`, the bot therefore sends this description:
+
+```text
+<quantity> <ticker>. Buy VN stock at market price. Example: /stock_buy 100 TCB
+```
+
+`/help` combines the command and parameter syntax, adds the same summary, then
+puts the example on the next line in a copyable code block. When `Example` is
+omitted, both surfaces use the bare command (for example, `/ping`).
+
+For future commands, use lowercase descriptive parameter names. Include units
+or currencies when they affect meaning (`<vnd_amount>`, `<usd_to_spend>`), use
+square brackets for optional input (`[date]`), append `...` when an argument
+accepts remaining text (`[target...]`), and describe structured input in
+parentheses (`<ratio(owned:new)>`, `<options(comma-separated)>`). Keep command
+metadata, handler usage text, examples, tests, and this documentation aligned.
 
 ### Stock dividend commands
 
 Stock dividends are manual portfolio adjustments:
 
-- `/stock_cash_dividend <vnd_per_share> <TICKER>` credits a positive whole-VND amount for each pre-event share held. Example: `/stock_cash_dividend 1500 TCB`.
-- `/stock_share_dividend <owned:new> <TICKER>` adds `floor(pre_event_shares × new / owned)` whole shares. Example: `/stock_share_dividend 100:10 TCB`.
-- `/stock_dividend <vnd_per_share> <owned:new> <TICKER>` applies both parts from the same pre-event holding and saves them together. Example: `/stock_dividend 1500 100:10 TCB`.
+- `/stock_cash_dividend <vnd_per_share> <ticker>` credits a positive whole-VND amount for each pre-event share held. Example: `/stock_cash_dividend 1500 TCB`.
+- `/stock_share_dividend <ratio(owned:new)> <ticker>` adds `floor(pre_event_shares × new / owned)` whole shares. Example: `/stock_share_dividend 100:10 TCB`.
+- `/stock_dividend <vnd_per_share> <ratio(owned:new)> <ticker>` applies both parts from the same pre-event holding and saves them together. Example: `/stock_dividend 1500 100:10 TCB`.
 
 Ratios use `owned:new` exactly as written in the issuer notice. Equivalent
 unreduced ratios are accepted and the entered ratio is preserved in the reply.

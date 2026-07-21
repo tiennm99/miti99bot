@@ -20,7 +20,7 @@ const statsUsage = `Usage:
 /stats
 /stats users
 /stats user <username>
-/stats cmd <name>`
+/stats cmd <command_name>`
 
 type row struct {
 	display string
@@ -32,6 +32,8 @@ func statsCommand(c *counter) modules.Command {
 		Name:        "stats",
 		Visibility:  modules.VisibilityPublic,
 		Description: "Show command usage statistics",
+		Parameters:  "[users | user <username> | cmd <command_name>]",
+		Example:     "/stats user alice",
 		Handler: func(ctx context.Context, b *bot.Bot, update *models.Update) error {
 			if update.Message == nil {
 				return nil

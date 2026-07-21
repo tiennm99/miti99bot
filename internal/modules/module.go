@@ -38,7 +38,9 @@ type CronHandler func(ctx context.Context, deps Deps) error
 type Command struct {
 	Name        string         // ^[a-z0-9_]{1,32}$ — Telegram BotFather rules
 	Visibility  Visibility     // public/protected/private
-	Description string         // shown in /help (required, non-empty)
+	Description string         // concise summary shown in command discovery (required, non-empty)
+	Parameters  string         // optional syntax after the command, e.g. "<quantity> <ticker>"
+	Example     string         // optional full invocation; defaults to "/" + Name
 	Handler     CommandHandler // required
 }
 

@@ -26,6 +26,8 @@ func New(deps modules.Deps) modules.Module {
 				Name:        "lol",
 				Visibility:  modules.VisibilityPublic,
 				Description: "LoL matches for a date (dd, dd-mm, dd/mm, ddmm, or full date; default today)",
+				Parameters:  "[date]",
+				Example:     "/lol 21-07-2026",
 				Handler:     s.handleSchedule,
 			},
 			{

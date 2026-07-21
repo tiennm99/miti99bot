@@ -24,9 +24,16 @@ Telegram command names are user-facing contracts. When adding, renaming, or
 deleting commands, update all related surfaces:
 
 - module command registration in `internal/modules/<module>/`
+- command parameter and example metadata used by Telegram and `/help`
 - handler usage text and user-facing error text
 - tests for registration, handlers, and command menu behavior
 - README/docs when behavior changes are user-visible
+
+Use lowercase, descriptive parameter names in command metadata and usage text.
+Include units or currencies when meaningful (for example, `<vnd_amount>`), use
+`[...]` for optional input, append `...` for remaining free text, and use
+parentheses to document structured input (for example,
+`<ratio(owned:new)>`). Keep metadata, usage errors, examples, and tests exact.
 
 ## Stats Compatibility
 
