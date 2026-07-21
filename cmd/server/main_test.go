@@ -77,3 +77,13 @@ func TestFactoriesIncludesExpectedModules(t *testing.T) {
 		}
 	}
 }
+
+func TestModuleLoaded(t *testing.T) {
+	reg := &modules.Registry{Modules: []modules.Module{{Name: "coin"}}}
+	if !moduleLoaded(reg, "coin") {
+		t.Fatal("coin module was not detected")
+	}
+	if moduleLoaded(reg, "stock") || moduleLoaded(nil, "coin") {
+		t.Fatal("moduleLoaded reported an absent module")
+	}
+}
