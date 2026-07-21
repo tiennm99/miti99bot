@@ -29,6 +29,7 @@ import (
 	"github.com/tiennm99/miti99bot/internal/modules/wordle"
 	"github.com/tiennm99/miti99bot/internal/server"
 	"github.com/tiennm99/miti99bot/internal/storage"
+	"github.com/tiennm99/miti99bot/internal/systemstate"
 	"github.com/tiennm99/miti99bot/internal/telegram"
 )
 
@@ -94,6 +95,10 @@ func factories() map[string]modules.Factory {
 // container; 10s leaves headroom without hiding a wedged cluster.
 const mongodbInitTimeout = 10 * time.Second
 
+// portfolioCleanupTimeout bounds the temporary one-time cleanup of legacy
+// coin portfolio fields before Telegram handlers begin serving requests.
+const portfolioCleanupTimeout = 2 * time.Minute
+
 func main() {
 	rootCtx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -130,6 +135,18 @@ func main() {
 	})
 	if err != nil {
 		log.Fatal("module registry build failed", "err", err)
+	}
+	if moduleLoaded(reg, coin.CollectionName) {
+		cleanupCtx, cancel := context.WithTimeout(rootCtx, portfolioCleanupTimeout)
+		err = coin.InitStore(
+			cleanupCtx,
+			provider.Collection(coin.CollectionName),
+			provider.Collection(systemstate.CollectionName),
+		)
+		cancel()
+		if err != nil {
+			log.Fatal("coin storage cleanup failed", "err", err)
+		}
 	}
 	auth := modules.Auth{BotOwnerID: cfg.BotOwnerID, AdminUserIDs: cfg.AdminUserIDs}
 	modules.Install(b, reg, auth)
@@ -207,6 +224,18 @@ func main() {
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		log.Error("graceful shutdown failed", "err", err)
 	}
+}
+
+func moduleLoaded(reg *modules.Registry, name string) bool {
+	if reg == nil {
+		return false
+	}
+	for _, module := range reg.Modules {
+		if module.Name == name {
+			return true
+		}
+	}
+	return false
 }
 
 // buildProvider picks the storage backend. Selection order:
