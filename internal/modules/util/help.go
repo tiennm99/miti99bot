@@ -47,10 +47,12 @@ func RenderHelp(reg *modules.Registry) string {
 		var sb strings.Builder
 		fmt.Fprintf(&sb, "<b>%s</b>", html.EscapeString(mod.Name))
 		for _, command := range es {
-			fmt.Fprintf(&sb, "\n%s %s\n<pre>%s</pre>",
+			fmt.Fprintf(&sb, "\n%s %s",
 				html.EscapeString(command.InvocationSentence()),
-				html.EscapeString(command.SummarySentence()),
-				html.EscapeString(command.ExampleInvocation()))
+				html.EscapeString(command.SummarySentence()))
+			if example := command.ExampleInvocation(); example != "" {
+				fmt.Fprintf(&sb, " Eg: <code>%s</code>", html.EscapeString(example))
+			}
 		}
 		sections = append(sections, sb.String())
 	}

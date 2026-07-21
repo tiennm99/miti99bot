@@ -38,8 +38,8 @@ func TestBotCommandMenu_UsesLoadedPublicCommandsInModuleOrder(t *testing.T) {
 
 	got := botCommandMenu(reg)
 	want := []models.BotCommand{
-		{Command: "beta_public", Description: "<value>. Beta public. Example: /beta_public demo"},
-		{Command: "alpha_public", Description: "Alpha public. Example: /alpha_public"},
+		{Command: "beta_public", Description: "<value>. Beta public. Eg: /beta_public demo"},
+		{Command: "alpha_public", Description: "Alpha public."},
 	}
 	if len(got) != len(want) {
 		t.Fatalf("commands = %v, want %v", got, want)
@@ -90,8 +90,13 @@ func TestCommandDiscovery_AllPublicCommandsHaveSafeMetadata(t *testing.T) {
 		if got := command.Parameters; got != expectedParameters[command.Name] {
 			t.Errorf("/%s parameters = %q, want %q", command.Name, got, expectedParameters[command.Name])
 		}
-		if !strings.HasPrefix(command.ExampleInvocation(), "/"+command.Name) {
-			t.Errorf("/%s example = %q", command.Name, command.ExampleInvocation())
+		example := command.ExampleInvocation()
+		if command.Parameters == "" {
+			if example != "" || strings.Contains(command.TelegramMenuDescription(), "Eg:") {
+				t.Errorf("/%s without parameters has example %q", command.Name, example)
+			}
+		} else if !strings.HasPrefix(example, "/"+command.Name) {
+			t.Errorf("/%s example = %q", command.Name, example)
 		}
 		description := command.TelegramMenuDescription()
 		if strings.ContainsAny(description, "\r\n") {
@@ -164,7 +169,7 @@ func TestRegisterCommandMenu_CallsTelegramSetMyCommands(t *testing.T) {
 	if err := json.Unmarshal([]byte(call.Form["commands"]), &cmds); err != nil {
 		t.Fatalf("decode commands form field: %v; raw=%q", err, call.Form["commands"])
 	}
-	if len(cmds) != 1 || cmds[0].Command != "demo" || cmds[0].Description != "Demo command. Example: /demo" {
+	if len(cmds) != 1 || cmds[0].Command != "demo" || cmds[0].Description != "Demo command." {
 		t.Fatalf("commands payload = %+v, want demo command", cmds)
 	}
 }

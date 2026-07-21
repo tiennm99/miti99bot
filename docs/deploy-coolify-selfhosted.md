@@ -139,8 +139,10 @@ every startup. The Go module registry is the single source of truth; no separate
 command-menu file or manual registration step is required. A command's
 description plus optional `Parameters` and `Example` metadata feed both
 surfaces. Telegram renders the command name separately and accepts only a
-single-line plain-text description, while `/help` can put the example in a
-copyable code block. An omitted example defaults to the bare command.
+single-line plain-text description, so parameterized commands append
+`Eg: <invocation>` inline. `/help` uses the same inline layout and wraps only
+the invocation in Telegram HTML `<code>` formatting. Commands without
+parameters omit examples.
 
 ## Operations
 

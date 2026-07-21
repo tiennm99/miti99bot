@@ -22,12 +22,16 @@ source documentation.
   `<ratio(owned:new)> <ticker>`, and
   `<vnd_per_share> <ratio(owned:new)> <ticker>` for cash, share, and combined
   commands. Examples and parsing remain unchanged.
-- Native menu descriptions now combine parameters, summary, and example on one
-  plain-text line. Registration validation rejects multiline metadata, examples
-  for another command, and public descriptions over Telegram's 256-character
-  limit.
-- `/help` now renders each invocation and summary together, followed by a
-  copyable HTML `<pre>` example. Dynamic command fields are HTML-escaped.
+- Native menu descriptions show only the summary for no-parameter commands.
+  Parameterized commands append an explicit example with the short `Eg:` label
+  on the same plain-text line.
+- `/help` renders each invocation and summary together. Parameterized commands
+  append `Eg: <code>invocation</code>` on the same line, with only the copyable
+  invocation inside Telegram's HTML `<code>` formatting. No-parameter commands
+  omit the label and example. Dynamic command fields are HTML-escaped.
+- Registration validation rejects multiline metadata, examples for another
+  command, public commands that provide only one of parameters or example, and
+  public descriptions over Telegram's 256-character limit.
 - Updated user and deployment documentation for the shared registry behavior.
 
 ## Reflection
@@ -42,13 +46,15 @@ supports without sacrificing safe HTML rendering.
 - Existing command names, handlers, parsers, and persisted data remain
   unchanged; normalization is presentation-only.
 - No command was added, renamed, or deleted, so no stats migration is needed.
-- Commands without parameters default their example to the command invocation.
+- Public commands with parameters require an explicit example; commands
+  without parameters omit it.
 - The complete `/help` output remains within Telegram's 4,096-character limit.
 
 ## Verification
 
 - Passed: command presentation, validation, menu, and `/help` tests for all 40
-  public commands.
+  public commands, including inline `<code>` rendering, no-parameter omission,
+  and both parameter/example validation branches.
 - Passed: `go test ./...`, including real MongoDB Testcontainers suites.
 - Passed: `go vet ./...`
 - Passed: `go build ./...`

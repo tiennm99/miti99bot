@@ -34,6 +34,10 @@ Include units or currencies when meaningful (for example, `<vnd_amount>`), use
 `[...]` for optional input, append `...` for remaining free text, and use
 parentheses to document structured input (for example,
 `<ratio(owned:new)>`). Keep metadata, usage errors, examples, and tests exact.
+Public commands with parameters must provide an explicit copyable example;
+commands without parameters must omit it. In both Telegram's native menu and
+`/help`, append `Eg: <invocation>` inline; `/help` must wrap only the invocation
+in Telegram HTML `<code>` formatting.
 
 ## Stats Compatibility
 
