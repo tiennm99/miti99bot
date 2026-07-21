@@ -87,6 +87,12 @@ func TestHelp_RendersHTML(t *testing.T) {
 	if !strings.Contains(got.Text(), "<b>util</b>") {
 		t.Errorf("/help body missing util section; got %q", got.Text())
 	}
+	if !strings.Contains(got.Text(), "/help. Show all available commands.") {
+		t.Errorf("/help body missing formatted command summary; got %q", got.Text())
+	}
+	if !strings.Contains(got.Text(), "<pre>/help</pre>") {
+		t.Errorf("/help body missing copyable example; got %q", got.Text())
+	}
 }
 
 func TestStickerID_NoReply_ShowsUsage(t *testing.T) {

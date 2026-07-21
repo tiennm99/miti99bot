@@ -12,7 +12,7 @@ import (
 	"github.com/tiennm99/miti99bot/internal/modules/util/chathelper"
 )
 
-const randomUsage = "Usage: /random <option1>, <option2>, ..."
+const randomUsage = "Usage: /random <options(comma-separated)>"
 
 func splitWheelOptions(arg string) []string {
 	parts := strings.Split(arg, ",")
@@ -30,6 +30,8 @@ func randomCommand() modules.Command {
 		Name:        "random",
 		Visibility:  modules.VisibilityPublic,
 		Description: "Pick one random comma-separated option",
+		Parameters:  "<options(comma-separated)>",
+		Example:     "/random pizza, sushi, pho",
 		Handler: func(ctx context.Context, b *bot.Bot, update *models.Update) error {
 			if update.Message == nil {
 				return nil

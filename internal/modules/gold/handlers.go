@@ -52,7 +52,7 @@ func (s *state) handleTopup(ctx context.Context, b *bot.Bot, update *models.Upda
 	}
 	args := argsAfterCommand(update.Message.Text)
 	if len(args) != 1 {
-		return chathelper.Reply(ctx, b, update.Message, "Usage: /gold_topup <amount>\nExample: /gold_topup 5000000")
+		return chathelper.Reply(ctx, b, update.Message, "Usage: /gold_topup <vnd_amount>\nExample: /gold_topup 5000000")
 	}
 	amount, ok := parsePositiveFinite(args[0])
 	if !ok || !isSafeVND(amount) {

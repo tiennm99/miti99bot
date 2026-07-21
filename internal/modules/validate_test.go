@@ -2,6 +2,7 @@ package modules
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/go-telegram/bot"
@@ -24,6 +25,46 @@ func TestValidateCommand_RejectsBadNames(t *testing.T) {
 			err := validateCommand(Command{Name: name, Visibility: VisibilityPublic, Description: "d", Handler: okHandler})
 			if err == nil {
 				t.Errorf("name %q: expected error", name)
+			}
+		})
+	}
+}
+
+func TestValidateCommand_RejectsInvalidPresentationMetadata(t *testing.T) {
+	tests := []struct {
+		name    string
+		command Command
+	}{
+		{
+			name:    "blank description",
+			command: Command{Name: "ok", Visibility: VisibilityPublic, Description: "   ", Handler: okHandler},
+		},
+		{
+			name:    "multiline description",
+			command: Command{Name: "ok", Visibility: VisibilityPublic, Description: "one\ntwo", Handler: okHandler},
+		},
+		{
+			name:    "multiline parameters",
+			command: Command{Name: "ok", Visibility: VisibilityPublic, Description: "d", Parameters: "<a>\n<b>", Handler: okHandler},
+		},
+		{
+			name:    "multiline example",
+			command: Command{Name: "ok", Visibility: VisibilityPublic, Description: "d", Example: "/ok one\n/ok two", Handler: okHandler},
+		},
+		{
+			name:    "example invokes another command",
+			command: Command{Name: "ok", Visibility: VisibilityPublic, Description: "d", Example: "/other", Handler: okHandler},
+		},
+		{
+			name:    "native description too long",
+			command: Command{Name: "ok", Visibility: VisibilityPublic, Description: strings.Repeat("x", 250), Handler: okHandler},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := validateCommand(tc.command); err == nil {
+				t.Fatal("expected validation error")
 			}
 		})
 	}

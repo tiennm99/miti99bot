@@ -136,7 +136,11 @@ Successful GIF replies include the result behind Telegram spoiler formatting.
 
 The bot registers its Telegram command menu from loaded public modules on
 every startup. The Go module registry is the single source of truth; no separate
-command-menu file or manual registration step is required.
+command-menu file or manual registration step is required. A command's
+description plus optional `Parameters` and `Example` metadata feed both
+surfaces. Telegram renders the command name separately and accepts only a
+single-line plain-text description, while `/help` can put the example in a
+copyable code block. An omitted example defaults to the bare command.
 
 ## Operations
 

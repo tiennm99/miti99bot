@@ -182,7 +182,7 @@ func TestHandleSellInsufficientCoin(t *testing.T) {
 		t.Fatalf("handleSell: %v", err)
 	}
 	text := rb.LastSent().Text()
-	for _, want := range []string{"No ETH available to sell.", "Try /coin_buy ETH <usd_amount> first."} {
+	for _, want := range []string{"No ETH available to sell.", "Try /coin_buy ETH <usd_to_spend> first."} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("zero-holdings sell message missing %q in %q", want, text)
 		}
