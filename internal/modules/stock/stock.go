@@ -15,7 +15,6 @@ func New(deps modules.Deps) modules.Module {
 				Visibility:  modules.VisibilityPublic,
 				Description: "Show current VN stock price",
 				Parameters:  "<ticker>",
-				Example:     "/stock_price TCB",
 				Handler:     s.handlePrice,
 			},
 			{
@@ -23,7 +22,6 @@ func New(deps modules.Deps) modules.Module {
 				Visibility:  modules.VisibilityPublic,
 				Description: "Top up VND to your stock account",
 				Parameters:  "<vnd_amount>",
-				Example:     "/stock_topup 5000000",
 				Handler:     s.handleTopup,
 			},
 			{
@@ -31,7 +29,6 @@ func New(deps modules.Deps) modules.Module {
 				Visibility:  modules.VisibilityPublic,
 				Description: "Buy VN stock at market price",
 				Parameters:  "<quantity> <ticker>",
-				Example:     "/stock_buy 100 TCB",
 				Handler:     s.handleBuy,
 			},
 			{
@@ -39,7 +36,6 @@ func New(deps modules.Deps) modules.Module {
 				Visibility:  modules.VisibilityPublic,
 				Description: "Sell VN stock back to VND",
 				Parameters:  "<quantity> <ticker>",
-				Example:     "/stock_sell 100 TCB",
 				Handler:     s.handleSell,
 			},
 			{
@@ -47,7 +43,6 @@ func New(deps modules.Deps) modules.Module {
 				Visibility:  modules.VisibilityPublic,
 				Description: "Record cash dividend",
 				Parameters:  "<vnd_per_share> <ticker>",
-				Example:     "/stock_cash_dividend 1500 TCB",
 				Handler:     s.handleCashDividend,
 			},
 			{
@@ -55,7 +50,6 @@ func New(deps modules.Deps) modules.Module {
 				Visibility:  modules.VisibilityPublic,
 				Description: "Record share dividend",
 				Parameters:  "<ratio(owned:new)> <ticker>",
-				Example:     "/stock_share_dividend 100:10 TCB",
 				Handler:     s.handleShareDividend,
 			},
 			{
@@ -63,7 +57,6 @@ func New(deps modules.Deps) modules.Module {
 				Visibility:  modules.VisibilityPublic,
 				Description: "Record cash and share dividend",
 				Parameters:  "<vnd_per_share> <ratio(owned:new)> <ticker>",
-				Example:     "/stock_dividend 1500 100:10 TCB",
 				Handler:     s.handleDividend,
 			},
 			{

@@ -16,7 +16,6 @@ func New(deps modules.Deps) modules.Module {
 				Visibility:  modules.VisibilityPublic,
 				Description: "Show current crypto price in USD",
 				Parameters:  "<coin>",
-				Example:     "/coin_price BTC",
 				Handler:     s.handlePrice,
 			},
 			{
@@ -24,7 +23,6 @@ func New(deps modules.Deps) modules.Module {
 				Visibility:  modules.VisibilityPublic,
 				Description: "Top up USD to your coin account",
 				Parameters:  "<usd_amount>",
-				Example:     "/coin_topup 1000",
 				Handler:     s.handleTopup,
 			},
 			{
@@ -32,7 +30,6 @@ func New(deps modules.Deps) modules.Module {
 				Visibility:  modules.VisibilityPublic,
 				Description: "Spend a USD amount to buy coin",
 				Parameters:  "<coin> <usd_to_spend>",
-				Example:     "/coin_buy BTC 10",
 				Handler:     s.handleBuy,
 			},
 			{
@@ -40,7 +37,6 @@ func New(deps modules.Deps) modules.Module {
 				Visibility:  modules.VisibilityPublic,
 				Description: "Sell enough coin to receive a USD amount",
 				Parameters:  "<coin> <usd_to_receive>",
-				Example:     "/coin_sell BTC 10",
 				Handler:     s.handleSell,
 			},
 			{

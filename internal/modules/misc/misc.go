@@ -129,17 +129,14 @@ func senderMention(u *models.User) string {
 
 func disclaimerCommand(name, description, defaultTarget string, allowCustomTarget bool) modules.Command {
 	parameters := ""
-	example := ""
 	if allowCustomTarget {
 		parameters = "[target...]"
-		example = "/" + name + " FBI"
 	}
 	return modules.Command{
 		Name:        name,
 		Visibility:  modules.VisibilityPublic,
 		Description: description,
 		Parameters:  parameters,
-		Example:     example,
 		Handler: func(ctx context.Context, b *bot.Bot, update *models.Update) error {
 			if update.Message == nil {
 				return nil

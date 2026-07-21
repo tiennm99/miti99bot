@@ -74,13 +74,12 @@ func TestRenderHelp_GroupsByModuleAndSkipsNonPublic(t *testing.T) {
 	}
 }
 
-func TestRenderHelp_ShowsParametersAndCopyableExample(t *testing.T) {
+func TestRenderHelp_ShowsParametersWithoutExample(t *testing.T) {
 	command := modules.Command{
 		Name:        "buy",
 		Visibility:  modules.VisibilityPublic,
 		Description: "Buy & hold",
 		Parameters:  "<quantity> <ticker>",
-		Example:     "/buy 100 TCB & hold",
 		Handler:     helpTestNoop,
 	}
 	reg, err := modules.Build(
@@ -97,14 +96,8 @@ func TestRenderHelp_ShowsParametersAndCopyableExample(t *testing.T) {
 	if !strings.Contains(out, "/buy &lt;quantity&gt; &lt;ticker&gt;. Buy &amp; hold.") {
 		t.Fatalf("help missing formatted invocation and summary:\n%s", out)
 	}
-	if !strings.Contains(out, "<code>/buy 100 TCB &amp; hold</code>") {
-		t.Fatalf("help missing copyable example:\n%s", out)
-	}
-	if !strings.Contains(out, "Buy &amp; hold. Eg: <code>/buy 100 TCB &amp; hold</code>") {
-		t.Fatalf("help missing short example label:\n%s", out)
-	}
-	if strings.Contains(out, "<pre>") {
-		t.Fatalf("help example should use inline code, not a pre block:\n%s", out)
+	if strings.Contains(out, "Eg:") || strings.Contains(out, "<code>") || strings.Contains(out, "<pre>") {
+		t.Fatalf("help should not render examples:\n%s", out)
 	}
 }
 

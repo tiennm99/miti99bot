@@ -22,26 +22,23 @@ Disable modules with the `MODULES` environment variable.
 ## Command discovery
 
 Public command registrations share their description plus optional `Parameters`
-and `Example` metadata between Telegram's native `/` menu and the bot's `/help`
-response. Telegram renders the `/command` separately, and its native description
-field supports only single-line plain text—no copyable code block. For
-`/stock_buy`, the bot therefore sends this description:
+metadata between Telegram's native `/` menu and the bot's `/help` response.
+Telegram renders the `/command` separately, so `/stock_buy` uses this native
+description:
 
 ```text
-<quantity> <ticker>. Buy VN stock at market price. Eg: /stock_buy 100 TCB
+<quantity> <ticker>. Buy VN stock at market price.
 ```
 
-`/help` combines the command syntax and summary, then appends `Eg:` and the
-example on the same line. It wraps only the invocation in Telegram HTML
-`<code>` formatting so it is easy to copy. Public commands with parameters must
-register an explicit example; commands without parameters omit it entirely.
+`/help` combines the full command syntax and summary on one line. Neither
+discovery surface includes example invocations.
 
 For future commands, use lowercase descriptive parameter names. Include units
 or currencies when they affect meaning (`<vnd_amount>`, `<usd_to_spend>`), use
 square brackets for optional input (`[date]`), append `...` when an argument
 accepts remaining text (`[target...]`), and describe structured input in
 parentheses (`<ratio(owned:new)>`, `<options(comma-separated)>`). Keep command
-metadata, handler usage text, examples, tests, and this documentation aligned.
+metadata, handler usage text, tests, and this documentation aligned.
 
 ### Stock dividend commands
 

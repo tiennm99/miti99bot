@@ -33,7 +33,6 @@ func statsCommand(c *counter) modules.Command {
 		Visibility:  modules.VisibilityPublic,
 		Description: "Show command usage statistics",
 		Parameters:  "[users | user <username> | cmd <command_name>]",
-		Example:     "/stats user alice",
 		Handler: func(ctx context.Context, b *bot.Bot, update *models.Update) error {
 			if update.Message == nil {
 				return nil

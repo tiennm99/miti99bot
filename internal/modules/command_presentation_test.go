@@ -7,26 +7,22 @@ func TestCommandPresentation(t *testing.T) {
 		name       string
 		command    Command
 		invocation string
-		example    string
 		menu       string
 	}{
 		{
-			name: "parameters and explicit example",
+			name: "parameters",
 			command: Command{
 				Name:        "stock_buy",
 				Parameters:  "<quantity> <ticker>",
 				Description: "Buy VN stock at market price",
-				Example:     "/stock_buy 100 TCB",
 			},
 			invocation: "/stock_buy <quantity> <ticker>",
-			example:    "/stock_buy 100 TCB",
-			menu:       "<quantity> <ticker>. Buy VN stock at market price. Eg: /stock_buy 100 TCB",
+			menu:       "<quantity> <ticker>. Buy VN stock at market price.",
 		},
 		{
-			name:       "no parameters omits example",
+			name:       "no parameters",
 			command:    Command{Name: "ping", Description: "Health check!"},
 			invocation: "/ping",
-			example:    "",
 			menu:       "Health check!",
 		},
 		{
@@ -35,11 +31,9 @@ func TestCommandPresentation(t *testing.T) {
 				Name:        "random",
 				Parameters:  "<options(comma-separated)>",
 				Description: "Pick one option",
-				Example:     "/random pizza, sushi",
 			},
 			invocation: "/random <options(comma-separated)>",
-			example:    "/random pizza, sushi",
-			menu:       "<options(comma-separated)>. Pick one option. Eg: /random pizza, sushi",
+			menu:       "<options(comma-separated)>. Pick one option.",
 		},
 	}
 
@@ -47,9 +41,6 @@ func TestCommandPresentation(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := tc.command.Invocation(); got != tc.invocation {
 				t.Errorf("Invocation() = %q, want %q", got, tc.invocation)
-			}
-			if got := tc.command.ExampleInvocation(); got != tc.example {
-				t.Errorf("ExampleInvocation() = %q, want %q", got, tc.example)
 			}
 			if got := tc.command.TelegramMenuDescription(); got != tc.menu {
 				t.Errorf("TelegramMenuDescription() = %q, want %q", got, tc.menu)
