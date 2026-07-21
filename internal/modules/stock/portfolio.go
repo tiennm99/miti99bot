@@ -1,20 +1,18 @@
 package stock
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
 	"strconv"
 
-	"go.mongodb.org/mongo-driver/v2/bson"
-
 	"github.com/tiennm99/miti99bot/internal/storage"
 )
 
 type Store = storage.DocStore[Portfolio]
+
+const CollectionName = "stock"
 
 // AssetPosition keeps the complete persisted state for one stock ticker.
 // Base is total remaining VND cost, not average price. DividendCheckedAt is
@@ -23,38 +21,6 @@ type AssetPosition struct {
 	Quantity          int64   `json:"quantity" bson:"quantity"`
 	Base              float64 `json:"base" bson:"base"`
 	DividendCheckedAt int64   `json:"dividendCheckedAt" bson:"dividendCheckedAt"`
-	legacyQuantity    bool
-}
-
-func (p *AssetPosition) UnmarshalJSON(data []byte) error {
-	data = bytes.TrimSpace(data)
-	if len(data) > 0 && data[0] == '{' {
-		type plain AssetPosition
-		return json.Unmarshal(data, (*plain)(p))
-	}
-	var quantity int64
-	if err := json.Unmarshal(data, &quantity); err != nil {
-		return fmt.Errorf("stock: decode legacy asset quantity: %w", err)
-	}
-	*p = AssetPosition{Quantity: quantity, legacyQuantity: true}
-	return nil
-}
-
-func (p *AssetPosition) UnmarshalBSONValue(valueType byte, data []byte) error {
-	raw := bson.RawValue{Type: bson.Type(valueType), Value: data}
-	if raw.Type == bson.TypeEmbeddedDocument {
-		type plain AssetPosition
-		return raw.Unmarshal((*plain)(p))
-	}
-	if quantity, ok := raw.Int64OK(); ok {
-		*p = AssetPosition{Quantity: quantity, legacyQuantity: true}
-		return nil
-	}
-	if quantity, ok := raw.Int32OK(); ok {
-		*p = AssetPosition{Quantity: int64(quantity), legacyQuantity: true}
-		return nil
-	}
-	return fmt.Errorf("stock: unsupported legacy asset BSON type %s", raw.Type)
 }
 
 type Portfolio struct {
