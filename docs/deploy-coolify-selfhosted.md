@@ -101,11 +101,12 @@ Successful GIF replies include the result behind Telegram spoiler formatting.
 > counts and creates indexes on startup. Deleted legacy command rows are
 > retained with `deleted: true`; `/stats` queries filter those rows from visible
 > results. A historical `system` collection may remain in MongoDB with completed
-> migration records. Stock stores cash as `vnd` and embeds positions as
-> `assets.<symbol>.{quantity,base,dividendCheckedAt}`. Coin stores cash as `usd`
-> and embeds positions as `assets.<symbol>.{quantity,base}`. Completed migration
-> records remain in `system` as audit history; the completed one-time migration
-> code no longer runs at startup.
+> migration records; keep those records as audit history. Stock stores cash as
+> `vnd`, embeds positions as
+> `assets.<symbol>.{quantity,base,dividendCheckedAt,openedAt}`, and retains
+> applied dividend identities under `appliedDividendEvents`. Coin stores cash as
+> `usd` and embeds positions as `assets.<symbol>.{quantity,base}`. No completed
+> one-time migration code runs at startup.
 
 ## 2. Coolify
 
