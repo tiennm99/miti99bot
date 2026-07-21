@@ -33,12 +33,9 @@ description:
 `/help` combines the full command syntax and summary on one line. Neither
 discovery surface includes example invocations.
 
-For future commands, use lowercase descriptive parameter names. Include units
-or currencies when they affect meaning (`<vnd_amount>`, `<usd_to_spend>`), use
-square brackets for optional input (`[date]`), append `...` when an argument
-accepts remaining text (`[target...]`), and describe structured input in
-parentheses (`<ratio(owned:new)>`, `<options(comma-separated)>`). Keep command
-metadata, handler usage text, tests, and this documentation aligned.
+Future commands must follow the
+[command parameter conventions](docs/command-parameter-conventions.md). Keep
+command metadata, handler usage text, tests, and documentation aligned.
 
 ### Stock dividend commands
 

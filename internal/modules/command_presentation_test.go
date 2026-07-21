@@ -26,14 +26,14 @@ func TestCommandPresentation(t *testing.T) {
 			menu:       "Health check!",
 		},
 		{
-			name: "variadic parameters keep ellipsis",
+			name: "concise parameter name",
 			command: Command{
 				Name:        "random",
-				Parameters:  "<options(comma-separated)>",
+				Parameters:  "<option,...>",
 				Description: "Pick one option",
 			},
-			invocation: "/random <options(comma-separated)>",
-			menu:       "<options(comma-separated)>. Pick one option.",
+			invocation: "/random <option,...>",
+			menu:       "<option,...>. Pick one option.",
 		},
 	}
 

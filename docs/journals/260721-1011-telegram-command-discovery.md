@@ -1,5 +1,10 @@
 # Telegram Command Discovery Journal
 
+> Historical note: the later command-parameter convention simplifies
+> `<options(comma-separated)>` to `<option,...>`, keeping the literal delimiter
+> visible without prose inside the placeholder. See
+> `docs/command-parameter-conventions.md`.
+
 ## Context
 
 Telegram's native command menu and `/help` exposed only short descriptions,
