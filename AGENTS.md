@@ -29,11 +29,8 @@ deleting commands, update all related surfaces:
 - tests for registration, handlers, and command menu behavior
 - README/docs when behavior changes are user-visible
 
-Use lowercase, descriptive parameter names in command metadata and usage text.
-Include units or currencies when meaningful (for example, `<vnd_amount>`), use
-`[...]` for optional input, append `...` for remaining free text, and use
-parentheses to document structured input (for example,
-`<ratio(owned:new)>`). Keep metadata, usage errors, examples, and tests exact.
+Follow `docs/command-parameter-conventions.md` for all command parameter
+metadata and usage text. Keep metadata, usage errors, examples, and tests exact.
 Telegram's native menu and `/help` show command syntax plus the summary without
 example invocations.
 

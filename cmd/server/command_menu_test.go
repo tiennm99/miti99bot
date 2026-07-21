@@ -67,7 +67,7 @@ func TestCommandDiscovery_AllPublicCommandsHaveSafeMetadata(t *testing.T) {
 		"gold_sell":            "<luong>",
 		"lol":                  "[date]",
 		"loldle":               "[champion]",
-		"random":               "<options(comma-separated)>",
+		"random":               "<option,...>",
 		"stats":                "[users | user <username> | cmd <command_name>]",
 		"stock_price":          "<ticker>",
 		"stock_topup":          "<vnd_amount>",
@@ -78,7 +78,7 @@ func TestCommandDiscovery_AllPublicCommandsHaveSafeMetadata(t *testing.T) {
 		"stock_dividend":       "<vnd_per_share> <ratio(owned:new)> <ticker>",
 		"trongtruonghop":       "[target...]",
 		"tth":                  "[target...]",
-		"wheelofnames":         "<options(comma-separated)>",
+		"wheelofnames":         "<option,...>",
 		"wordle":               "[word]",
 	}
 
