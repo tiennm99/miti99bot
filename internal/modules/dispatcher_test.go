@@ -25,6 +25,9 @@ func TestAuth_Permits(t *testing.T) {
 	updateFrom := func(id int64) *models.Update {
 		return &models.Update{Message: &models.Message{From: &models.User{ID: id}}}
 	}
+	callbackFrom := func(id int64) *models.Update {
+		return &models.Update{CallbackQuery: &models.CallbackQuery{From: models.User{ID: id}}}
+	}
 
 	cases := []struct {
 		name   string
@@ -35,6 +38,7 @@ func TestAuth_Permits(t *testing.T) {
 		{"public-no-message", VisibilityPublic, &models.Update{}, true},
 		{"public-stranger", VisibilityPublic, updateFrom(stranger), true},
 		{"protected-owner", VisibilityProtected, updateFrom(owner), true},
+		{"protected-callback-owner", VisibilityProtected, callbackFrom(owner), true},
 		{"protected-admin", VisibilityProtected, updateFrom(admin), true},
 		{"protected-stranger", VisibilityProtected, updateFrom(stranger), false},
 		{"private-owner", VisibilityPrivate, updateFrom(owner), true},

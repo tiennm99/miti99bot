@@ -47,3 +47,21 @@ func validateCron(c Cron) error {
 	}
 	return nil
 }
+
+func validateCallback(c Callback) error {
+	if strings.TrimSpace(c.Prefix) == "" {
+		return fmt.Errorf("callback: prefix is required")
+	}
+	if len(c.Prefix) > 32 || strings.ContainsAny(c.Prefix, "\r\n\x00") {
+		return fmt.Errorf("callback prefix %q is invalid", c.Prefix)
+	}
+	switch c.Visibility {
+	case VisibilityPublic, VisibilityProtected, VisibilityPrivate:
+	default:
+		return fmt.Errorf("callback prefix %q: unknown visibility %d", c.Prefix, c.Visibility)
+	}
+	if c.Handler == nil {
+		return fmt.Errorf("callback prefix %q: handler is nil", c.Prefix)
+	}
+	return nil
+}

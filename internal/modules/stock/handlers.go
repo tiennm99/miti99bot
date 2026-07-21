@@ -21,10 +21,13 @@ import (
 // prefixes/partitions). PriceClient is reused across calls; nowFn allows
 // tests to inject a deterministic clock for portfolio CreatedAt.
 type state struct {
-	store  Store
-	prices *PriceClient
-	locks  keylock.Map
-	nowFn  func() time.Time
+	store            Store
+	pending          PendingDividendStore
+	prices           *PriceClient
+	dividends        DividendEventProvider
+	locks            keylock.Map
+	nowFn            func() time.Time
+	newDividendToken func() (string, error)
 }
 
 func (s *state) now() time.Time {
@@ -35,10 +38,12 @@ func (s *state) now() time.Time {
 }
 
 // newState builds the default state used by the module factory.
-func newState(store Store) *state {
+func newState(store Store, pending PendingDividendStore) *state {
 	return &state{
-		store:  store,
-		prices: &PriceClient{},
+		store:     store,
+		pending:   pending,
+		prices:    &PriceClient{},
+		dividends: &SSIDividendProvider{},
 	}
 }
 
@@ -452,15 +457,17 @@ func (s *state) handleDividend(ctx context.Context, b *bot.Bot, update *models.U
 			"\nBalance: "+FormatVND(balance))
 }
 
-// handleStats fetches current prices for held tickers and renders the
-// portfolio. Read-only; no portfolio mutation, so no keylock.
+// handleStats renders the portfolio first, then checks each held ticker for
+// dividend events. Cursor persistence reloads and merges under the user lock,
+// so network calls never block concurrent portfolio mutations.
 func (s *state) handleStats(ctx context.Context, b *bot.Bot, update *models.Update) error {
 	userID, ok := senderInfo(update)
 	if !ok {
 		return chathelper.Reply(ctx, b, update.Message,
 			"Cannot identify user — /stock_portfolio needs a sender.")
 	}
-	p, err := LoadPortfolio(ctx, s.store, userID, s.now().UnixMilli())
+	checkedThrough := s.now()
+	p, err := LoadPortfolio(ctx, s.store, userID, checkedThrough.UnixMilli())
 	if err != nil {
 		log.Error("stock_load_portfolio", "user", userID, "err", err)
 		return chathelper.Reply(ctx, b, update.Message, "Could not load portfolio. Try again later.")
@@ -486,13 +493,13 @@ func (s *state) handleStats(ctx context.Context, b *bot.Bot, update *models.Upda
 
 	if len(heldList) > 0 {
 		fetchCtx, cancel := chathelper.FetchContext(ctx)
-		defer cancel()
 
 		symbols := make([]string, 0, len(heldList))
 		for _, h := range heldList {
 			symbols = append(symbols, h.symbol)
 		}
 		prices, fetchErr := s.prices.FetchPrices(fetchCtx, symbols)
+		cancel()
 		if fetchErr != nil {
 			log.Error("stock_fetch_prices", "symbols", strings.Join(symbols, ","), "err", fetchErr)
 		}
@@ -535,7 +542,10 @@ func (s *state) handleStats(ctx context.Context, b *bot.Bot, update *models.Upda
 			{"Account P&L", FormatPnL(totalValue, p.Meta.Invested)},
 		}
 	}
-	return chathelper.ReplyHTML(ctx, b, update.Message, portfolioTableReply("Stock Portfolio", positions, summary))
+	if err := chathelper.ReplyHTML(ctx, b, update.Message, portfolioTableReply("Stock Portfolio", positions, summary)); err != nil {
+		return err
+	}
+	return s.notifyDividendEvents(ctx, b, update.Message, userID, p, checkedThrough)
 }
 
 const portfolioReplyLimit = 4000

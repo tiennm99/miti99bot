@@ -28,10 +28,18 @@ func (a Auth) Permits(v Visibility, update *models.Update) bool {
 	if v == VisibilityPublic {
 		return true
 	}
-	if update == nil || update.Message == nil || update.Message.From == nil {
+	if update == nil {
 		return false
 	}
-	senderID := update.Message.From.ID
+	var senderID int64
+	if update.Message != nil && update.Message.From != nil {
+		senderID = update.Message.From.ID
+	} else if update.CallbackQuery != nil {
+		senderID = update.CallbackQuery.From.ID
+	}
+	if senderID == 0 {
+		return false
+	}
 	switch v {
 	case VisibilityPrivate:
 		return a.BotOwnerID != 0 && senderID == a.BotOwnerID
@@ -81,6 +89,24 @@ func Install(b *bot.Bot, reg *Registry, auth Auth) {
 				logCommand(cmdCopy.Name, update, err)
 			},
 		)
+	}
+	for prefix, callback := range reg.callbacks {
+		callbackCopy := callback
+		prefixCopy := prefix
+		b.RegisterHandler(bot.HandlerTypeCallbackQueryData, prefixCopy, bot.MatchTypePrefix,
+			func(ctx context.Context, b *bot.Bot, update *models.Update) {
+				if !auth.Permits(callbackCopy.Visibility, update) {
+					if update != nil && update.CallbackQuery != nil {
+						_, _ = b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{CallbackQueryID: update.CallbackQuery.ID})
+					}
+					return
+				}
+				err := callbackCopy.Handler(ctx, b, update)
+				if err != nil {
+					metrics.IncError("callback-handler-error")
+					log.Error("callback", "prefix", prefixCopy, "err", err)
+				}
+			})
 	}
 }
 

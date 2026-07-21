@@ -134,6 +134,30 @@ func TestBuild_DetectsCronConflict(t *testing.T) {
 	}
 }
 
+func TestBuild_DetectsOverlappingCallbackPrefixes(t *testing.T) {
+	callback := func(prefix string) Callback {
+		return Callback{Prefix: prefix, Visibility: VisibilityPublic, Handler: func(_ context.Context, _ *bot.Bot, _ *models.Update) error { return nil }}
+	}
+	factories := map[string]Factory{
+		"alpha": func(_ Deps) Module { return Module{Callbacks: []Callback{callback("stock:")}} },
+		"beta":  func(_ Deps) Module { return Module{Callbacks: []Callback{callback("stock:div:")}} },
+	}
+	_, err := Build([]string{"alpha", "beta"}, factories, newProvider(), BuildOptions{})
+	if err == nil || !strings.Contains(err.Error(), "callback prefix conflict") {
+		t.Fatalf("expected callback prefix conflict, got %v", err)
+	}
+}
+
+func TestBuild_RejectsInvalidCallback(t *testing.T) {
+	factories := map[string]Factory{
+		"alpha": func(_ Deps) Module { return Module{Callbacks: []Callback{{Prefix: "", Handler: nil}}} },
+	}
+	_, err := Build([]string{"alpha"}, factories, newProvider(), BuildOptions{})
+	if err == nil || !strings.Contains(err.Error(), "callback") {
+		t.Fatalf("expected callback validation error, got %v", err)
+	}
+}
+
 func TestBuild_RequiresProvider(t *testing.T) {
 	_, err := Build(nil, map[string]Factory{}, nil, BuildOptions{})
 	if err == nil {

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"regexp"
 	"sort"
+	"strings"
 
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
@@ -36,6 +37,7 @@ type Registry struct {
 	private      map[string]Command
 	crons        map[string]Cron // name → Cron, unique across modules
 	cronDeps     map[string]Deps // cron name → owning module's prefixed Deps
+	callbacks    map[string]Callback
 	commandHooks []func(ctx context.Context, name string, update *models.Update)
 }
 
@@ -121,10 +123,12 @@ func Build(enabled []string, factories map[string]Factory, provider storage.Prov
 		private:     map[string]Command{},
 		crons:       map[string]Cron{},
 		cronDeps:    map[string]Deps{},
+		callbacks:   map[string]Callback{},
 	}
 
 	owners := map[string]string{} // command name → module that registered it
 	cronOwners := map[string]string{}
+	callbackOwners := map[string]string{}
 	seenModule := map[string]bool{}
 	var unknown []string
 
@@ -192,6 +196,10 @@ func Build(enabled []string, factories map[string]Factory, provider storage.Prov
 			reg.cronDeps[cron.Name] = moduleDeps
 		}
 
+		if err := reg.addCallbacks(name, mod.Callbacks, callbackOwners); err != nil {
+			return nil, err
+		}
+
 		reg.Modules = append(reg.Modules, mod)
 	}
 
@@ -200,6 +208,22 @@ func Build(enabled []string, factories map[string]Factory, provider storage.Prov
 	}
 
 	return reg, nil
+}
+
+func (r *Registry) addCallbacks(module string, callbacks []Callback, owners map[string]string) error {
+	for _, callback := range callbacks {
+		if err := validateCallback(callback); err != nil {
+			return fmt.Errorf("module %q: %w", module, err)
+		}
+		for prefix, owner := range owners {
+			if strings.HasPrefix(prefix, callback.Prefix) || strings.HasPrefix(callback.Prefix, prefix) {
+				return fmt.Errorf("callback prefix conflict: %q in %q overlaps %q in %q", callback.Prefix, module, prefix, owner)
+			}
+		}
+		owners[callback.Prefix] = module
+		r.callbacks[callback.Prefix] = callback
+	}
+	return nil
 }
 
 func sortedCommands(m map[string]Command) []Command {
