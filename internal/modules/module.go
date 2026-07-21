@@ -40,7 +40,7 @@ type Command struct {
 	Visibility  Visibility     // public/protected/private
 	Description string         // concise summary shown in command discovery (required, non-empty)
 	Parameters  string         // optional syntax after the command, e.g. "<quantity> <ticker>"
-	Example     string         // optional full invocation; defaults to "/" + Name
+	Example     string         // full invocation required with public Parameters; omitted without them
 	Handler     CommandHandler // required
 }
 

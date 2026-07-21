@@ -20,14 +20,14 @@ func TestCommandPresentation(t *testing.T) {
 			},
 			invocation: "/stock_buy <quantity> <ticker>",
 			example:    "/stock_buy 100 TCB",
-			menu:       "<quantity> <ticker>. Buy VN stock at market price. Example: /stock_buy 100 TCB",
+			menu:       "<quantity> <ticker>. Buy VN stock at market price. Eg: /stock_buy 100 TCB",
 		},
 		{
-			name:       "no parameters uses command as example",
+			name:       "no parameters omits example",
 			command:    Command{Name: "ping", Description: "Health check!"},
 			invocation: "/ping",
-			example:    "/ping",
-			menu:       "Health check! Example: /ping",
+			example:    "",
+			menu:       "Health check!",
 		},
 		{
 			name: "variadic parameters keep ellipsis",
@@ -39,7 +39,7 @@ func TestCommandPresentation(t *testing.T) {
 			},
 			invocation: "/random <options(comma-separated)>",
 			example:    "/random pizza, sushi",
-			menu:       "<options(comma-separated)>. Pick one option. Example: /random pizza, sushi",
+			menu:       "<options(comma-separated)>. Pick one option. Eg: /random pizza, sushi",
 		},
 	}
 

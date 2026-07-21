@@ -32,7 +32,17 @@ func validateCommand(c Command) error {
 	if strings.ContainsAny(c.Example, "\r\n") {
 		return fmt.Errorf("command %q: example must be single-line", c.Name)
 	}
-	if example := strings.TrimSpace(c.Example); example != "" {
+	parameters := strings.TrimSpace(c.Parameters)
+	example := strings.TrimSpace(c.Example)
+	if c.Visibility == VisibilityPublic {
+		if parameters == "" && example != "" {
+			return fmt.Errorf("command %q: example requires parameters", c.Name)
+		}
+		if parameters != "" && example == "" {
+			return fmt.Errorf("command %q: example is required when parameters are present", c.Name)
+		}
+	}
+	if example != "" {
 		prefix := "/" + c.Name
 		if example != prefix && !strings.HasPrefix(example, prefix+" ") {
 			return fmt.Errorf("command %q: example must invoke %s", c.Name, prefix)
