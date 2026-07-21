@@ -21,12 +21,14 @@ type AssetPosition struct {
 	Quantity          int64   `json:"quantity" bson:"quantity"`
 	Base              float64 `json:"base" bson:"base"`
 	DividendCheckedAt int64   `json:"dividendCheckedAt" bson:"dividendCheckedAt"`
+	OpenedAt          int64   `json:"openedAt,omitempty" bson:"openedAt,omitempty"`
 }
 
 type Portfolio struct {
-	VND    float64                  `json:"vnd" bson:"vnd"`
-	Assets map[string]AssetPosition `json:"assets" bson:"assets"`
-	Meta   PortfolioMeta            `json:"meta" bson:"meta"`
+	VND                   float64                  `json:"vnd" bson:"vnd"`
+	Assets                map[string]AssetPosition `json:"assets" bson:"assets"`
+	AppliedDividendEvents map[string]int64         `json:"appliedDividendEvents,omitempty" bson:"appliedDividendEvents,omitempty"`
+	Meta                  PortfolioMeta            `json:"meta" bson:"meta"`
 }
 
 type PortfolioMeta struct {
@@ -48,6 +50,9 @@ func LoadPortfolio(ctx context.Context, store Store, userID int64, now int64) (P
 	case err == nil:
 		if p.Assets == nil {
 			p.Assets = map[string]AssetPosition{}
+		}
+		if p.AppliedDividendEvents == nil {
+			p.AppliedDividendEvents = map[string]int64{}
 		}
 		if p.Meta.CreatedAt == 0 {
 			p.Meta.CreatedAt = now
@@ -82,8 +87,13 @@ func (p Portfolio) Validate() error {
 		if err != nil || canonical != symbol {
 			return fmt.Errorf("stock: invalid ticker %q", symbol)
 		}
-		if position.Quantity <= 0 || !isPositiveFiniteCost(position.Base) || position.DividendCheckedAt <= 0 {
+		if position.Quantity <= 0 || !isPositiveFiniteCost(position.Base) || position.DividendCheckedAt <= 0 || position.OpenedAt < 0 {
 			return fmt.Errorf("stock: %s has invalid position", symbol)
+		}
+	}
+	for eventID, appliedAt := range p.AppliedDividendEvents {
+		if eventID == "" || len(eventID) > 128 || appliedAt <= 0 {
+			return fmt.Errorf("stock: invalid applied dividend event")
 		}
 	}
 	return nil
@@ -111,6 +121,7 @@ func (p *Portfolio) BuyTicker(symbol string, quantity int64, base float64, now i
 		p.Assets = map[string]AssetPosition{}
 	}
 	position := p.Assets[symbol]
+	isOpening := position.Quantity == 0
 	if position.Quantity > math.MaxInt64-quantity {
 		return fmt.Errorf("stock: quantity overflows")
 	}
@@ -121,6 +132,9 @@ func (p *Portfolio) BuyTicker(symbol string, quantity int64, base float64, now i
 	}
 	if position.DividendCheckedAt == 0 {
 		position.DividendCheckedAt = now
+	}
+	if isOpening {
+		position.OpenedAt = now
 	}
 	p.Assets[symbol] = position
 	return nil
