@@ -17,11 +17,6 @@ func (c Command) InvocationSentence() string {
 	return withTerminalPunctuation(c.Invocation())
 }
 
-// ExampleInvocation returns the explicitly registered copyable example.
-func (c Command) ExampleInvocation() string {
-	return strings.TrimSpace(c.Example)
-}
-
 // SummarySentence normalizes a command summary to a sentence without
 // duplicating terminal punctuation supplied by the registration.
 func (c Command) SummarySentence() string {
@@ -38,10 +33,6 @@ func (c Command) TelegramMenuDescription() string {
 		sb.WriteByte(' ')
 	}
 	sb.WriteString(c.SummarySentence())
-	if example := c.ExampleInvocation(); example != "" {
-		sb.WriteString(" Eg: ")
-		sb.WriteString(example)
-	}
 	return sb.String()
 }
 

@@ -25,7 +25,6 @@ func wheelOfNamesCommand() modules.Command {
 		Visibility:  modules.VisibilityPublic,
 		Description: "Pick one comma-separated option with wheel GIF when configured",
 		Parameters:  "<options(comma-separated)>",
-		Example:     "/wheelofnames pizza, sushi, pho",
 		Handler: func(ctx context.Context, b *bot.Bot, update *models.Update) error {
 			if update.Message == nil {
 				return nil

@@ -48,22 +48,6 @@ func TestValidateCommand_RejectsInvalidPresentationMetadata(t *testing.T) {
 			command: Command{Name: "ok", Visibility: VisibilityPublic, Description: "d", Parameters: "<a>\n<b>", Handler: okHandler},
 		},
 		{
-			name:    "multiline example",
-			command: Command{Name: "ok", Visibility: VisibilityPublic, Description: "d", Example: "/ok one\n/ok two", Handler: okHandler},
-		},
-		{
-			name:    "example invokes another command",
-			command: Command{Name: "ok", Visibility: VisibilityPublic, Description: "d", Example: "/other", Handler: okHandler},
-		},
-		{
-			name:    "example without parameters",
-			command: Command{Name: "ok", Visibility: VisibilityPublic, Description: "d", Example: "/ok", Handler: okHandler},
-		},
-		{
-			name:    "parameters without example",
-			command: Command{Name: "ok", Visibility: VisibilityPublic, Description: "d", Parameters: "<value>", Handler: okHandler},
-		},
-		{
 			name:    "native description too long",
 			command: Command{Name: "ok", Visibility: VisibilityPublic, Description: strings.Repeat("x", 257), Handler: okHandler},
 		},
@@ -86,13 +70,12 @@ func TestValidateCommand_AcceptsLegalNames(t *testing.T) {
 	}
 }
 
-func TestValidateCommand_AcceptsMatchedParametersAndExample(t *testing.T) {
+func TestValidateCommand_AcceptsParameters(t *testing.T) {
 	command := Command{
 		Name:        "ok",
 		Visibility:  VisibilityPublic,
 		Description: "Do it",
 		Parameters:  "<value>",
-		Example:     "/ok demo",
 		Handler:     okHandler,
 	}
 	if err := validateCommand(command); err != nil {

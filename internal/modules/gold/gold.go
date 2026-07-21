@@ -21,7 +21,6 @@ func New(deps modules.Deps) modules.Module {
 				Visibility:  modules.VisibilityPublic,
 				Description: "Top up VND to your gold account",
 				Parameters:  "<vnd_amount>",
-				Example:     "/gold_topup 5000000",
 				Handler:     s.handleTopup,
 			},
 			{
@@ -29,7 +28,6 @@ func New(deps modules.Deps) modules.Module {
 				Visibility:  modules.VisibilityPublic,
 				Description: "Buy gold at SJC sell price",
 				Parameters:  "<luong>",
-				Example:     "/gold_buy 1",
 				Handler:     s.handleBuy,
 			},
 			{
@@ -37,7 +35,6 @@ func New(deps modules.Deps) modules.Module {
 				Visibility:  modules.VisibilityPublic,
 				Description: "Sell gold at SJC buy price",
 				Parameters:  "<luong>",
-				Example:     "/gold_sell 0.5",
 				Handler:     s.handleSell,
 			},
 			{
