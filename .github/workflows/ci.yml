@@ -48,7 +48,7 @@ jobs:
           govulncheck ./...
 
       # No DB emulator step: MongoDB integration tests skip gracefully when
-      # MONGODB_TEST_URL is unset. Run them locally via `make test-mongo`.
+      # MONGODB_TEST_URL is unset. See README.md for the local Docker command.
       - name: go test
         env:
           # Quiet test logs so real failures stand out.

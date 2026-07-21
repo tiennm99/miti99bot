@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"syscall"
@@ -32,15 +33,35 @@ import (
 	"github.com/tiennm99/miti99bot/internal/telegram"
 )
 
-// gitSHA is the local-build fallback, populated via `-ldflags "-X
-// main.gitSHA=<sha>"` (see Makefile). On Coolify the commit comes from the
-// SOURCE_COMMIT runtime env instead (resolveCommitSHA prefers it). Empty from
-// both sources means deploynotify stays silent.
-var gitSHA string
+// gitSHA is the local-build fallback read from the VCS metadata that go build
+// embeds automatically. On Coolify the commit comes from SOURCE_COMMIT instead
+// (resolveCommitSHA prefers it).
+var gitSHA = buildCommitSHA()
+
+func buildCommitSHA() string {
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return ""
+	}
+	for _, setting := range info.Settings {
+		if setting.Key == "vcs.revision" {
+			return shortCommitSHA(setting.Value)
+		}
+	}
+	return ""
+}
+
+func shortCommitSHA(value string) string {
+	value = strings.TrimSpace(value)
+	if len(value) > 7 {
+		return value[:7]
+	}
+	return value
+}
 
 // resolveCommitSHA returns the commit identifier for the deploy notification.
 // Coolify injects SOURCE_COMMIT into the container environment at runtime, so
-// prefer it; fall back to the ldflags-baked gitSHA for local builds; and when
+// prefer it; fall back to Go's embedded VCS revision for local builds; and when
 // neither is set, report "unknown" so the owner still gets the startup DM.
 func resolveCommitSHA(envSourceCommit string) string {
 	if s := strings.TrimSpace(envSourceCommit); s != "" {
