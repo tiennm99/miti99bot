@@ -60,3 +60,17 @@ func TestHandleStatsDeliversReplyWhenUpstreamHangs(t *testing.T) {
 		t.Fatalf("reply missing summary / degraded line; got:\n%s", sent)
 	}
 }
+
+func TestCoinPortfolioReplyStaysWithinTelegramBudget(t *testing.T) {
+	positions := make([]string, 200)
+	for i := range positions {
+		positions[i] = strings.Repeat("position-data-", 20)
+	}
+	reply := boundedPortfolioReply([]string{"header"}, positions, []string{"summary"})
+	if len(reply) > portfolioReplyLimit {
+		t.Fatalf("reply length = %d, limit = %d", len(reply), portfolioReplyLimit)
+	}
+	if !strings.Contains(reply, "position(s) omitted") || !strings.Contains(reply, "summary") {
+		t.Fatalf("bounded reply lost omission marker or summary: %q", reply)
+	}
+}

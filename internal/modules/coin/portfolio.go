@@ -17,9 +17,10 @@ const portfolioUpdateAttempts = 5
 type Store = storage.DocStore[Portfolio]
 
 type Portfolio struct {
-	USD    float64            `json:"usd" bson:"usd"`
-	Assets map[string]float64 `json:"assets" bson:"assets"`
-	Meta   PortfolioMeta      `json:"meta" bson:"meta"`
+	USD       float64            `json:"usd" bson:"usd"`
+	Assets    map[string]float64 `json:"assets" bson:"assets"`
+	CostBasis map[string]float64 `json:"costBasis" bson:"costBasis"`
+	Meta      PortfolioMeta      `json:"meta" bson:"meta"`
 }
 
 type PortfolioMeta struct {
@@ -28,7 +29,11 @@ type PortfolioMeta struct {
 }
 
 func NewPortfolio(now int64) Portfolio {
-	return Portfolio{Assets: map[string]float64{}, Meta: PortfolioMeta{CreatedAt: now}}
+	return Portfolio{
+		Assets:    map[string]float64{},
+		CostBasis: map[string]float64{},
+		Meta:      PortfolioMeta{CreatedAt: now},
+	}
 }
 
 func portfolioKey(userID int64) string {
@@ -45,6 +50,9 @@ func LoadPortfolio(ctx context.Context, store Store, userID int64, now int64) (P
 
 func SavePortfolio(ctx context.Context, store Store, userID int64, p Portfolio) error {
 	p.normalize()
+	if err := p.ValidateCostBasis(); err != nil {
+		return fmt.Errorf("coin: save portfolio %d: %w", userID, err)
+	}
 	if err := store.Put(ctx, portfolioKey(userID), p); err != nil {
 		return fmt.Errorf("coin: save portfolio %d: %w", userID, err)
 	}
@@ -62,6 +70,9 @@ func UpdatePortfolio(ctx context.Context, store Store, userID int64, now int64, 
 			return p, err
 		}
 		p.normalize()
+		if err := p.ValidateCostBasis(); err != nil {
+			return Portfolio{}, err
+		}
 		if err := store.PutVersioned(ctx, key, version, p); err == nil {
 			return p, nil
 		} else if !errors.Is(err, storage.ErrConflict) {
@@ -75,12 +86,21 @@ func loadPortfolioForUpdate(ctx context.Context, store Store, key string, now in
 	p, version, err := store.Get(ctx, key)
 	switch {
 	case err == nil:
+		if err := p.validateStoredAssetQuantities(); err != nil {
+			return Portfolio{}, 0, err
+		}
 		p.normalize()
 		if p.Assets == nil {
 			p.Assets = map[string]float64{}
 		}
+		if p.CostBasis == nil {
+			p.CostBasis = map[string]float64{}
+		}
 		if p.Meta.CreatedAt == 0 {
 			p.Meta.CreatedAt = now
+		}
+		if err := p.ValidateCostBasis(); err != nil {
+			return Portfolio{}, 0, err
 		}
 		return p, version, nil
 	case errors.Is(err, storage.ErrNotFound):
@@ -88,6 +108,15 @@ func loadPortfolioForUpdate(ctx context.Context, store Store, key string, now in
 	default:
 		return Portfolio{}, 0, err
 	}
+}
+
+func (p Portfolio) validateStoredAssetQuantities() error {
+	for symbol, qty := range p.Assets {
+		if math.IsNaN(qty) || math.IsInf(qty, 0) || qty < 0 {
+			return fmt.Errorf("coin: %s has invalid quantity", symbol)
+		}
+	}
+	return nil
 }
 
 func (p *Portfolio) AddUSD(amount float64) {
@@ -112,6 +141,62 @@ func (p *Portfolio) AddAsset(symbol string, amount float64) {
 	}
 	p.Assets[symbol] += amount
 	p.normalize()
+}
+
+func (p *Portfolio) AddCostBasis(symbol string, amount float64) error {
+	if !isPositiveFinite(amount) {
+		return fmt.Errorf("coin: invalid purchase cost basis")
+	}
+	if p.CostBasis == nil {
+		p.CostBasis = map[string]float64{}
+	}
+	next := p.CostBasis[symbol] + amount
+	if !isPositiveFinite(next) {
+		return fmt.Errorf("coin: cost basis overflows")
+	}
+	p.CostBasis[symbol] = next
+	return nil
+}
+
+func (p *Portfolio) RemoveCostBasis(symbol string, sold, held float64, holdingRemains bool) (float64, error) {
+	if !isPositiveFinite(sold) || !isPositiveFinite(held) || sold > held+coinDustEpsilon {
+		return 0, fmt.Errorf("coin: invalid cost basis quantities")
+	}
+	basis := p.CostBasis[symbol]
+	if !isPositiveFinite(basis) {
+		return 0, fmt.Errorf("coin: missing cost basis for %s", symbol)
+	}
+	if !holdingRemains {
+		delete(p.CostBasis, symbol)
+		return basis, nil
+	}
+	removed := basis * (sold / held)
+	remaining := basis - removed
+	if !isPositiveFinite(removed) || !isPositiveFinite(remaining) {
+		return 0, fmt.Errorf("coin: invalid remaining cost basis")
+	}
+	p.CostBasis[symbol] = remaining
+	return removed, nil
+}
+
+func (p Portfolio) ValidateCostBasis() error {
+	for symbol, basis := range p.CostBasis {
+		if !isPositiveFinite(basis) {
+			return fmt.Errorf("coin: %s has invalid cost basis", symbol)
+		}
+		if p.Assets[symbol] <= 0 {
+			return fmt.Errorf("coin: %s has cost basis without a holding", symbol)
+		}
+	}
+	for symbol, qty := range p.Assets {
+		if qty <= 0 {
+			continue
+		}
+		if !isPositiveFinite(p.CostBasis[symbol]) {
+			return fmt.Errorf("coin: holding %s has missing or invalid cost basis", symbol)
+		}
+	}
+	return nil
 }
 
 func (p *Portfolio) DeductAsset(symbol string, amount float64) (ok bool, held float64) {
@@ -141,6 +226,18 @@ func (p *Portfolio) normalize() {
 		} else {
 			p.Assets[symbol] = amount
 		}
+	}
+	if p.CostBasis == nil {
+		p.CostBasis = map[string]float64{}
+	}
+	for symbol, basis := range p.CostBasis {
+		if basis == 0 {
+			continue
+		}
+		if math.IsNaN(basis) || math.IsInf(basis, 0) || basis < 0 {
+			continue
+		}
+		p.CostBasis[symbol] = basis
 	}
 }
 
