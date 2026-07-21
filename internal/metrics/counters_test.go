@@ -27,7 +27,7 @@ func TestRegistry_IncCommand_AccumulatesCounts(t *testing.T) {
 	r.IncCommand("wordle")
 	r.IncCommand("loldle")
 
-	cmds, _, _ := r.snapshot()
+	cmds, _ := r.snapshot()
 	if cmds["wordle"] != 2 {
 		t.Errorf("wordle = %d, want 2", cmds["wordle"])
 	}
@@ -40,7 +40,7 @@ func TestRegistry_Snapshot_ResetsCounters(t *testing.T) {
 	r := New()
 	r.IncCommand("wordle")
 	r.snapshot() // first snapshot drains
-	cmds, _, _ := r.snapshot()
+	cmds, _ := r.snapshot()
 	if len(cmds) != 0 {
 		t.Errorf("after drain, snapshot = %v, want empty", cmds)
 	}
@@ -52,7 +52,7 @@ func TestRegistry_Flush_EmitsMetricsLine(t *testing.T) {
 
 	r := New()
 	r.IncCommand("wordle")
-	r.IncError("ai-429")
+	r.IncError("handler-error")
 	r.Flush()
 
 	output := buf.String()
@@ -62,8 +62,11 @@ func TestRegistry_Flush_EmitsMetricsLine(t *testing.T) {
 	if !strings.Contains(output, `"wordle":1`) {
 		t.Errorf("flush output missing wordle counter: %s", output)
 	}
-	if !strings.Contains(output, `"ai-429":1`) {
+	if !strings.Contains(output, `"handler-error":1`) {
 		t.Errorf("flush output missing error counter: %s", output)
+	}
+	if strings.Contains(output, `"ai":`) {
+		t.Errorf("flush output contains removed AI metrics field: %s", output)
 	}
 }
 
@@ -94,7 +97,7 @@ func TestRegistry_ConcurrentInc(t *testing.T) {
 		}()
 	}
 	wg.Wait()
-	cmds, _, _ := r.snapshot()
+	cmds, _ := r.snapshot()
 	if got := cmds["hot"]; got != goroutines*itersEach {
 		t.Errorf("hot = %d, want %d", got, goroutines*itersEach)
 	}
@@ -107,11 +110,10 @@ func TestPackageDefault_RoundTrip(t *testing.T) {
 
 	IncCommand("ping")
 	IncError("kv-fail")
-	IncAI("flash")
 
-	cmds, errs, ai := Default.snapshot()
-	if cmds["ping"] != 1 || errs["kv-fail"] != 1 || ai["flash"] != 1 {
-		t.Errorf("default registry: cmds=%v errs=%v ai=%v", cmds, errs, ai)
+	cmds, errs := Default.snapshot()
+	if cmds["ping"] != 1 || errs["kv-fail"] != 1 {
+		t.Errorf("default registry: cmds=%v errs=%v", cmds, errs)
 	}
 }
 
