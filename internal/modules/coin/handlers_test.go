@@ -156,7 +156,7 @@ func TestHandleBuyAndSell(t *testing.T) {
 	if p.USD != 500 || p.Assets["BTC"].Quantity != 0.01 {
 		t.Fatalf("after buy = %+v", p)
 	}
-	if p.Assets["BTC"].Base != 500 || p.Assets["BTC"].DividendCheckedAt != 123 {
+	if p.Assets["BTC"].Base != 500 {
 		t.Fatalf("buy asset = %+v", p.Assets["BTC"])
 	}
 	s.prices.(fakePriceFetcher).prices["BTC"] = CoinPrice{USD: 60_000, Source: "Binance"}
@@ -354,7 +354,7 @@ func TestStatsTreatsOverflowedValuationAsUnavailable(t *testing.T) {
 	ctx := context.Background()
 	s := newTestState(map[string]CoinPrice{"BTC": {USD: math.MaxFloat64, Source: "test"}}, nil)
 	p := NewPortfolio(1)
-	p.Assets["BTC"] = AssetPosition{Quantity: 2, Base: 1, DividendCheckedAt: 1}
+	p.Assets["BTC"] = AssetPosition{Quantity: 2, Base: 1}
 	if err := SavePortfolio(ctx, s.store, 7, p); err != nil {
 		t.Fatal(err)
 	}

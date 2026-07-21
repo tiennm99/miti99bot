@@ -29,7 +29,6 @@ import (
 	"github.com/tiennm99/miti99bot/internal/modules/wordle"
 	"github.com/tiennm99/miti99bot/internal/server"
 	"github.com/tiennm99/miti99bot/internal/storage"
-	"github.com/tiennm99/miti99bot/internal/systemstate"
 	"github.com/tiennm99/miti99bot/internal/telegram"
 )
 
@@ -94,7 +93,6 @@ func factories() map[string]modules.Factory {
 // shutdown). Atlas SRV DNS + TLS handshake can take a couple seconds on a cold
 // container; 10s leaves headroom without hiding a wedged cluster.
 const mongodbInitTimeout = 10 * time.Second
-const portfolioMigrationTimeout = 2 * time.Minute
 
 func main() {
 	rootCtx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -115,7 +113,7 @@ func main() {
 	}
 	defer closeProvider()
 
-	if err := stats.InitStore(rootCtx, provider.Collection("stats"), provider.Collection(systemstate.CollectionName)); err != nil {
+	if err := stats.InitStore(rootCtx, provider.Collection("stats")); err != nil {
 		log.Fatal("stats storage init failed", "err", err)
 	}
 	if err := lol.InitStore(rootCtx, provider.Collection(lol.CollectionName)); err != nil {
@@ -133,20 +131,6 @@ func main() {
 	if err != nil {
 		log.Fatal("module registry build failed", "err", err)
 	}
-	migrationCtx, cancelMigrations := context.WithTimeout(rootCtx, portfolioMigrationTimeout)
-	if moduleLoaded(reg, stock.CollectionName) {
-		if err := stock.InitStore(migrationCtx, provider.Collection(stock.CollectionName), provider.Collection(systemstate.CollectionName)); err != nil {
-			cancelMigrations()
-			log.Fatal("stock storage init failed", "err", err)
-		}
-	}
-	if moduleLoaded(reg, coin.CollectionName) {
-		if err := coin.InitStore(migrationCtx, provider.Collection(coin.CollectionName), provider.Collection(systemstate.CollectionName)); err != nil {
-			cancelMigrations()
-			log.Fatal("coin storage init failed", "err", err)
-		}
-	}
-	cancelMigrations()
 	auth := modules.Auth{BotOwnerID: cfg.BotOwnerID, AdminUserIDs: cfg.AdminUserIDs}
 	modules.Install(b, reg, auth)
 	log.Info("modules loaded",
@@ -223,15 +207,6 @@ func main() {
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		log.Error("graceful shutdown failed", "err", err)
 	}
-}
-
-func moduleLoaded(reg *modules.Registry, name string) bool {
-	for _, module := range reg.Modules {
-		if module.Name == name {
-			return true
-		}
-	}
-	return false
 }
 
 // buildProvider picks the storage backend. Selection order:

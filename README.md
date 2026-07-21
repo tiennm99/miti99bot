@@ -53,9 +53,10 @@ notice and avoiding accidental repeated adjustments.
 
 ### Stock and coin P&L accounting
 
-Stock and coin portfolios embed each open position under `assets.<symbol>` with
-`quantity`, total remaining `base`, and `dividendCheckedAt`. Stock cash is
-stored directly as `vnd`; coin cash remains `usd`. Buys add their actual spend. Partial sells remove basis using the
+Stock and coin portfolios embed each open position under `assets.<symbol>`.
+Both store `quantity` and total remaining `base`; stock positions additionally
+store `dividendCheckedAt`. Stock cash is stored directly as `vnd`; coin cash
+remains `usd`. Buys add their actual spend. Partial sells remove basis using the
 weighted-average method and report realized P&L; full sells remove the position
 and its basis. Stock share dividends add shares without adding cost, which
 lowers the derived average price, while cash dividends do not change position
@@ -67,16 +68,11 @@ account value minus all top-ups, so it also reflects realized proceeds,
 dividend cash, and idle cash. If any current quote is unavailable, totals are
 marked partial and numeric Account P&L is withheld.
 
-`dividendCheckedAt` is a future dividend-event cursor. It is initialized when a
-position is first bought, preserved across later buys and sells, and advanced
-when a stock dividend is recorded. A full exit removes the cursor; reopening
-the position starts it again.
-
-On startup, enabled stock and coin modules migrate the previous flat
-`assets`/`costBasis` shape into embedded asset documents. Stock also migrates
-`currency.VND` to `vnd`. The migration preserves the already-established basis,
-uses optimistic writes, records completion in the shared `system` collection,
-and verifies the new invariant every boot.
+For stock positions, `dividendCheckedAt` is a future dividend-event cursor. It
+is initialized when a position is first bought, preserved across later buys and
+sells, and advanced when a stock dividend is recorded. A full exit removes the
+cursor; reopening the position starts it again. Coin positions do not store a
+dividend cursor.
 
 ## Layout
 
