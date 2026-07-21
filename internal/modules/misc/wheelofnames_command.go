@@ -24,7 +24,7 @@ func wheelOfNamesCommand() modules.Command {
 		Name:        "wheelofnames",
 		Visibility:  modules.VisibilityPublic,
 		Description: "Pick one comma-separated option with wheel GIF when configured",
-		Parameters:  "<options(comma-separated)>",
+		Parameters:  "<option,...>",
 		Handler: func(ctx context.Context, b *bot.Bot, update *models.Update) error {
 			if update.Message == nil {
 				return nil
@@ -63,7 +63,7 @@ func wheelOfNamesCommand() modules.Command {
 	}
 }
 
-const wheelUsage = "Usage: /wheelofnames <options(comma-separated)>"
+const wheelUsage = "Usage: /wheelofnames <option,...>"
 
 func wheelResultCaption(result string) string {
 	result = truncateWheelResultCaption(result)
