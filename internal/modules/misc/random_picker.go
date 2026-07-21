@@ -31,7 +31,6 @@ func randomCommand() modules.Command {
 		Visibility:  modules.VisibilityPublic,
 		Description: "Pick one random comma-separated option",
 		Parameters:  "<options(comma-separated)>",
-		Example:     "/random pizza, sushi, pho",
 		Handler: func(ctx context.Context, b *bot.Bot, update *models.Update) error {
 			if update.Message == nil {
 				return nil

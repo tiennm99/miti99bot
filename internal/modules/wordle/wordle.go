@@ -23,7 +23,6 @@ func New(deps modules.Deps) modules.Module {
 				Visibility:  modules.VisibilityPublic,
 				Description: "Classic wordle — guess the 5-letter word",
 				Parameters:  "[word]",
-				Example:     "/wordle apple",
 				Handler:     s.handleWordle,
 			},
 			{

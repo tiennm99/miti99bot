@@ -50,9 +50,6 @@ func RenderHelp(reg *modules.Registry) string {
 			fmt.Fprintf(&sb, "\n%s %s",
 				html.EscapeString(command.InvocationSentence()),
 				html.EscapeString(command.SummarySentence()))
-			if example := command.ExampleInvocation(); example != "" {
-				fmt.Fprintf(&sb, " Eg: <code>%s</code>", html.EscapeString(example))
-			}
 		}
 		sections = append(sections, sb.String())
 	}

@@ -22,7 +22,7 @@ func TestBotCommandMenu_UsesLoadedPublicCommandsInModuleOrder(t *testing.T) {
 			{
 				Name: "beta",
 				Commands: []modules.Command{
-					{Name: "beta_public", Description: "Beta public", Parameters: "<value>", Example: "/beta_public demo", Visibility: modules.VisibilityPublic},
+					{Name: "beta_public", Description: "Beta public", Parameters: "<value>", Visibility: modules.VisibilityPublic},
 					{Name: "beta_private", Description: "Beta private", Visibility: modules.VisibilityPrivate},
 				},
 			},
@@ -38,7 +38,7 @@ func TestBotCommandMenu_UsesLoadedPublicCommandsInModuleOrder(t *testing.T) {
 
 	got := botCommandMenu(reg)
 	want := []models.BotCommand{
-		{Command: "beta_public", Description: "<value>. Beta public. Eg: /beta_public demo"},
+		{Command: "beta_public", Description: "<value>. Beta public."},
 		{Command: "alpha_public", Description: "Alpha public."},
 	}
 	if len(got) != len(want) {
@@ -90,15 +90,10 @@ func TestCommandDiscovery_AllPublicCommandsHaveSafeMetadata(t *testing.T) {
 		if got := command.Parameters; got != expectedParameters[command.Name] {
 			t.Errorf("/%s parameters = %q, want %q", command.Name, got, expectedParameters[command.Name])
 		}
-		example := command.ExampleInvocation()
-		if command.Parameters == "" {
-			if example != "" || strings.Contains(command.TelegramMenuDescription(), "Eg:") {
-				t.Errorf("/%s without parameters has example %q", command.Name, example)
-			}
-		} else if !strings.HasPrefix(example, "/"+command.Name) {
-			t.Errorf("/%s example = %q", command.Name, example)
-		}
 		description := command.TelegramMenuDescription()
+		if strings.Contains(description, "Eg:") {
+			t.Errorf("/%s native menu description contains an example: %q", command.Name, description)
+		}
 		if strings.ContainsAny(description, "\r\n") {
 			t.Errorf("/%s native menu description is multiline: %q", command.Name, description)
 		}

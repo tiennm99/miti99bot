@@ -21,7 +21,6 @@ func New(deps modules.Deps) modules.Module {
 				Visibility:  modules.VisibilityPublic,
 				Description: "Classic loldle — guess the current champion",
 				Parameters:  "[champion]",
-				Example:     "/loldle Ahri",
 				Handler:     s.handleLoldle,
 			},
 			{
