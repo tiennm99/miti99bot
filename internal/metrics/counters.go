@@ -20,8 +20,8 @@ import (
 // while still surfacing minute-scale traffic shifts.
 const DefaultFlushInterval = 60 * time.Second
 
-// Registry holds named counters across three categories: command
-// invocations, errors, and AI calls. Zero-value Registry is ready to use.
+// Registry holds named counters across two categories: command invocations
+// and errors. Zero-value Registry is ready to use.
 //
 // Counters use atomic.Int64 so increments don't lock; the per-name map
 // itself is guarded by an RWMutex for the rare add path. Names should be
@@ -30,7 +30,6 @@ type Registry struct {
 	mu       sync.RWMutex
 	commands map[string]*atomic.Int64
 	errors   map[string]*atomic.Int64
-	ai       map[string]*atomic.Int64
 }
 
 // New returns an empty Registry. Most callers use the package-level
@@ -39,7 +38,6 @@ func New() *Registry {
 	return &Registry{
 		commands: map[string]*atomic.Int64{},
 		errors:   map[string]*atomic.Int64{},
-		ai:       map[string]*atomic.Int64{},
 	}
 }
 
@@ -56,13 +54,8 @@ func (r *Registry) IncCommand(name string) { r.inc(r.commandsMap(), name) }
 // like "ai-429", "kv-unavailable", "telegram-403".
 func (r *Registry) IncError(kind string) { r.inc(r.errorsMap(), kind) }
 
-// IncAI bumps the counter for an AI call by model name. Useful for
-// tracking the daily-quota path: sum across instances == requests.
-func (r *Registry) IncAI(model string) { r.inc(r.aiMap(), model) }
-
 func (r *Registry) commandsMap() map[string]*atomic.Int64 { return r.commands }
 func (r *Registry) errorsMap() map[string]*atomic.Int64   { return r.errors }
-func (r *Registry) aiMap() map[string]*atomic.Int64       { return r.ai }
 
 // inc bumps the counter for name in m, allocating on first use. Allocates
 // only when the name is new, so steady-state increments are mutex-free.
@@ -88,12 +81,11 @@ func (r *Registry) inc(m map[string]*atomic.Int64, name string) {
 // snapshot copies and resets the counters atomically per category. The
 // returned maps are owned by the caller; the registry's internal state is
 // reset to zero for the next interval.
-func (r *Registry) snapshot() (cmds, errs, ai map[string]int64) {
+func (r *Registry) snapshot() (cmds, errs map[string]int64) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	cmds = drain(r.commands)
 	errs = drain(r.errors)
-	ai = drain(r.ai)
 	return
 }
 
@@ -122,20 +114,20 @@ func drain(m map[string]*atomic.Int64) map[string]int64 {
 //
 // The log line shape:
 //
-//	{"msg":"metrics","commands":{"wordle":3,"loldle":1},"errors":{"ai-429":1},"ai":null}
+//	{"msg":"metrics","commands":{"wordle":3,"loldle":1},"errors":{"handler-error":1}}
 //
 // CloudWatch Logs filters on `jsonPayload.msg=metrics` for dashboards.
 // Empty categories appear as null (slog's default for nil maps).
 func (r *Registry) Flush() {
-	cmds, errs, ai := r.snapshot()
+	cmds, errs := r.snapshot()
 	// Avoid an empty-everything log line — adds noise without signal.
-	if cmds == nil && errs == nil && ai == nil {
+	if cmds == nil && errs == nil {
 		return
 	}
 	// slog renders map[string]int64 as a JSON object; tests assert on
 	// per-key substrings rather than full-line equality so non-deterministic
 	// hashtable iteration order doesn't make them flaky.
-	log.Info("metrics", "commands", cmds, "errors", errs, "ai", ai)
+	log.Info("metrics", "commands", cmds, "errors", errs)
 }
 
 // Run starts a goroutine that flushes counters every DefaultFlushInterval
@@ -160,11 +152,10 @@ func (r *Registry) Run(ctx context.Context) {
 	}
 }
 
-// IncCommand / IncError / IncAI on the package-level Default — short
-// import-path-free spelling for the common case.
+// IncCommand / IncError on the package-level Default — short import-path-free
+// spelling for the common case.
 func IncCommand(name string) { Default.IncCommand(name) }
 func IncError(kind string)   { Default.IncError(kind) }
-func IncAI(model string)     { Default.IncAI(model) }
 
 // Flush flushes the default registry. Used in graceful-shutdown paths.
 func Flush() { Default.Flush() }
