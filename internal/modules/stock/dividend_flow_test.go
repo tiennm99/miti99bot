@@ -1,8 +1,11 @@
 package stock
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -12,6 +15,7 @@ import (
 
 	"github.com/go-telegram/bot/models"
 
+	applog "github.com/tiennm99/miti99bot/internal/log"
 	"github.com/tiennm99/miti99bot/internal/storage"
 	"github.com/tiennm99/miti99bot/internal/testutil"
 )
@@ -37,6 +41,43 @@ func (p *blockingDividendProvider) FetchDividendEvents(_ context.Context, _ stri
 func (f *fakeDividendProvider) FetchDividendEvents(_ context.Context, _ string, _, _ time.Time) ([]DividendEvent, error) {
 	f.calls++
 	return append([]DividendEvent(nil), f.events...), f.err
+}
+
+func TestPortfolioDividendCheckLogsNoEvents(t *testing.T) {
+	s, store, _, rb, now := newDividendFlowState(t, nil)
+	seedDividendFlowPortfolio(t, store, now, 100)
+	p, err := LoadPortfolio(context.Background(), store, 7, now.UnixMilli())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var output bytes.Buffer
+	previous := applog.Default()
+	applog.SetDefault(slog.New(slog.NewJSONHandler(&output, nil)))
+	t.Cleanup(func() { applog.SetDefault(previous) })
+
+	if err := s.notifyDividendEvents(
+		context.Background(),
+		rb.Bot,
+		testutil.NewPrivateMessage(7, "/stock_portfolio").Message,
+		7,
+		p,
+		now,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	var record map[string]any
+	if err := json.Unmarshal(bytes.TrimSpace(output.Bytes()), &record); err != nil {
+		t.Fatalf("decode dividend check log %q: %v", output.String(), err)
+	}
+	if record["msg"] != "stock_dividend_events_checked" ||
+		record["user"] != float64(7) ||
+		record["ticker"] != "TCB" ||
+		record["events"] != float64(0) ||
+		record["status"] != "success" {
+		t.Fatalf("unexpected dividend check log: %#v", record)
+	}
 }
 
 func newDividendFlowState(t *testing.T, events []DividendEvent) (*state, Store, PendingDividendStore, *testutil.RecordingBot, time.Time) {

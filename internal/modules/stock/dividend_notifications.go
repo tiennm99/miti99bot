@@ -26,6 +26,7 @@ const (
 type dividendCheckResult struct {
 	symbol   string
 	openedAt int64
+	after    time.Time
 	events   []DividendEvent
 	err      error
 }
@@ -69,7 +70,13 @@ func (s *state) notifyDividendEvents(ctx context.Context, b *bot.Bot, msg *model
 			sem <- struct{}{}
 			defer func() { <-sem }()
 			events, err := s.dividends.FetchDividendEvents(fetchCtx, h.symbol, h.after, checkedThrough)
-			results[index] = dividendCheckResult{symbol: h.symbol, openedAt: p.Assets[h.symbol].OpenedAt, events: events, err: err}
+			results[index] = dividendCheckResult{
+				symbol:   h.symbol,
+				openedAt: p.Assets[h.symbol].OpenedAt,
+				after:    h.after,
+				events:   events,
+				err:      err,
+			}
 		}()
 	}
 	wg.Wait()
@@ -78,10 +85,24 @@ func (s *state) notifyDividendEvents(ctx context.Context, b *bot.Bot, msg *model
 	failed := make([]string, 0)
 	for _, result := range results {
 		if result.err != nil {
-			log.Error("stock_fetch_dividend_events", "ticker", result.symbol, "err", result.err)
+			log.Error("stock_dividend_events_checked",
+				"user", userID,
+				"ticker", result.symbol,
+				"from", result.after.UnixMilli(),
+				"through", checkedThrough.UnixMilli(),
+				"events", 0,
+				"status", "error",
+				"err", result.err)
 			failed = append(failed, result.symbol)
 			continue
 		}
+		log.Info("stock_dividend_events_checked",
+			"user", userID,
+			"ticker", result.symbol,
+			"from", result.after.UnixMilli(),
+			"through", checkedThrough.UnixMilli(),
+			"events", len(result.events),
+			"status", "success")
 		sort.Slice(result.events, func(i, j int) bool {
 			if result.events[i].PublishedAt.Equal(result.events[j].PublishedAt) {
 				return result.events[i].ProviderID < result.events[j].ProviderID
