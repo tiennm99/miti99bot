@@ -17,7 +17,7 @@ func TestHandlersRejectExtraArgs(t *testing.T) {
 		text string
 		want string
 	}{
-		{name: "topup currency", text: "/gold_topup 100 USD", want: "Usage: /gold_topup <amount>"},
+		{name: "topup currency", text: "/gold_topup 100 USD", want: "Usage: /gold_topup <vnd_amount>"},
 		{name: "buy unit", text: "/gold_buy 1 oz", want: "Usage: /gold_buy <luong>"},
 		{name: "sell symbol", text: "/gold_sell 1 SJC", want: "Usage: /gold_sell <luong>"},
 	}

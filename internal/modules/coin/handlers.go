@@ -20,7 +20,7 @@ var (
 func (s *state) handlePrice(ctx context.Context, b *bot.Bot, update *models.Update) error {
 	args := argsAfterCommand(update.Message.Text)
 	if len(args) != 1 {
-		return chathelper.Reply(ctx, b, update.Message, "Usage: /coin_price <COIN>\nExample: /coin_price BTC")
+		return chathelper.Reply(ctx, b, update.Message, "Usage: /coin_price <coin>\nExample: /coin_price BTC")
 	}
 	coin, err := ResolveCoinSymbol(args[0])
 	if err != nil {
@@ -70,7 +70,7 @@ func (s *state) handleBuy(ctx context.Context, b *bot.Bot, update *models.Update
 	}
 	args := argsAfterCommand(update.Message.Text)
 	if len(args) != 2 {
-		return chathelper.Reply(ctx, b, update.Message, "Usage: /coin_buy <COIN> <usd_amount>\nSpend USD to buy coin.\nAlternative: /coin_buy <usd_amount> <COIN>\nExample: /coin_buy BTC 10")
+		return chathelper.Reply(ctx, b, update.Message, "Usage: /coin_buy <coin> <usd_to_spend>\nSpend USD to buy coin.\nAlternative: /coin_buy <usd_to_spend> <coin>\nExample: /coin_buy BTC 10")
 	}
 	parsed, err := parseCoinValueArgs(args, isSafeUSD, errInvalidUSDAmount)
 	if errors.Is(err, errInvalidUSDAmount) {
@@ -124,7 +124,7 @@ func (s *state) handleSell(ctx context.Context, b *bot.Bot, update *models.Updat
 	}
 	args := argsAfterCommand(update.Message.Text)
 	if len(args) != 2 {
-		return chathelper.Reply(ctx, b, update.Message, "Usage: /coin_sell <COIN> <usd_amount>\nSell enough coin to receive USD.\nAlternative: /coin_sell <usd_amount> <COIN>\nExample: /coin_sell BTC 10")
+		return chathelper.Reply(ctx, b, update.Message, "Usage: /coin_sell <coin> <usd_to_receive>\nSell enough coin to receive USD.\nAlternative: /coin_sell <usd_to_receive> <coin>\nExample: /coin_sell BTC 10")
 	}
 	parsed, err := parseCoinValueArgs(args, isSafeUSD, errInvalidUSDAmount)
 	if errors.Is(err, errInvalidUSDAmount) {
@@ -174,7 +174,7 @@ func (s *state) handleSell(ctx context.Context, b *bot.Bot, update *models.Updat
 func formatInsufficientSellMessage(coin CoinSymbol, requestedUSD, heldQty, priceUSD float64) string {
 	heldQty = normalizeAmount(heldQty)
 	if heldQty == 0 {
-		return "No " + coin.Symbol + " available to sell.\nTry /coin_buy " + coin.Symbol + " <usd_amount> first."
+		return "No " + coin.Symbol + " available to sell.\nTry /coin_buy " + coin.Symbol + " <usd_to_spend> first."
 	}
 	availableUSD := heldQty * priceUSD
 	return "Not enough " + coin.Symbol + " to sell " + FormatUSD(requestedUSD) + ".\n" +

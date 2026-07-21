@@ -15,7 +15,6 @@ import (
 )
 
 const (
-	wheelOfNamesUsage          = "Usage: /wheelofnames <option1>, <option2>, ..."
 	wheelFilename              = "wheelofnames.gif"
 	wheelResultCaptionMaxRunes = 900
 )
@@ -25,13 +24,15 @@ func wheelOfNamesCommand() modules.Command {
 		Name:        "wheelofnames",
 		Visibility:  modules.VisibilityPublic,
 		Description: "Pick one comma-separated option with wheel GIF when configured",
+		Parameters:  "<options(comma-separated)>",
+		Example:     "/wheelofnames pizza, sushi, pho",
 		Handler: func(ctx context.Context, b *bot.Bot, update *models.Update) error {
 			if update.Message == nil {
 				return nil
 			}
 			options := splitWheelOptions(chathelper.ArgAfterCommand(update.Message.Text))
 			if len(options) == 0 {
-				return chathelper.Reply(ctx, b, update.Message, wheelOfNamesUsage)
+				return chathelper.Reply(ctx, b, update.Message, wheelUsage)
 			}
 			winner := pickWheelOption(options)
 			animation, err := renderWheelOfNamesAnimation(ctx, options, winner)
@@ -62,6 +63,8 @@ func wheelOfNamesCommand() modules.Command {
 		},
 	}
 }
+
+const wheelUsage = "Usage: /wheelofnames <options(comma-separated)>"
 
 func wheelResultCaption(result string) string {
 	result = truncateWheelResultCaption(result)

@@ -142,8 +142,8 @@ func TestWheelOfNames_UsageWhenMissingOptions(t *testing.T) {
 			rb, _ := installMisc(t, 999)
 			rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(7, text))
 
-			if got := rb.LastSent().Text(); got != wheelOfNamesUsage {
-				t.Errorf("wheelofnames reply = %q, want usage %q", got, wheelOfNamesUsage)
+			if got := rb.LastSent().Text(); got != wheelUsage {
+				t.Errorf("wheelofnames reply = %q, want usage %q", got, wheelUsage)
 			}
 		})
 	}

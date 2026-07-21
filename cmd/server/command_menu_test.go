@@ -3,12 +3,15 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/go-telegram/bot/models"
 
 	"github.com/tiennm99/miti99bot/internal/modules"
 	"github.com/tiennm99/miti99bot/internal/modules/stock"
+	moduleutil "github.com/tiennm99/miti99bot/internal/modules/util"
 	"github.com/tiennm99/miti99bot/internal/storage"
 	"github.com/tiennm99/miti99bot/internal/testutil"
 )
@@ -19,7 +22,7 @@ func TestBotCommandMenu_UsesLoadedPublicCommandsInModuleOrder(t *testing.T) {
 			{
 				Name: "beta",
 				Commands: []modules.Command{
-					{Name: "beta_public", Description: "Beta public", Visibility: modules.VisibilityPublic},
+					{Name: "beta_public", Description: "Beta public", Parameters: "<value>", Example: "/beta_public demo", Visibility: modules.VisibilityPublic},
 					{Name: "beta_private", Description: "Beta private", Visibility: modules.VisibilityPrivate},
 				},
 			},
@@ -35,8 +38,8 @@ func TestBotCommandMenu_UsesLoadedPublicCommandsInModuleOrder(t *testing.T) {
 
 	got := botCommandMenu(reg)
 	want := []models.BotCommand{
-		{Command: "beta_public", Description: "Beta public"},
-		{Command: "alpha_public", Description: "Alpha public"},
+		{Command: "beta_public", Description: "<value>. Beta public. Example: /beta_public demo"},
+		{Command: "alpha_public", Description: "Alpha public. Example: /alpha_public"},
 	}
 	if len(got) != len(want) {
 		t.Fatalf("commands = %v, want %v", got, want)
@@ -47,6 +50,68 @@ func TestBotCommandMenu_UsesLoadedPublicCommandsInModuleOrder(t *testing.T) {
 		}
 	}
 }
+
+func TestCommandDiscovery_AllPublicCommandsHaveSafeMetadata(t *testing.T) {
+	reg, err := modules.Build(nil, factories(), storage.NewMemoryProvider(), modules.BuildOptions{})
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	expectedParameters := map[string]string{
+		"coin_price":           "<coin>",
+		"coin_topup":           "<usd_amount>",
+		"coin_buy":             "<coin> <usd_to_spend>",
+		"coin_sell":            "<coin> <usd_to_receive>",
+		"gold_topup":           "<vnd_amount>",
+		"gold_buy":             "<luong>",
+		"gold_sell":            "<luong>",
+		"lol":                  "[date]",
+		"loldle":               "[champion]",
+		"random":               "<options(comma-separated)>",
+		"stats":                "[users | user <username> | cmd <command_name>]",
+		"stock_price":          "<ticker>",
+		"stock_topup":          "<vnd_amount>",
+		"stock_buy":            "<quantity> <ticker>",
+		"stock_sell":           "<quantity> <ticker>",
+		"stock_cash_dividend":  "<vnd_per_share> <ticker>",
+		"stock_share_dividend": "<ratio(owned:new)> <ticker>",
+		"stock_dividend":       "<vnd_per_share> <ratio(owned:new)> <ticker>",
+		"trongtruonghop":       "[target...]",
+		"tth":                  "[target...]",
+		"wheelofnames":         "<options(comma-separated)>",
+		"wordle":               "[word]",
+	}
+
+	menu := botCommandMenu(reg)
+	if len(menu) != len(reg.PublicCommands()) {
+		t.Fatalf("menu commands = %d, public commands = %d", len(menu), len(reg.PublicCommands()))
+	}
+	for _, command := range reg.PublicCommands() {
+		if got := command.Parameters; got != expectedParameters[command.Name] {
+			t.Errorf("/%s parameters = %q, want %q", command.Name, got, expectedParameters[command.Name])
+		}
+		if !strings.HasPrefix(command.ExampleInvocation(), "/"+command.Name) {
+			t.Errorf("/%s example = %q", command.Name, command.ExampleInvocation())
+		}
+		description := command.TelegramMenuDescription()
+		if strings.ContainsAny(description, "\r\n") {
+			t.Errorf("/%s native menu description is multiline: %q", command.Name, description)
+		}
+		if utf8.RuneCountInString(description) > telegramCommandDescriptionMaxRunesForTest {
+			t.Errorf("/%s native menu description exceeds Telegram limit: %d", command.Name, utf8.RuneCountInString(description))
+		}
+	}
+
+	help := moduleutil.RenderHelp(reg)
+	if utf8.RuneCountInString(help) > telegramMessageMaxRunesForTest {
+		t.Fatalf("/help source is %d characters, exceeds conservative Telegram limit %d", utf8.RuneCountInString(help), telegramMessageMaxRunesForTest)
+	}
+}
+
+const (
+	telegramCommandDescriptionMaxRunesForTest = 256
+	telegramMessageMaxRunesForTest            = 4096
+)
 
 func TestBotCommandMenu_StockDividendContracts(t *testing.T) {
 	mod := stock.New(modules.Deps{Store: storage.NewMemoryProvider().Collection("stock")})
@@ -99,7 +164,7 @@ func TestRegisterCommandMenu_CallsTelegramSetMyCommands(t *testing.T) {
 	if err := json.Unmarshal([]byte(call.Form["commands"]), &cmds); err != nil {
 		t.Fatalf("decode commands form field: %v; raw=%q", err, call.Form["commands"])
 	}
-	if len(cmds) != 1 || cmds[0].Command != "demo" || cmds[0].Description != "Demo command" {
+	if len(cmds) != 1 || cmds[0].Command != "demo" || cmds[0].Description != "Demo command. Example: /demo" {
 		t.Fatalf("commands payload = %+v, want demo command", cmds)
 	}
 }

@@ -32,16 +32,10 @@ func RenderHelp(reg *modules.Registry) string {
 		return "no commands registered\n\n" + supportFooter
 	}
 
-	type entry struct {
-		name        string
-		description string
-	}
-	byModule := make(map[string][]entry, len(reg.Modules))
+	byModule := make(map[string][]modules.Command, len(reg.Modules))
 
 	for _, c := range reg.PublicCommands() {
-		byModule[ownerOf(reg, c.Name)] = append(byModule[ownerOf(reg, c.Name)], entry{
-			name: c.Name, description: c.Description,
-		})
+		byModule[ownerOf(reg, c.Name)] = append(byModule[ownerOf(reg, c.Name)], c)
 	}
 
 	var sections []string
@@ -52,8 +46,11 @@ func RenderHelp(reg *modules.Registry) string {
 		}
 		var sb strings.Builder
 		fmt.Fprintf(&sb, "<b>%s</b>", html.EscapeString(mod.Name))
-		for _, e := range es {
-			fmt.Fprintf(&sb, "\n/%s — %s", e.name, html.EscapeString(e.description))
+		for _, command := range es {
+			fmt.Fprintf(&sb, "\n%s %s\n<pre>%s</pre>",
+				html.EscapeString(command.InvocationSentence()),
+				html.EscapeString(command.SummarySentence()),
+				html.EscapeString(command.ExampleInvocation()))
 		}
 		sections = append(sections, sb.String())
 	}

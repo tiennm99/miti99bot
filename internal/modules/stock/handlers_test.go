@@ -72,7 +72,7 @@ func TestHandlePriceUsage(t *testing.T) {
 	if err := s.handlePrice(context.Background(), rb.Bot, testutil.NewPrivateMessage(7, "/stock_price")); err != nil {
 		t.Fatalf("handlePrice: %v", err)
 	}
-	rb.AssertSentText(t, "Usage: /stock_price <TICKER>")
+	rb.AssertSentText(t, "Usage: /stock_price <ticker>")
 }
 
 func TestMutableHandlersRejectExtraArgs(t *testing.T) {
@@ -94,7 +94,7 @@ func TestMutableHandlersRejectExtraArgs(t *testing.T) {
 			run: func(ctx context.Context, rb *testutil.RecordingBot, upd *models.Update) error {
 				return s.handleTopup(ctx, rb.Bot, upd)
 			},
-			want: "Usage: /stock_topup <amount>",
+			want: "Usage: /stock_topup <vnd_amount>",
 		},
 		{
 			name: "buy",
@@ -102,7 +102,7 @@ func TestMutableHandlersRejectExtraArgs(t *testing.T) {
 			run: func(ctx context.Context, rb *testutil.RecordingBot, upd *models.Update) error {
 				return s.handleBuy(ctx, rb.Bot, upd)
 			},
-			want: "Usage: /stock_buy <qty> <TICKER>",
+			want: "Usage: /stock_buy <quantity> <ticker>",
 		},
 		{
 			name: "sell",
@@ -110,7 +110,7 @@ func TestMutableHandlersRejectExtraArgs(t *testing.T) {
 			run: func(ctx context.Context, rb *testutil.RecordingBot, upd *models.Update) error {
 				return s.handleSell(ctx, rb.Bot, upd)
 			},
-			want: "Usage: /stock_sell <qty> <TICKER>",
+			want: "Usage: /stock_sell <quantity> <ticker>",
 		},
 		{
 			name: "cash dividend",
@@ -118,7 +118,7 @@ func TestMutableHandlersRejectExtraArgs(t *testing.T) {
 			run: func(ctx context.Context, rb *testutil.RecordingBot, upd *models.Update) error {
 				return s.handleCashDividend(ctx, rb.Bot, upd)
 			},
-			want: "Usage: /stock_cash_dividend <vnd_per_share> <TICKER>",
+			want: "Usage: /stock_cash_dividend <vnd_per_share> <ticker>",
 		},
 		{
 			name: "share dividend",
@@ -126,7 +126,7 @@ func TestMutableHandlersRejectExtraArgs(t *testing.T) {
 			run: func(ctx context.Context, rb *testutil.RecordingBot, upd *models.Update) error {
 				return s.handleShareDividend(ctx, rb.Bot, upd)
 			},
-			want: "Usage: /stock_share_dividend <owned:new> <TICKER>",
+			want: "Usage: /stock_share_dividend <ratio(owned:new)> <ticker>",
 		},
 		{
 			name: "dividend",
@@ -134,7 +134,7 @@ func TestMutableHandlersRejectExtraArgs(t *testing.T) {
 			run: func(ctx context.Context, rb *testutil.RecordingBot, upd *models.Update) error {
 				return s.handleDividend(ctx, rb.Bot, upd)
 			},
-			want: "Usage: /stock_dividend <vnd_per_share> <owned:new> <TICKER>",
+			want: "Usage: /stock_dividend <vnd_per_share> <ratio(owned:new)> <ticker>",
 		},
 	}
 	for _, tc := range cases {

@@ -28,7 +28,7 @@ func botCommandMenu(reg *modules.Registry) []models.BotCommand {
 			}
 			out = append(out, models.BotCommand{
 				Command:     cmd.Name,
-				Description: cmd.Description,
+				Description: cmd.TelegramMenuDescription(),
 			})
 		}
 	}
