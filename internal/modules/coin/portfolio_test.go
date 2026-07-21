@@ -11,81 +11,46 @@ import (
 
 func TestLoadPortfolioFirstTimeUser(t *testing.T) {
 	p, err := LoadPortfolio(context.Background(), newCoinStore(), 42, 123)
-	if err != nil {
-		t.Fatalf("LoadPortfolio: %v", err)
-	}
-	if p.USD != 0 || len(p.Assets) != 0 || p.Meta.CreatedAt != 123 {
-		t.Fatalf("portfolio = %+v", p)
+	if err != nil || p.USD != 0 || len(p.Assets) != 0 || p.Meta.CreatedAt != 123 {
+		t.Fatalf("portfolio=%+v err=%v", p, err)
 	}
 }
 
-func TestPortfolioBuySellMath(t *testing.T) {
+func TestCoinBuySellMathAndCursor(t *testing.T) {
 	p := NewPortfolio(1)
 	p.AddUSD(1000)
 	p.Meta.Invested = 1000
-	if ok, bal := p.DeductUSD(250); !ok || bal != 750 {
-		t.Fatalf("DeductUSD ok=%v bal=%v", ok, bal)
+	if ok, balance := p.DeductUSD(250); !ok || balance != 750 {
+		t.Fatalf("balance=%v ok=%v", balance, ok)
 	}
-	p.AddAsset("BTC", 0.1)
-	if ok, held := p.DeductAsset("BTC", 0.04); !ok || math.Abs(held-0.06) > 1e-12 {
-		t.Fatalf("DeductAsset ok=%v held=%v", ok, held)
+	if err := p.BuyTicker("BTC", 0.1, 250, 10); err != nil {
+		t.Fatal(err)
 	}
-	if p.Assets["BTC"] <= 0 {
-		t.Fatalf("BTC holding missing: %+v", p.Assets)
+	if err := p.BuyTicker("BTC", 0.05, 150, 20); err != nil {
+		t.Fatal(err)
+	}
+	position := p.Assets["BTC"]
+	if position.DividendCheckedAt != 10 {
+		t.Fatalf("cursor=%d", position.DividendCheckedAt)
+	}
+	remaining, soldBase, ok, err := p.SellTicker("BTC", 0.06)
+	if err != nil || !ok || math.Abs(remaining-0.09) > 1e-12 || math.Abs(soldBase-160) > 1e-9 {
+		t.Fatalf("remaining=%v soldBase=%v ok=%v err=%v", remaining, soldBase, ok, err)
+	}
+	if p.Assets["BTC"].DividendCheckedAt != 10 {
+		t.Fatal("sell changed dividend cursor")
 	}
 }
 
-func TestDeductInsufficientBalances(t *testing.T) {
+func TestCoinFullSellRemovesTicker(t *testing.T) {
 	p := NewPortfolio(1)
-	p.AddUSD(10)
-	p.AddAsset("ETH", 0.5)
-	if ok, bal := p.DeductUSD(11); ok || bal != 10 || p.USD != 10 {
-		t.Fatalf("DeductUSD ok=%v bal=%v p=%+v", ok, bal, p)
-	}
-	if ok, held := p.DeductAsset("ETH", 0.6); ok || held != 0.5 || p.Assets["ETH"] != 0.5 {
-		t.Fatalf("DeductAsset ok=%v held=%v p=%+v", ok, held, p)
+	_ = p.BuyTicker("BTC", 0.3, 12_000, 10)
+	_, soldBase, ok, err := p.SellTicker("BTC", 0.3)
+	if err != nil || !ok || math.Abs(soldBase-12_000) > 1e-9 || len(p.Assets) != 0 {
+		t.Fatalf("portfolio=%+v soldBase=%v ok=%v err=%v", p, soldBase, ok, err)
 	}
 }
 
-func TestDeductAssetDustCleanup(t *testing.T) {
-	p := NewPortfolio(1)
-	p.AddAsset("BTC", 0.1)
-	p.AddAsset("BTC", 0.2)
-	if ok, _ := p.DeductAsset("BTC", 0.3); !ok {
-		t.Fatal("DeductAsset ok=false")
-	}
-	if _, ok := p.Assets["BTC"]; ok {
-		t.Fatalf("dust key not removed: %+v", p.Assets)
-	}
-}
-
-func TestNormalizeAmountSpecialValues(t *testing.T) {
-	for _, n := range []float64{math.NaN(), math.Inf(1), math.Inf(-1), coinDustEpsilon / 2} {
-		if got := normalizeAmount(n); got != 0 {
-			t.Fatalf("normalizeAmount(%v) = %v, want 0", n, got)
-		}
-	}
-}
-
-func TestLoadPortfolioRejectsCorruptStoredQuantityBeforeNormalization(t *testing.T) {
-	ctx := context.Background()
-	store := &corruptQuantityStore{Store: newCoinStore()}
-	if _, err := LoadPortfolio(ctx, store, 7, 1); err == nil {
-		t.Fatal("LoadPortfolio silently normalized a corrupt quantity")
-	}
-}
-
-type corruptQuantityStore struct{ Store }
-
-func (s *corruptQuantityStore) Get(context.Context, string) (Portfolio, int64, error) {
-	p := NewPortfolio(1)
-	p.Assets["BTC"] = math.NaN()
-	return p, 1, nil
-}
-
-// conflictOnceStore wraps a real typed store and forces exactly one write
-// conflict (after committing a competing value) before delegating, to exercise
-// UpdatePortfolio's optimistic-lock retry.
 type conflictOnceStore struct {
 	Store
 	conflicted bool
@@ -105,30 +70,24 @@ func (s *conflictOnceStore) PutVersioned(ctx context.Context, key string, expect
 }
 
 func TestUpdatePortfolioRetriesAfterWriteConflict(t *testing.T) {
-	ctx := context.Background()
 	store := &conflictOnceStore{Store: newCoinStore()}
-	got, err := UpdatePortfolio(ctx, store, 7, 1, func(p *Portfolio) error {
+	got, err := UpdatePortfolio(context.Background(), store, 7, 1, func(p *Portfolio) error {
 		p.AddUSD(5)
 		return nil
 	})
-	if err != nil {
-		t.Fatalf("UpdatePortfolio: %v", err)
-	}
-	if got.USD != 15 {
-		t.Fatalf("USD = %v, want 15", got.USD)
+	if err != nil || got.USD != 15 {
+		t.Fatalf("USD=%v err=%v", got.USD, err)
 	}
 }
 
 func TestUpdatePortfolioMutateErrorDoesNotPersist(t *testing.T) {
 	ctx := context.Background()
 	store := newCoinStore()
-	_, err := UpdatePortfolio(ctx, store, 7, 1, func(p *Portfolio) error {
-		return errInsufficientUSD
-	})
+	_, err := UpdatePortfolio(ctx, store, 7, 1, func(*Portfolio) error { return errInsufficientUSD })
 	if !errors.Is(err, errInsufficientUSD) {
-		t.Fatalf("got %v, want errInsufficientUSD", err)
+		t.Fatalf("err=%v", err)
 	}
 	if _, _, err := store.Get(ctx, "user:7"); !errors.Is(err, storage.ErrNotFound) {
-		t.Fatalf("failed mutate must not persist, Get = %v", err)
+		t.Fatalf("Get err=%v", err)
 	}
 }

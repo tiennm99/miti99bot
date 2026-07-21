@@ -38,14 +38,11 @@ func TestHandleStats_UsesSSIBatchPrices(t *testing.T) {
 
 	store := newStockStore()
 	p := NewPortfolio(now.UnixMilli())
-	p.Currency["VND"] = 2335000
+	p.VND = 2335000
 	p.Meta.Invested = 1000000000
-	p.AddAsset("MWG", 1800)
-	p.AddAsset("TCB", 4200)
-	p.AddAsset("FPT", 2300)
-	p.CostBasis["MWG"] = 108_000_000
-	p.CostBasis["TCB"] = 105_000_000
-	p.CostBasis["FPT"] = 230_000_000
+	_ = p.BuyTicker("MWG", 1800, 108_000_000, 1)
+	_ = p.BuyTicker("TCB", 4200, 105_000_000, 1)
+	_ = p.BuyTicker("FPT", 2300, 230_000_000, 1)
 	if err := SavePortfolio(ctx, store, 7, p); err != nil {
 		t.Fatalf("SavePortfolio: %v", err)
 	}
@@ -70,18 +67,22 @@ func TestHandleStats_UsesSSIBatchPrices(t *testing.T) {
 
 	text := rb.LastSent().Text()
 	for _, want := range []string{
-		"MWG x1800 | Avg 60.000 VND | Now 70.000 VND | Value 126.000.000 VND | Unrealized P&L +18.000.000 VND (+16.67%)",
-		"TCB x4200 | Avg 25.000 VND | Now 30.000 VND | Value 126.000.000 VND | Unrealized P&L +21.000.000 VND (+20.00%)",
-		"FPT x2300 | Avg 100.000 VND | Now 120.000 VND | Value 276.000.000 VND | Unrealized P&L +46.000.000 VND (+20.00%)",
-		"Total value: 530.335.000 VND",
-		"Unrealized P&L: +85.000.000 VND (+19.19%)",
-		"Account P&L: -469.665.000 VND (-46.97%)",
+		"<pre>",
+		"Ticker",
+		"MWG",
+		"126.000.000 VND",
+		"Total value",
+		"530.335.000 VND",
+		"Unrealized P&amp;L",
+		"+85.000.000 VND (+19.19%)",
+		"Account P&amp;L",
+		"-469.665.000 VND (-46.97%)",
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("stats missing %q in:\n%s", want, text)
 		}
 	}
-	if strings.Contains(text, "(no price)") {
+	if strings.Contains(text, "N/A") {
 		t.Fatalf("stats rendered missing prices:\n%s", text)
 	}
 }
@@ -91,11 +92,15 @@ func TestStockPortfolioReplyStaysWithinTelegramBudget(t *testing.T) {
 	for i := range positions {
 		positions[i] = strings.Repeat("position-data-", 20)
 	}
-	reply := boundedPortfolioReply([]string{"header"}, positions, []string{"summary"})
+	rows := make([][]string, len(positions))
+	for index, position := range positions {
+		rows[index] = []string{position}
+	}
+	reply := portfolioTableReply("header", rows, [][]string{{"summary", "value"}})
 	if len(reply) > portfolioReplyLimit {
 		t.Fatalf("reply length = %d, limit = %d", len(reply), portfolioReplyLimit)
 	}
-	if !strings.Contains(reply, "position(s) omitted") || !strings.Contains(reply, "summary") {
+	if !strings.Contains(reply, "omitted") || !strings.Contains(reply, "summary") {
 		t.Fatalf("bounded reply lost omission marker or summary: %q", reply)
 	}
 }

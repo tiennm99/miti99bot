@@ -135,13 +135,13 @@ func main() {
 	}
 	migrationCtx, cancelMigrations := context.WithTimeout(rootCtx, portfolioMigrationTimeout)
 	if moduleLoaded(reg, stock.CollectionName) {
-		if err := stock.InitStore(migrationCtx, provider.Collection(stock.CollectionName), provider.Collection(systemstate.CollectionName), &stock.PriceClient{}); err != nil {
+		if err := stock.InitStore(migrationCtx, provider.Collection(stock.CollectionName), provider.Collection(systemstate.CollectionName)); err != nil {
 			cancelMigrations()
 			log.Fatal("stock storage init failed", "err", err)
 		}
 	}
 	if moduleLoaded(reg, coin.CollectionName) {
-		if err := coin.InitStore(migrationCtx, provider.Collection(coin.CollectionName), provider.Collection(systemstate.CollectionName), coin.NewPriceClient()); err != nil {
+		if err := coin.InitStore(migrationCtx, provider.Collection(coin.CollectionName), provider.Collection(systemstate.CollectionName)); err != nil {
 			cancelMigrations()
 			log.Fatal("coin storage init failed", "err", err)
 		}

@@ -49,7 +49,8 @@ func (s *state) handleTopup(ctx context.Context, b *bot.Bot, update *models.Upda
 		return chathelper.Reply(ctx, b, update.Message, "Amount must be a positive finite USD number within the supported range.")
 	}
 	defer s.locks.Acquire(strconv.FormatInt(userID, 10))()
-	p, err := UpdatePortfolio(ctx, s.store, userID, s.now().UnixMilli(), func(p *Portfolio) error {
+	now := s.now().UnixMilli()
+	p, err := UpdatePortfolio(ctx, s.store, userID, now, func(p *Portfolio) error {
 		p.AddUSD(amount)
 		p.Meta.Invested += amount
 		return nil
@@ -94,17 +95,14 @@ func (s *state) handleBuy(ctx context.Context, b *bot.Bot, update *models.Update
 	}
 	defer s.locks.Acquire(strconv.FormatInt(userID, 10))()
 	var insufficientBalance *float64
-	p, err := UpdatePortfolio(ctx, s.store, userID, s.now().UnixMilli(), func(p *Portfolio) error {
+	now := s.now().UnixMilli()
+	p, err := UpdatePortfolio(ctx, s.store, userID, now, func(p *Portfolio) error {
 		ok, balance := p.DeductUSD(amount)
 		if !ok {
 			insufficientBalance = &balance
 			return errInsufficientUSD
 		}
-		if err := p.AddCostBasis(coin.Symbol, amount); err != nil {
-			return err
-		}
-		p.AddAsset(coin.Symbol, qty)
-		return nil
+		return p.BuyTicker(coin.Symbol, qty, amount, now)
 	})
 	if errors.Is(err, errInsufficientUSD) && insufficientBalance != nil {
 		return chathelper.Reply(ctx, b, update.Message,
@@ -154,19 +152,17 @@ func (s *state) handleSell(ctx context.Context, b *bot.Bot, update *models.Updat
 	var insufficientHeld bool
 	var soldBasis float64
 	p, err := UpdatePortfolio(ctx, s.store, userID, s.now().UnixMilli(), func(p *Portfolio) error {
-		heldBefore := p.Assets[coin.Symbol]
-		ok, held := p.DeductAsset(coin.Symbol, qty)
+		heldBefore := p.Assets[coin.Symbol].Quantity
+		_, removedBase, ok, sellErr := p.SellTicker(coin.Symbol, qty)
 		if !ok {
-			insufficientHeldQty = held
+			insufficientHeldQty = heldBefore
 			insufficientHeld = true
 			return errInsufficientCoin
 		}
-		remaining := p.Assets[coin.Symbol]
-		var basisErr error
-		soldBasis, basisErr = p.RemoveCostBasis(coin.Symbol, qty, heldBefore, remaining > 0)
-		if basisErr != nil {
-			return basisErr
+		if sellErr != nil {
+			return sellErr
 		}
+		soldBasis = removedBase
 		p.AddUSD(amount)
 		return nil
 	})

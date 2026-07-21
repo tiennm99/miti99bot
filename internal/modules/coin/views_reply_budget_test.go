@@ -56,7 +56,7 @@ func TestHandleStatsDeliversReplyWhenUpstreamHangs(t *testing.T) {
 		t.Fatalf("handleStats took %v — fetch was not bounded below the reply reserve", elapsed)
 	}
 	sent := rb.LastSent().Text()
-	if !strings.Contains(sent, "Coin Account Summary") || !strings.Contains(sent, "price unavailable") {
+	if !strings.Contains(sent, "Coin Portfolio") || !strings.Contains(sent, "N/A") || !strings.Contains(sent, "<pre>") {
 		t.Fatalf("reply missing summary / degraded line; got:\n%s", sent)
 	}
 }
@@ -66,11 +66,15 @@ func TestCoinPortfolioReplyStaysWithinTelegramBudget(t *testing.T) {
 	for i := range positions {
 		positions[i] = strings.Repeat("position-data-", 20)
 	}
-	reply := boundedPortfolioReply([]string{"header"}, positions, []string{"summary"})
+	rows := make([][]string, len(positions))
+	for index, position := range positions {
+		rows[index] = []string{position}
+	}
+	reply := portfolioTableReply("header", rows, [][]string{{"summary", "value"}})
 	if len(reply) > portfolioReplyLimit {
 		t.Fatalf("reply length = %d, limit = %d", len(reply), portfolioReplyLimit)
 	}
-	if !strings.Contains(reply, "position(s) omitted") || !strings.Contains(reply, "summary") {
+	if !strings.Contains(reply, "omitted") || !strings.Contains(reply, "summary") {
 		t.Fatalf("bounded reply lost omission marker or summary: %q", reply)
 	}
 }

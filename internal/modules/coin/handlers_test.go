@@ -153,11 +153,11 @@ func TestHandleBuyAndSell(t *testing.T) {
 	}
 	rb.AssertSentText(t, "Bought 0.01 BTC")
 	p, _ := LoadPortfolio(ctx, s.store, 7, 999)
-	if p.USD != 500 || p.Assets["BTC"] != 0.01 {
+	if p.USD != 500 || p.Assets["BTC"].Quantity != 0.01 {
 		t.Fatalf("after buy = %+v", p)
 	}
-	if p.CostBasis["BTC"] != 500 {
-		t.Fatalf("buy cost basis = %v, want 500", p.CostBasis["BTC"])
+	if p.Assets["BTC"].Base != 500 || p.Assets["BTC"].DividendCheckedAt != 123 {
+		t.Fatalf("buy asset = %+v", p.Assets["BTC"])
 	}
 	s.prices.(fakePriceFetcher).prices["BTC"] = CoinPrice{USD: 60_000, Source: "Binance"}
 	rb.Reset()
@@ -167,7 +167,7 @@ func TestHandleBuyAndSell(t *testing.T) {
 	rb.AssertSentText(t, "Sold 0.01 BTC")
 	rb.AssertSentText(t, "Realized P&L: +$100.00 (+20.00%)")
 	p, _ = LoadPortfolio(ctx, s.store, 7, 999)
-	if p.USD != 1100 || len(p.Assets) != 0 || len(p.CostBasis) != 0 {
+	if p.USD != 1100 || len(p.Assets) != 0 {
 		t.Fatalf("after sell = %+v", p)
 	}
 }
@@ -244,7 +244,7 @@ func TestHandleSellInsufficientCoinWithHoldings(t *testing.T) {
 	}
 
 	p, _ := LoadPortfolio(ctx, s.store, 7, 999)
-	if p.USD != 500 || p.Assets["BTC"] != 0.01 {
+	if p.USD != 500 || p.Assets["BTC"].Quantity != 0.01 {
 		t.Fatalf("portfolio mutated on failed sell = %+v", p)
 	}
 }
@@ -334,7 +334,7 @@ func TestStatsWithAndWithoutPrice(t *testing.T) {
 		t.Fatalf("handleStats: %v", err)
 	}
 	text := rb.LastSent().Text()
-	for _, want := range []string{"Coin Account Summary", "BTC: 0.01", "(Binance)", "P&L:"} {
+	for _, want := range []string{"Coin Portfolio", "<pre>", "BTC", "0.01", "P&amp;L"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("stats missing %q in %q", want, text)
 		}
@@ -344,7 +344,7 @@ func TestStatsWithAndWithoutPrice(t *testing.T) {
 	if err := s.handleStats(ctx, rb.Bot, testutil.NewPrivateMessage(7, "/coin_portfolio")); err != nil {
 		t.Fatalf("handleStats no price: %v", err)
 	}
-	rb.AssertSentText(t, "price unavailable")
+	rb.AssertSentText(t, "N/A")
 	if strings.Contains(rb.LastSent().Text(), "Account P&L: +") || strings.Contains(rb.LastSent().Text(), "Account P&L: -") {
 		t.Fatalf("partial prices must not show numeric account P&L: %q", rb.LastSent().Text())
 	}
@@ -354,8 +354,7 @@ func TestStatsTreatsOverflowedValuationAsUnavailable(t *testing.T) {
 	ctx := context.Background()
 	s := newTestState(map[string]CoinPrice{"BTC": {USD: math.MaxFloat64, Source: "test"}}, nil)
 	p := NewPortfolio(1)
-	p.Assets["BTC"] = 2
-	p.CostBasis["BTC"] = 1
+	p.Assets["BTC"] = AssetPosition{Quantity: 2, Base: 1, DividendCheckedAt: 1}
 	if err := SavePortfolio(ctx, s.store, 7, p); err != nil {
 		t.Fatal(err)
 	}
@@ -364,7 +363,7 @@ func TestStatsTreatsOverflowedValuationAsUnavailable(t *testing.T) {
 		t.Fatal(err)
 	}
 	text := rb.LastSent().Text()
-	if !strings.Contains(text, "valuation unavailable") || !strings.Contains(text, "Account P&L: unavailable") {
+	if !strings.Contains(text, "N/A") || !strings.Contains(text, "Account P&amp;L") || !strings.Contains(text, "Unavailable") {
 		t.Fatalf("overflowed valuation was presented as complete: %q", text)
 	}
 }

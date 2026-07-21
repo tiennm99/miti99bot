@@ -6,6 +6,7 @@ package chathelper
 
 import (
 	"context"
+	"html"
 	"math"
 	"strconv"
 	"strings"
@@ -14,6 +15,45 @@ import (
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
 )
+
+// MonospaceTable renders an HTML-safe, left-aligned table for Telegram's
+// <pre> mode. Callers should send the result with ReplyHTML.
+func MonospaceTable(headers []string, rows [][]string) string {
+	widths := make([]int, len(headers))
+	for index, header := range headers {
+		widths[index] = len([]rune(header))
+	}
+	for _, row := range rows {
+		for index := range headers {
+			if index < len(row) && len([]rune(row[index])) > widths[index] {
+				widths[index] = len([]rune(row[index]))
+			}
+		}
+	}
+	var lines []string
+	appendRow := func(row []string) {
+		cells := make([]string, len(headers))
+		for index := range headers {
+			if index < len(row) {
+				cells[index] = row[index]
+			}
+			if index < len(headers)-1 {
+				cells[index] += strings.Repeat(" ", widths[index]-len([]rune(cells[index])))
+			}
+		}
+		lines = append(lines, strings.Join(cells, "  "))
+	}
+	appendRow(headers)
+	separator := make([]string, len(headers))
+	for index := range headers {
+		separator[index] = strings.Repeat("-", widths[index])
+	}
+	appendRow(separator)
+	for _, row := range rows {
+		appendRow(row)
+	}
+	return "<pre>" + html.EscapeString(strings.Join(lines, "\n")) + "</pre>"
+}
 
 // SubjectFor returns the identity key per-module state should be scoped by:
 // group/supergroup → chat ID (shared game state), otherwise → user ID.
