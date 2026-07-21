@@ -73,7 +73,7 @@ dev bot is created manually; its token is injected through the environment.
 Persistent MongoDB locally (auto-selected when `MONGO_URL` is set):
 
 ```sh
-docker run -d --rm --name miti99bot-mongo -p 27017:27017 mongo:7
+docker run -d --rm --name miti99bot-mongo -p 27017:27017 mongo:8
 ```
 
 Then set `MONGO_URL=mongodb://127.0.0.1:27017` and
@@ -81,21 +81,12 @@ Then set `MONGO_URL=mongodb://127.0.0.1:27017` and
 `go run ./cmd/server`. Stop the local database with
 `docker stop miti99bot-mongo`.
 
-For MongoDB integration tests, start that container and set
-`MONGODB_TEST_URL=mongodb://127.0.0.1:27017`:
-
-```powershell
-# PowerShell
-$env:MONGODB_TEST_URL = "mongodb://127.0.0.1:27017"
-$env:LOG_LEVEL = "error"
-go test -count=1 ./internal/storage/... ./internal/modules/lol/... ./internal/modules/stats/...
-```
-
-```sh
-# POSIX shells (Linux/macOS)
-MONGODB_TEST_URL=mongodb://127.0.0.1:27017 LOG_LEVEL=error \
-  go test -count=1 ./internal/storage/... ./internal/modules/lol/... ./internal/modules/stats/...
-```
+MongoDB integration tests use Testcontainers to start MongoDB 8 automatically.
+Keep Docker Desktop or another compatible Docker daemon running, then use the
+normal Go test command. `MONGODB_TEST_URL` remains available as an optional
+override when testing against an already-running MongoDB instance. If Docker is
+unavailable and no override is set, MongoDB tests skip with an explicit warning;
+use `go test -v ./...` to see individual skip reasons.
 
 ## Test
 

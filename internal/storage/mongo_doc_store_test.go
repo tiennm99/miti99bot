@@ -11,17 +11,21 @@ import (
 
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
+
+	"github.com/tiennm99/miti99bot/internal/testutil/mongotest"
 )
 
-// mongoLocalSetup connects to a local MongoDB and returns a fresh, uniquely
-// named database plus cleanup. Tests skip if MONGODB_TEST_URL is unset so CI
-// without a Mongo container still builds.
+var mongoTests mongotest.Manager
+
+func TestMain(m *testing.M) {
+	os.Exit(mongoTests.Run(m))
+}
+
+// mongoLocalSetup connects to the shared test MongoDB and returns a fresh,
+// uniquely named database plus cleanup.
 func mongoLocalSetup(t *testing.T) (*mongo.Database, func()) {
 	t.Helper()
-	uri := os.Getenv("MONGODB_TEST_URL")
-	if uri == "" {
-		t.Skip("MONGODB_TEST_URL not set; skipping MongoDB integration test (see README.md for local MongoDB setup)")
-	}
+	uri := mongoTests.URI(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

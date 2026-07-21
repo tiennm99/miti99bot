@@ -8,7 +8,14 @@ import (
 	"time"
 
 	"github.com/tiennm99/miti99bot/internal/storage"
+	"github.com/tiennm99/miti99bot/internal/testutil/mongotest"
 )
+
+var mongoTests mongotest.Manager
+
+func TestMain(m *testing.M) {
+	os.Exit(mongoTests.Run(m))
+}
 
 func TestInitStore_MongoCreatesIndexes(t *testing.T) {
 	ctx, statsColl, systemColl := setupMongoStatsTest(t)
@@ -72,10 +79,7 @@ func TestInitStore_MongoMigratesDividendStatsIdempotently(t *testing.T) {
 func setupMongoStatsTest(t *testing.T) (context.Context, storage.Collection, storage.Collection) {
 	t.Helper()
 
-	uri := os.Getenv("MONGODB_TEST_URL")
-	if uri == "" {
-		t.Skip("MONGODB_TEST_URL not set; skipping MongoDB integration test")
-	}
+	uri := mongoTests.URI(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	t.Cleanup(cancel)

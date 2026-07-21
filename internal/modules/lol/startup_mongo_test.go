@@ -10,13 +10,17 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 
 	"github.com/tiennm99/miti99bot/internal/storage"
+	"github.com/tiennm99/miti99bot/internal/testutil/mongotest"
 )
 
+var mongoTests mongotest.Manager
+
+func TestMain(m *testing.M) {
+	os.Exit(mongoTests.Run(m))
+}
+
 func TestInitStore_MongoCreatesMatchCacheTTLIndex(t *testing.T) {
-	uri := os.Getenv("MONGODB_TEST_URL")
-	if uri == "" {
-		t.Skip("MONGODB_TEST_URL not set; skipping MongoDB integration test")
-	}
+	uri := mongoTests.URI(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
