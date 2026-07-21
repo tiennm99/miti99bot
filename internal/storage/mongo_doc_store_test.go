@@ -20,7 +20,7 @@ func mongoLocalSetup(t *testing.T) (*mongo.Database, func()) {
 	t.Helper()
 	uri := os.Getenv("MONGODB_TEST_URL")
 	if uri == "" {
-		t.Skip("MONGODB_TEST_URL not set; skipping MongoDB integration test (run `make mongo-local` to start the local container)")
+		t.Skip("MONGODB_TEST_URL not set; skipping MongoDB integration test (see README.md for local MongoDB setup)")
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

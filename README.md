@@ -44,45 +44,68 @@ internal/modules/            Module framework, registry, dispatchers, modules
 internal/storage/            typed DocStore[T] (Provider + Typed); mongodb runtime + memory (tests). Values persist as flattened native BSON root documents
 internal/systemstate/        shared `system` collection helper for future startup migrations
 compose.yml                  Coolify self-host stack (single bot service)
-telegram-commands.json       Manual Telegram command menu source
 docs/deploy-coolify-selfhosted.md    Self-host deploy and operations guide
 ```
 
 ## Run locally
 
-In-memory storage (no database required):
+In-memory storage requires no database. Set the environment variables for your
+shell, then run the server with Go:
 
-```sh
-TELEGRAM_BOT_TOKEN=… \
-MODULES= \
+```powershell
+# PowerShell
+$env:TELEGRAM_BOT_TOKEN = "…"
+$env:MODULES = ""
 go run ./cmd/server
 ```
 
-The bot uses long polling, so a local run talks to Telegram directly — no `ngrok`, no public URL. Ensure the bot's webhook is unset (the server clears it on startup) or `getUpdates` 409s. The dev bot is created manually; token injected via env vars only.
+```sh
+# POSIX shells (Linux/macOS)
+export TELEGRAM_BOT_TOKEN="…"
+export MODULES=""
+go run ./cmd/server
+```
+
+The bot uses long polling, so a local run talks to Telegram directly — no
+`ngrok` or public URL. The server clears any existing webhook on startup. The
+dev bot is created manually; its token is injected through the environment.
 
 Persistent MongoDB locally (auto-selected when `MONGO_URL` is set):
 
 ```sh
-make mongo-local
-TELEGRAM_BOT_TOKEN=… \
-MONGO_URL=mongodb://127.0.0.1:27017 \
-MONGO_DATABASE=miti99bot_dev \
-go run ./cmd/server
+docker run -d --rm --name miti99bot-mongo -p 27017:27017 mongo:7
 ```
 
-For integration tests (each skips when its emulator env var is unset):
+Then set `MONGO_URL=mongodb://127.0.0.1:27017` and
+`MONGO_DATABASE=miti99bot_dev` using the shell syntax above before running
+`go run ./cmd/server`. Stop the local database with
+`docker stop miti99bot-mongo`.
+
+For MongoDB integration tests, start that container and set
+`MONGODB_TEST_URL=mongodb://127.0.0.1:27017`:
+
+```powershell
+# PowerShell
+$env:MONGODB_TEST_URL = "mongodb://127.0.0.1:27017"
+$env:LOG_LEVEL = "error"
+go test -count=1 ./internal/storage/... ./internal/modules/lol/... ./internal/modules/stats/...
+```
+
 ```sh
-make mongo-local         # docker run mongo:7 on :27017
-make test-mongo          # MongoDB integration tests against local MongoDB
+# POSIX shells (Linux/macOS)
+MONGODB_TEST_URL=mongodb://127.0.0.1:27017 LOG_LEVEL=error \
+  go test -count=1 ./internal/storage/... ./internal/modules/lol/... ./internal/modules/stats/...
 ```
 
 ## Test
 
 ```sh
-make vet              # go vet
-make test             # full unit suite (no emulator)
-make test-mongo       # MongoDB integration tests against local Mongo (requires Docker)
+go vet ./...
+go test -count=1 ./...
+go build ./...
 ```
+
+CI additionally runs the test suite with Go's race detector.
 
 ## Deploy
 

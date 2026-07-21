@@ -25,7 +25,6 @@ deleting commands, update all related surfaces:
 
 - module command registration in `internal/modules/<module>/`
 - handler usage text and user-facing error text
-- `telegram-commands.json`
 - tests for registration, handlers, and command menu behavior
 - README/docs when behavior changes are user-visible
 

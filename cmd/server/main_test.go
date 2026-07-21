@@ -20,7 +20,7 @@ func TestResolveCommitSHA(t *testing.T) {
 		t.Errorf("env present: got %q, want trimmed runtime-sha", got)
 	}
 
-	// Empty env falls back to the ldflags-baked value.
+	// Empty env falls back to the VCS revision embedded by go build.
 	if got := resolveCommitSHA(""); got != "baked" {
 		t.Errorf("env empty: got %q, want baked fallback", got)
 	}
@@ -29,6 +29,15 @@ func TestResolveCommitSHA(t *testing.T) {
 	gitSHA = ""
 	if got := resolveCommitSHA("   "); got != "unknown" {
 		t.Errorf("both empty: got %q, want unknown", got)
+	}
+}
+
+func TestShortCommitSHA(t *testing.T) {
+	if got := shortCommitSHA(" 0123456789abcdef "); got != "0123456" {
+		t.Errorf("full revision: got %q, want %q", got, "0123456")
+	}
+	if got := shortCommitSHA("abc123"); got != "abc123" {
+		t.Errorf("short revision: got %q, want %q", got, "abc123")
 	}
 }
 

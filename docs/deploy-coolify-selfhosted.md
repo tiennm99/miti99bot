@@ -135,11 +135,8 @@ Successful GIF replies include the result behind Telegram spoiler formatting.
 ## 3. Command menu
 
 The bot registers its Telegram command menu from loaded public modules on
-startup. The manual target remains useful for repairs or local experiments:
-
-```sh
-TELEGRAM_BOT_TOKEN=… make telegram-commands
-```
+every startup. The Go module registry is the single source of truth; no separate
+command-menu file or manual registration step is required.
 
 ## Operations
 
@@ -147,23 +144,44 @@ The live deployment is the Coolify container and MongoDB is the sole system of
 record. Keep exactly one replica running. To confirm Telegram is in polling mode:
 
 ```sh
-TELEGRAM_BOT_TOKEN=… make telegram-webhook-info
+# POSIX shells (Linux/macOS)
+curl "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getWebhookInfo"
+```
+
+```powershell
+# PowerShell
+Invoke-RestMethod "https://api.telegram.org/bot$env:TELEGRAM_BOT_TOKEN/getWebhookInfo"
 ```
 
 `url` should be empty. If needed, clear the webhook explicitly:
 
 ```sh
-TELEGRAM_BOT_TOKEN=… make telegram-deletewebhook
+# POSIX shells (Linux/macOS)
+curl -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/deleteWebhook" \
+  --data "drop_pending_updates=false"
+```
+
+```powershell
+# PowerShell
+Invoke-RestMethod -Method Post -Uri "https://api.telegram.org/bot$env:TELEGRAM_BOT_TOKEN/deleteWebhook" -Body @{ drop_pending_updates = "false" }
 ```
 
 ## Local smoke test
 
+```powershell
+# PowerShell
+Copy-Item .env.example .env # fill TELEGRAM_BOT_TOKEN, MONGO_URL, MONGO_DATABASE
+docker compose up --build
+```
+
 ```sh
-cp .env.example .env   # fill TELEGRAM_BOT_TOKEN, MONGO_URL, MONGO_DATABASE
+# POSIX shells (Linux/macOS)
+cp .env.example .env # fill TELEGRAM_BOT_TOKEN, MONGO_URL, MONGO_DATABASE
 docker compose up --build
 ```
 
 Boot logs should show `storage backend backend=mongodb database=…` (no
 connection string), `cron scheduler started`, and `telegram long polling
-started`. `curl localhost:8080/` returns `miti99bot ok`. The bot's webhook must
-be unset (the container clears it on startup) or `getUpdates` 409s.
+started`. A request to `http://localhost:8080/` returns `miti99bot ok` (use
+`Invoke-WebRequest` in PowerShell or `curl` in a POSIX shell). The bot's webhook
+must be unset (the container clears it on startup) or `getUpdates` 409s.
