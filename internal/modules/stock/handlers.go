@@ -119,19 +119,20 @@ func (s *state) handleTopup(ctx context.Context, b *bot.Bot, update *models.Upda
 
 	defer s.locks.Acquire(strconv.FormatInt(userID, 10))()
 
-	p, err := LoadPortfolio(ctx, s.store, userID, s.now().UnixMilli())
+	now := s.now().UnixMilli()
+	p, err := LoadPortfolio(ctx, s.store, userID, now)
 	if err != nil {
 		log.Error("stock_load_portfolio", "user", userID, "err", err)
 		return chathelper.Reply(ctx, b, update.Message, "Could not load portfolio. Try again later.")
 	}
-	p.AddCurrency("VND", amount)
+	p.AddVND(amount)
 	p.Meta.Invested += amount
 	if err := SavePortfolio(ctx, s.store, userID, p); err != nil {
 		log.Error("stock_save_portfolio", "user", userID, "err", err)
 		return chathelper.Reply(ctx, b, update.Message, "Could not save portfolio. Try again later.")
 	}
 	return chathelper.Reply(ctx, b, update.Message,
-		"Topped up "+FormatVND(amount)+".\nBalance: "+FormatVND(p.Currency["VND"]))
+		"Topped up "+FormatVND(amount)+".\nBalance: "+FormatVND(p.VND))
 }
 
 func (s *state) handleBuy(ctx context.Context, b *bot.Bot, update *models.Update) error {
@@ -170,21 +171,21 @@ func (s *state) handleBuy(ctx context.Context, b *bot.Bot, update *models.Update
 
 	defer s.locks.Acquire(strconv.FormatInt(userID, 10))()
 
-	p, err := LoadPortfolio(ctx, s.store, userID, s.now().UnixMilli())
+	now := s.now().UnixMilli()
+	p, err := LoadPortfolio(ctx, s.store, userID, now)
 	if err != nil {
 		log.Error("stock_load_portfolio", "user", userID, "err", err)
 		return chathelper.Reply(ctx, b, update.Message, "Could not load portfolio. Try again later.")
 	}
-	ok, balance := p.DeductCurrency("VND", cost)
+	ok, balance := p.DeductVND(cost)
 	if !ok {
 		return chathelper.Reply(ctx, b, update.Message,
 			"Insufficient VND. Need "+FormatVND(cost)+", have "+FormatVND(balance)+".")
 	}
-	if err := p.AddCostBasis(symbol, cost); err != nil {
+	if err := p.BuyTicker(symbol, qty, cost, now); err != nil {
 		log.Error("stock_add_cost_basis", "user", userID, "ticker", symbol, "err", err)
 		return chathelper.Reply(ctx, b, update.Message, "Could not record purchase cost. Try again later.")
 	}
-	p.AddAsset(symbol, qty)
 	if err := SavePortfolio(ctx, s.store, userID, p); err != nil {
 		log.Error("stock_save_portfolio", "user", userID, "err", err)
 		return chathelper.Reply(ctx, b, update.Message, "Could not save portfolio. Try again later.")
@@ -192,7 +193,7 @@ func (s *state) handleBuy(ctx context.Context, b *bot.Bot, update *models.Update
 	return chathelper.Reply(ctx, b, update.Message,
 		"Bought "+FormatStock(float64(qty))+" "+symbol+
 			" @ "+FormatVND(price)+"\nCost: "+FormatVND(cost)+
-			"\nRemaining: "+FormatVND(p.Currency["VND"]))
+			"\nRemaining: "+FormatVND(p.VND))
 }
 
 func (s *state) handleSell(ctx context.Context, b *bot.Bot, update *models.Update) error {
@@ -237,19 +238,17 @@ func (s *state) handleSell(ctx context.Context, b *bot.Bot, update *models.Updat
 		log.Error("stock_load_portfolio", "user", userID, "err", err)
 		return chathelper.Reply(ctx, b, update.Message, "Could not load portfolio. Try again later.")
 	}
-	heldBefore := p.Assets[symbol]
-	ok, held := p.DeductAsset(symbol, qty)
+	held, soldBasis, ok, basisErr := p.SellTicker(symbol, qty)
 	if !ok {
 		return chathelper.Reply(ctx, b, update.Message,
 			"Insufficient "+symbol+". You have: "+FormatStock(float64(held)))
 	}
 	revenue := float64(qty) * price
-	soldBasis, err := p.RemoveCostBasis(symbol, qty, heldBefore)
-	if err != nil {
-		log.Error("stock_remove_cost_basis", "user", userID, "ticker", symbol, "err", err)
+	if basisErr != nil {
+		log.Error("stock_remove_cost_basis", "user", userID, "ticker", symbol, "err", basisErr)
 		return chathelper.Reply(ctx, b, update.Message, "Portfolio cost basis is unavailable. Restart the bot or contact the owner.")
 	}
-	p.AddCurrency("VND", revenue)
+	p.AddVND(revenue)
 	if err := SavePortfolio(ctx, s.store, userID, p); err != nil {
 		log.Error("stock_save_portfolio", "user", userID, "err", err)
 		return chathelper.Reply(ctx, b, update.Message, "Could not save portfolio. Try again later.")
@@ -258,7 +257,7 @@ func (s *state) handleSell(ctx context.Context, b *bot.Bot, update *models.Updat
 		"Sold "+FormatStock(float64(qty))+" "+symbol+
 			" @ "+FormatVND(price)+"\nRevenue: "+FormatVND(revenue)+
 			"\nRealized P&L: "+FormatPnL(revenue, soldBasis)+
-			"\nRemaining: "+FormatVND(p.Currency["VND"]))
+			"\nRemaining: "+FormatVND(p.VND))
 }
 
 func (s *state) handleCashDividend(ctx context.Context, b *bot.Bot, update *models.Update) error {
@@ -293,7 +292,7 @@ func (s *state) handleCashDividend(ctx context.Context, b *bot.Bot, update *mode
 		log.Error("stock_load_portfolio", "user", userID, "err", err)
 		return chathelper.Reply(ctx, b, update.Message, "Could not load portfolio. Try again later.")
 	}
-	held := p.Assets[symbol]
+	held := p.Assets[symbol].Quantity
 	if held <= 0 {
 		return chathelper.Reply(ctx, b, update.Message,
 			"You don't hold any "+symbol+" to receive a cash dividend.")
@@ -302,11 +301,13 @@ func (s *state) handleCashDividend(ctx context.Context, b *bot.Bot, update *mode
 	if err != nil {
 		return chathelper.Reply(ctx, b, update.Message, "Dividend amount is too large.")
 	}
-	balance, err := checkedVNDBalance(p.Currency["VND"], total)
+	balance, err := checkedVNDBalance(p.VND, total)
 	if err != nil {
 		return chathelper.Reply(ctx, b, update.Message, "Dividend amount is too large.")
 	}
-	p.Currency["VND"] = balance
+	if err := p.ApplyDividend(symbol, held, balance, s.now().UnixMilli()); err != nil {
+		return chathelper.Reply(ctx, b, update.Message, "Could not update dividend checkpoint. Try again later.")
+	}
 	if err := SavePortfolio(ctx, s.store, userID, p); err != nil {
 		log.Error("stock_save_portfolio", "user", userID, "err", err)
 		return chathelper.Reply(ctx, b, update.Message, "Could not save portfolio. Try again later.")
@@ -349,7 +350,7 @@ func (s *state) handleShareDividend(ctx context.Context, b *bot.Bot, update *mod
 		log.Error("stock_load_portfolio", "user", userID, "err", err)
 		return chathelper.Reply(ctx, b, update.Message, "Could not load portfolio. Try again later.")
 	}
-	held := p.Assets[symbol]
+	held := p.Assets[symbol].Quantity
 	if held <= 0 {
 		return chathelper.Reply(ctx, b, update.Message,
 			"You don't hold any "+symbol+" to receive a share dividend.")
@@ -367,7 +368,9 @@ func (s *state) handleShareDividend(ctx context.Context, b *bot.Bot, update *mod
 	if err != nil {
 		return chathelper.Reply(ctx, b, update.Message, "Share dividend is too large.")
 	}
-	p.Assets[symbol] = finalHolding
+	if err := p.ApplyDividend(symbol, finalHolding, p.VND, s.now().UnixMilli()); err != nil {
+		return chathelper.Reply(ctx, b, update.Message, "Could not update dividend checkpoint. Try again later.")
+	}
 	if err := SavePortfolio(ctx, s.store, userID, p); err != nil {
 		log.Error("stock_save_portfolio", "user", userID, "err", err)
 		return chathelper.Reply(ctx, b, update.Message, "Could not save portfolio. Try again later.")
@@ -412,7 +415,7 @@ func (s *state) handleDividend(ctx context.Context, b *bot.Bot, update *models.U
 		log.Error("stock_load_portfolio", "user", userID, "err", err)
 		return chathelper.Reply(ctx, b, update.Message, "Could not load portfolio. Try again later.")
 	}
-	held := p.Assets[symbol]
+	held := p.Assets[symbol].Quantity
 	if held <= 0 {
 		return chathelper.Reply(ctx, b, update.Message,
 			"You don't hold any "+symbol+" to receive a dividend.")
@@ -429,13 +432,14 @@ func (s *state) handleDividend(ctx context.Context, b *bot.Bot, update *models.U
 	if err != nil {
 		return chathelper.Reply(ctx, b, update.Message, "Share dividend is too large.")
 	}
-	balance, err := checkedVNDBalance(p.Currency["VND"], total)
+	balance, err := checkedVNDBalance(p.VND, total)
 	if err != nil {
 		return chathelper.Reply(ctx, b, update.Message, "Dividend amount is too large.")
 	}
 
-	p.Currency["VND"] = balance
-	p.Assets[symbol] = finalHolding
+	if err := p.ApplyDividend(symbol, finalHolding, balance, s.now().UnixMilli()); err != nil {
+		return chathelper.Reply(ctx, b, update.Message, "Could not update dividend checkpoint. Try again later.")
+	}
 	if err := SavePortfolio(ctx, s.store, userID, p); err != nil {
 		log.Error("stock_save_portfolio", "user", userID, "err", err)
 		return chathelper.Reply(ctx, b, update.Message, "Could not save portfolio. Try again later.")
@@ -462,10 +466,8 @@ func (s *state) handleStats(ctx context.Context, b *bot.Bot, update *models.Upda
 		return chathelper.Reply(ctx, b, update.Message, "Could not load portfolio. Try again later.")
 	}
 
-	header := []string{"📊 Portfolio Summary", "VND: " + FormatVND(p.Currency["VND"])}
-	var positions []string
-	totalValue := 0.0
-	totalValue += p.Currency["VND"]
+	var positions [][]string
+	totalValue := p.VND
 	totalBasis := 0.0
 	missingPrice := false
 
@@ -475,15 +477,14 @@ func (s *state) handleStats(ctx context.Context, b *bot.Bot, update *models.Upda
 		qty    int64
 	}
 	var heldList []held
-	for sym, qty := range p.Assets {
-		if qty > 0 {
-			heldList = append(heldList, held{sym, qty})
+	for symbol, position := range p.Assets {
+		if position.Quantity > 0 {
+			heldList = append(heldList, held{symbol, position.Quantity})
 		}
 	}
 	sort.Slice(heldList, func(i, j int) bool { return heldList[i].symbol < heldList[j].symbol })
 
 	if len(heldList) > 0 {
-		header = append(header, "", "Stocks:")
 		fetchCtx, cancel := chathelper.FetchContext(ctx)
 		defer cancel()
 
@@ -498,55 +499,57 @@ func (s *state) handleStats(ctx context.Context, b *bot.Bot, update *models.Upda
 
 		for _, h := range heldList {
 			price := prices[h.symbol]
-			basis := p.CostBasis[h.symbol]
+			basis := p.Assets[h.symbol].Base
 			average := basis / float64(h.qty)
 			if !isPositiveFiniteCost(price) {
 				missingPrice = true
-				positions = append(positions, "  "+h.symbol+" x"+FormatStock(float64(h.qty))+
-					" | Avg "+FormatVND(average)+" | price unavailable")
+				positions = append(positions, []string{h.symbol, FormatStock(float64(h.qty)), FormatVND(average), "N/A", "N/A", "N/A"})
 				continue
 			}
 			val := float64(h.qty) * price
 			if !isPositiveFiniteCost(val) || !isPositiveFiniteCost(average) {
 				missingPrice = true
-				positions = append(positions, "  "+h.symbol+" x"+FormatStock(float64(h.qty))+" | valuation unavailable")
+				positions = append(positions, []string{h.symbol, FormatStock(float64(h.qty)), "N/A", "N/A", "N/A", "N/A"})
 				continue
 			}
 			totalValue += val
 			totalBasis += basis
-			positions = append(positions, "  "+h.symbol+" x"+FormatStock(float64(h.qty))+
-				" | Avg "+FormatVND(average)+" | Now "+FormatVND(price)+
-				" | Value "+FormatVND(val)+" | Unrealized P&L "+FormatPnL(val, basis))
+			positions = append(positions, []string{h.symbol, FormatStock(float64(h.qty)), FormatVND(average), FormatVND(price), FormatVND(val), FormatPnL(val, basis)})
 		}
 	}
-	var summary []string
+	var summary [][]string
 	if missingPrice {
-		summary = append(summary,
-			"", "Priced value (partial): "+FormatVND(totalValue),
-			"Unrealized P&L (priced positions): "+FormatPnL(totalValue-p.Currency["VND"], totalBasis),
-			"Invested: "+FormatVND(p.Meta.Invested),
-			"Account P&L: unavailable until all positions have prices")
+		summary = [][]string{
+			{"VND", FormatVND(p.VND)},
+			{"Priced value (partial)", FormatVND(totalValue)},
+			{"Unrealized P&L (priced)", FormatPnL(totalValue-p.VND, totalBasis)},
+			{"Invested", FormatVND(p.Meta.Invested)},
+			{"Account P&L", "Unavailable"},
+		}
 	} else {
-		summary = append(summary,
-			"", "Total value: "+FormatVND(totalValue),
-			"Invested: "+FormatVND(p.Meta.Invested),
-			"Unrealized P&L: "+FormatPnL(totalValue-p.Currency["VND"], totalBasis),
-			"Account P&L: "+FormatPnL(totalValue, p.Meta.Invested))
+		summary = [][]string{
+			{"VND", FormatVND(p.VND)},
+			{"Total value", FormatVND(totalValue)},
+			{"Invested", FormatVND(p.Meta.Invested)},
+			{"Unrealized P&L", FormatPnL(totalValue-p.VND, totalBasis)},
+			{"Account P&L", FormatPnL(totalValue, p.Meta.Invested)},
+		}
 	}
-	return chathelper.Reply(ctx, b, update.Message, boundedPortfolioReply(header, positions, summary))
+	return chathelper.ReplyHTML(ctx, b, update.Message, portfolioTableReply("Stock Portfolio", positions, summary))
 }
 
 const portfolioReplyLimit = 4000
 
-func boundedPortfolioReply(header, positions, summary []string) string {
+func portfolioTableReply(title string, positions, summary [][]string) string {
 	omitted := 0
 	for {
-		lines := append(append(append([]string{}, header...), positions...), summary...)
+		rows := append([][]string{}, positions...)
 		if omitted > 0 {
-			insertAt := len(header) + len(positions)
-			lines = append(lines[:insertAt], append([]string{"  … " + strconv.Itoa(omitted) + " position(s) omitted"}, lines[insertAt:]...)...)
+			rows = append(rows, []string{"… " + strconv.Itoa(omitted) + " omitted"})
 		}
-		reply := strings.Join(lines, "\n")
+		reply := "<b>" + title + "</b>\n" +
+			chathelper.MonospaceTable([]string{"Ticker", "Qty", "Avg", "Now", "Value", "Unrealized P&L"}, rows) + "\n" +
+			chathelper.MonospaceTable([]string{"Metric", "Value"}, summary)
 		if len(reply) <= portfolioReplyLimit || len(positions) == 0 {
 			return reply
 		}

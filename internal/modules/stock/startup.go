@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sort"
+	"math"
 	"time"
 
 	"github.com/tiennm99/miti99bot/internal/log"
@@ -13,63 +13,42 @@ import (
 )
 
 const (
-	CollectionName            = "stock"
-	costBasisMigrationKey     = "migration:stock-cost-basis-v1"
-	costBasisMigrationRetries = 5
+	CollectionName         = "stock"
+	assetSchemaMarkerKey   = "migration:stock-asset-schema-v2"
+	tickerMigrationRetries = 5
 )
 
-// MigrationPriceFetcher supplies the current quotes used to seed legacy holdings.
-type MigrationPriceFetcher interface {
-	FetchPrices(context.Context, []string) (map[string]float64, error)
+type legacyPortfolio struct {
+	VND       float64                  `json:"vnd,omitempty" bson:"vnd,omitempty"`
+	Currency  map[string]float64       `json:"currency,omitempty" bson:"currency,omitempty"`
+	Assets    map[string]AssetPosition `json:"assets" bson:"assets"`
+	CostBasis map[string]float64       `json:"costBasis,omitempty" bson:"costBasis,omitempty"`
+	Meta      PortfolioMeta            `json:"meta" bson:"meta"`
 }
 
-// InitStore ensures every existing stock holding has a cost basis. The scan runs
-// every boot so the marker is an audit record, not permission to skip validation.
-func InitStore(ctx context.Context, portfolioColl, systemColl storage.Collection, prices MigrationPriceFetcher) error {
-	docs := storage.Typed[Portfolio](portfolioColl)
+// InitStore migrates the old currency/assets/costBasis shape into the nested
+// asset schema before handlers can load portfolios. It remains an every-boot
+// invariant scan; the system marker is audit history, not a bypass.
+func InitStore(ctx context.Context, portfolioColl, systemColl storage.Collection) error {
+	docs := storage.Typed[legacyPortfolio](portfolioColl)
 	system := systemstate.New(systemColl)
-	marker, markerExists, err := system.Get(ctx, costBasisMigrationKey)
+	marker, markerExists, err := system.Get(ctx, assetSchemaMarkerKey)
 	if err != nil {
-		return fmt.Errorf("stock cost basis migration: read marker: %w", err)
+		return fmt.Errorf("stock asset schema migration: read marker: %w", err)
 	}
 	keys, err := docs.List(ctx, "user:")
 	if err != nil {
-		return fmt.Errorf("stock cost basis migration: list portfolios: %w", err)
+		return fmt.Errorf("stock asset schema migration: list portfolios: %w", err)
 	}
-	missing := map[string]bool{}
-	for _, key := range keys {
-		p, _, err := docs.Get(ctx, key)
-		if err != nil {
-			return fmt.Errorf("stock cost basis migration: read %s: %w", key, err)
-		}
-		if err := inspectLegacyPortfolio(p, missing); err != nil {
-			return fmt.Errorf("stock cost basis migration: %s: %w", key, err)
-		}
-	}
-
-	symbols := sortedMissingSymbols(missing)
-	quotes := map[string]float64{}
-	if len(symbols) > 0 {
-		quotes, err = prices.FetchPrices(ctx, symbols)
-		if err != nil {
-			return fmt.Errorf("stock cost basis migration: fetch quotes: %w", err)
-		}
-		for _, symbol := range symbols {
-			if !isPositiveFiniteCost(quotes[symbol]) {
-				return fmt.Errorf("stock cost basis migration: no valid quote for %s", symbol)
-			}
-		}
-	}
-
 	var migrated int64
 	for index, key := range keys {
-		count, err := migrateLegacyPortfolio(ctx, docs, key, quotes)
+		changed, err := migrateAssetSchema(ctx, docs, key, time.Now().UnixMilli())
 		if err != nil {
 			return err
 		}
-		migrated += int64(count)
-		if count > 0 {
-			log.Info("stock cost basis migrated", "portfolio", index+1, "total", len(keys), "positions", count)
+		if changed {
+			migrated++
+			log.Info("stock asset schema migrated", "portfolio", index+1, "total", len(keys))
 		}
 	}
 	now := time.Now().UnixMilli()
@@ -77,82 +56,108 @@ func InitStore(ctx context.Context, portfolioColl, systemColl storage.Collection
 		return nil
 	}
 	if !markerExists {
-		marker = systemstate.Record{Kind: "migration", Name: "stock cost basis v1", CompletedAt: now}
+		marker = systemstate.Record{Kind: "migration", Name: "stock asset schema v2", CompletedAt: now}
 	}
 	marker.Status = "completed"
 	marker.Count += migrated
 	marker.UpdatedAt = now
-	if err := system.Put(ctx, costBasisMigrationKey, marker); err != nil {
-		return fmt.Errorf("stock cost basis migration: write marker: %w", err)
+	if err := system.Put(ctx, assetSchemaMarkerKey, marker); err != nil {
+		return fmt.Errorf("stock asset schema migration: write marker: %w", err)
 	}
 	return nil
 }
 
-func inspectLegacyPortfolio(p Portfolio, missing map[string]bool) error {
-	for symbol, basis := range p.CostBasis {
-		if !isPositiveFiniteCost(basis) {
-			return fmt.Errorf("%s has invalid cost basis", symbol)
+func migrateAssetSchema(ctx context.Context, docs storage.DocStore[legacyPortfolio], key string, now int64) (bool, error) {
+	for attempt := 0; attempt < tickerMigrationRetries; attempt++ {
+		doc, version, err := docs.Get(ctx, key)
+		if err != nil {
+			return false, fmt.Errorf("stock asset schema migration: read %s: %w", key, err)
 		}
-		if p.Assets[symbol] <= 0 {
-			return fmt.Errorf("%s has cost basis without a holding", symbol)
+		changed, err := doc.migrate(now)
+		if err != nil {
+			return false, fmt.Errorf("stock asset schema migration: %s: %w", key, err)
+		}
+		if !changed {
+			return false, nil
+		}
+		if err := docs.PutVersioned(ctx, key, version, doc); err == nil {
+			return true, nil
+		} else if !errors.Is(err, storage.ErrConflict) {
+			return false, fmt.Errorf("stock asset schema migration: write %s: %w", key, err)
 		}
 	}
-	for symbol, qty := range p.Assets {
-		if qty < 0 {
-			return fmt.Errorf("%s has negative quantity", symbol)
+	return false, fmt.Errorf("stock asset schema migration: write %s: %w", key, storage.ErrConflict)
+}
+
+func (p *legacyPortfolio) migrate(now int64) (bool, error) {
+	if !p.hasLegacyFields() {
+		return false, p.currentPortfolio().Validate()
+	}
+	if err := p.migrateVND(); err != nil {
+		return false, err
+	}
+	if err := p.migrateAssets(now); err != nil {
+		return false, err
+	}
+	p.Currency = nil
+	p.CostBasis = nil
+	return true, p.currentPortfolio().Validate()
+}
+
+func (p *legacyPortfolio) hasLegacyFields() bool {
+	if p.Currency != nil || p.CostBasis != nil {
+		return true
+	}
+	for _, position := range p.Assets {
+		if position.legacyQuantity {
+			return true
 		}
-		if qty == 0 {
+	}
+	return false
+}
+
+func (p *legacyPortfolio) migrateVND() error {
+	if math.IsNaN(p.VND) || math.IsInf(p.VND, 0) || p.VND < 0 {
+		return fmt.Errorf("invalid VND balance")
+	}
+	for currency, balance := range p.Currency {
+		if currency != "VND" && balance != 0 {
+			return fmt.Errorf("unsupported legacy currency %q", currency)
+		}
+	}
+	if legacyVND := p.Currency["VND"]; legacyVND != 0 {
+		if p.VND != 0 && p.VND != legacyVND {
+			return fmt.Errorf("conflicting VND balances")
+		}
+		p.VND = legacyVND
+	}
+	return nil
+}
+
+func (p *legacyPortfolio) migrateAssets(now int64) error {
+	for symbol, position := range p.Assets {
+		if !position.legacyQuantity {
+			return fmt.Errorf("document mixes legacy and nested assets")
+		}
+		if position.Quantity == 0 {
+			delete(p.Assets, symbol)
 			continue
 		}
 		canonical, err := normalizeStockSymbol(symbol)
-		if err != nil || canonical != symbol {
-			return fmt.Errorf("%q is not a canonical ticker", symbol)
+		base := p.CostBasis[symbol]
+		if err != nil || canonical != symbol || position.Quantity < 0 || !isPositiveFiniteCost(base) {
+			return fmt.Errorf("invalid legacy position %q", symbol)
 		}
-		if _, ok := p.CostBasis[symbol]; !ok {
-			missing[symbol] = true
+		p.Assets[symbol] = AssetPosition{Quantity: position.Quantity, Base: base, DividendCheckedAt: now}
+	}
+	for symbol, base := range p.CostBasis {
+		if !isPositiveFiniteCost(base) || p.Assets[symbol].Quantity <= 0 {
+			return fmt.Errorf("orphan or invalid legacy basis %q", symbol)
 		}
 	}
 	return nil
 }
 
-func migrateLegacyPortfolio(ctx context.Context, docs storage.DocStore[Portfolio], key string, quotes map[string]float64) (int, error) {
-	for attempt := 0; attempt < costBasisMigrationRetries; attempt++ {
-		p, version, err := docs.Get(ctx, key)
-		if err != nil {
-			return 0, fmt.Errorf("stock cost basis migration: read %s: %w", key, err)
-		}
-		missing := map[string]bool{}
-		if err := inspectLegacyPortfolio(p, missing); err != nil {
-			return 0, fmt.Errorf("stock cost basis migration: %s: %w", key, err)
-		}
-		if len(missing) == 0 {
-			return 0, nil
-		}
-		if p.CostBasis == nil {
-			p.CostBasis = map[string]float64{}
-		}
-		for symbol := range missing {
-			quote := quotes[symbol]
-			basis := float64(p.Assets[symbol]) * quote
-			if !isPositiveFiniteCost(quote) || !isPositiveFiniteCost(basis) {
-				return 0, fmt.Errorf("stock cost basis migration: no cached valid quote for %s", symbol)
-			}
-			p.CostBasis[symbol] = basis
-		}
-		if err := docs.PutVersioned(ctx, key, version, p); err == nil {
-			return len(missing), nil
-		} else if !errors.Is(err, storage.ErrConflict) {
-			return 0, fmt.Errorf("stock cost basis migration: write %s: %w", key, err)
-		}
-	}
-	return 0, fmt.Errorf("stock cost basis migration: write %s: %w", key, storage.ErrConflict)
-}
-
-func sortedMissingSymbols(missing map[string]bool) []string {
-	symbols := make([]string, 0, len(missing))
-	for symbol := range missing {
-		symbols = append(symbols, symbol)
-	}
-	sort.Strings(symbols)
-	return symbols
+func (p *legacyPortfolio) currentPortfolio() Portfolio {
+	return Portfolio{VND: p.VND, Assets: p.Assets, Meta: p.Meta}
 }

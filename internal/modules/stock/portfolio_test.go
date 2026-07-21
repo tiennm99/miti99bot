@@ -7,91 +7,72 @@ import (
 	"github.com/tiennm99/miti99bot/internal/storage"
 )
 
-// newStockStore returns a fresh in-memory typed portfolio store for tests.
 func newStockStore() Store {
-	return storage.Typed[Portfolio](storage.NewMemoryProvider().Collection("stock"))
+	return storage.Typed[Portfolio](storage.NewMemoryProvider().Collection(CollectionName))
 }
 
-func TestLoadPortfolio_FirstTimeUser(t *testing.T) {
-	store := newStockStore()
-	p, err := LoadPortfolio(context.Background(), store, 42, 1234567890)
+func TestLoadPortfolioFirstTimeUser(t *testing.T) {
+	p, err := LoadPortfolio(context.Background(), newStockStore(), 42, 1234567890)
 	if err != nil {
-		t.Fatalf("LoadPortfolio: %v", err)
+		t.Fatal(err)
 	}
-	if p.Currency["VND"] != 0 {
-		t.Errorf("VND seeded: got %v, want 0", p.Currency["VND"])
-	}
-	if p.Assets == nil {
-		t.Error("Assets is nil")
-	}
-	if p.Meta.CreatedAt != 1234567890 {
-		t.Errorf("CreatedAt: got %d, want 1234567890", p.Meta.CreatedAt)
+	if p.VND != 0 || p.Assets == nil || p.Meta.CreatedAt != 1234567890 {
+		t.Fatalf("portfolio=%+v", p)
 	}
 }
 
 func TestSaveAndLoadRoundTrip(t *testing.T) {
+	ctx := context.Background()
 	store := newStockStore()
-	p, _ := LoadPortfolio(context.Background(), store, 42, 1)
-	p.AddCurrency("VND", 5_000_000)
-	p.AddAsset("TCB", 100)
-	p.CostBasis["TCB"] = 3_000_000
+	p := NewPortfolio(1)
+	p.AddVND(5_000_000)
+	if err := p.BuyTicker("TCB", 100, 3_000_000, 10); err != nil {
+		t.Fatal(err)
+	}
 	p.Meta.Invested = 5_000_000
-	if err := SavePortfolio(context.Background(), store, 42, p); err != nil {
-		t.Fatalf("Save: %v", err)
+	if err := SavePortfolio(ctx, store, 42, p); err != nil {
+		t.Fatal(err)
 	}
-	got, err := LoadPortfolio(context.Background(), store, 42, 999) // CreatedAt should NOT be reset
+	got, err := LoadPortfolio(ctx, store, 42, 999)
 	if err != nil {
-		t.Fatalf("Load: %v", err)
+		t.Fatal(err)
 	}
-	if got.Currency["VND"] != 5_000_000 {
-		t.Errorf("VND: got %v, want 5000000", got.Currency["VND"])
-	}
-	if got.Assets["TCB"] != 100 {
-		t.Errorf("TCB: got %d, want 100", got.Assets["TCB"])
-	}
-	if got.Meta.Invested != 5_000_000 {
-		t.Errorf("Invested: got %v, want 5000000", got.Meta.Invested)
-	}
-	if got.Meta.CreatedAt != 1 {
-		t.Errorf("CreatedAt: got %d, want 1 (load must NOT overwrite existing)", got.Meta.CreatedAt)
+	position := got.Assets["TCB"]
+	if got.VND != 5_000_000 || position.Quantity != 100 || position.Base != 3_000_000 || position.DividendCheckedAt != 10 || got.Meta.CreatedAt != 1 {
+		t.Fatalf("portfolio=%+v", got)
 	}
 }
 
-func TestAddDeductCurrency(t *testing.T) {
-	p := NewPortfolio(0)
-	p.AddCurrency("VND", 1000)
-	p.AddCurrency("VND", 500)
-	if p.Currency["VND"] != 1500 {
-		t.Errorf("after add: got %v, want 1500", p.Currency["VND"])
+func TestBuyPreservesDividendCheckedAtAndSellUsesWeightedBasis(t *testing.T) {
+	p := NewPortfolio(1)
+	if err := p.BuyTicker("TCB", 100, 2_000_000, 10); err != nil {
+		t.Fatal(err)
 	}
-	ok, bal := p.DeductCurrency("VND", 600)
-	if !ok || bal != 900 {
-		t.Errorf("deduct 600: ok=%v bal=%v, want ok=true bal=900", ok, bal)
+	if err := p.BuyTicker("TCB", 50, 1_500_000, 20); err != nil {
+		t.Fatal(err)
 	}
-	ok, bal = p.DeductCurrency("VND", 9999)
-	if ok || bal != 900 {
-		t.Errorf("deduct over balance: ok=%v bal=%v, want ok=false bal=900 (unchanged)", ok, bal)
+	position := p.Assets["TCB"]
+	if position.DividendCheckedAt != 10 {
+		t.Fatalf("additional buy changed dividend cursor to %d", position.DividendCheckedAt)
+	}
+	remaining, soldBase, ok, err := p.SellTicker("TCB", 60)
+	if err != nil || !ok || remaining != 90 || soldBase != 1_400_000 {
+		t.Fatalf("remaining=%d soldBase=%v ok=%v err=%v", remaining, soldBase, ok, err)
+	}
+	position = p.Assets["TCB"]
+	if position.Base != 2_100_000 || position.DividendCheckedAt != 10 {
+		t.Fatalf("position=%+v", position)
 	}
 }
 
-func TestAddDeductAsset(t *testing.T) {
-	p := NewPortfolio(0)
-	p.AddAsset("TCB", 10)
-	p.AddAsset("TCB", 5)
-	if p.Assets["TCB"] != 15 {
-		t.Errorf("TCB after add: got %d, want 15", p.Assets["TCB"])
+func TestDividendAdvancesCursorWithoutChangingBase(t *testing.T) {
+	p := NewPortfolio(1)
+	_ = p.BuyTicker("TCB", 100, 3_000_000, 10)
+	if err := p.ApplyDividend("TCB", 110, 500_000, 30); err != nil {
+		t.Fatal(err)
 	}
-	ok, held := p.DeductAsset("TCB", 3)
-	if !ok || held != 12 {
-		t.Errorf("deduct 3: ok=%v held=%v, want ok=true held=12", ok, held)
-	}
-	ok, _ = p.DeductAsset("TCB", 999)
-	if ok {
-		t.Error("deduct over holdings: should fail")
-	}
-	// Final deduction removes key entirely.
-	p.DeductAsset("TCB", 12)
-	if _, present := p.Assets["TCB"]; present {
-		t.Error("zero-balance asset should be removed from map")
+	position := p.Assets["TCB"]
+	if position.Quantity != 110 || position.Base != 3_000_000 || position.DividendCheckedAt != 30 || p.VND != 500_000 {
+		t.Fatalf("portfolio=%+v", p)
 	}
 }

@@ -97,7 +97,7 @@ func TestHandleBuyAndPartialSellTracksCostBasisAndRealizedPnL(t *testing.T) {
 		t.Fatal(err)
 	}
 	p, err := LoadPortfolio(ctx, s.store, 7, 999)
-	if err != nil || p.CostBasis["TCB"] != 3_000_000 {
+	if err != nil || p.Assets["TCB"].Base != 3_000_000 {
 		t.Fatalf("after buy=%+v err=%v", p, err)
 	}
 	price = 36_000
@@ -107,7 +107,7 @@ func TestHandleBuyAndPartialSellTracksCostBasisAndRealizedPnL(t *testing.T) {
 	}
 	rb.AssertSentText(t, "Realized P&L: +240.000 VND (+20.00%)")
 	p, err = LoadPortfolio(ctx, s.store, 7, 999)
-	if err != nil || p.Assets["TCB"] != 60 || p.CostBasis["TCB"] != 1_800_000 {
+	if err != nil || p.Assets["TCB"].Quantity != 60 || p.Assets["TCB"].Base != 1_800_000 {
 		t.Fatalf("after sell=%+v err=%v", p, err)
 	}
 }
@@ -188,7 +188,7 @@ func TestMutableHandlersRejectExtraArgs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadPortfolio: %v", err)
 	}
-	if p.Currency["VND"] != 0 || len(p.Assets) != 0 {
+	if p.VND != 0 || len(p.Assets) != 0 {
 		t.Fatalf("invalid commands mutated portfolio: %+v", p)
 	}
 }
@@ -243,9 +243,8 @@ func (s *countingPortfolioStore) Put(ctx context.Context, id string, p Portfolio
 func seedStockPortfolio(t *testing.T, store Store, userID int64, held int64, balance float64) {
 	t.Helper()
 	p := NewPortfolio(123)
-	p.Assets["TCB"] = held
-	p.CostBasis["TCB"] = float64(held) * 30_000
-	p.Currency["VND"] = balance
+	p.Assets["TCB"] = AssetPosition{Quantity: held, Base: float64(held) * 30_000, DividendCheckedAt: 100}
+	p.VND = balance
 	if err := SavePortfolio(context.Background(), store, userID, p); err != nil {
 		t.Fatalf("seed portfolio: %v", err)
 	}
@@ -267,11 +266,11 @@ func TestHandleCashDividendAllowsRepeatedManualAdjustments(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load portfolio: %v", err)
 	}
-	if got, want := p.Currency["VND"], float64(418000); got != want {
+	if got, want := p.VND, float64(418000); got != want {
 		t.Fatalf("balance = %v, want %v", got, want)
 	}
-	if p.CostBasis["TCB"] != 139*30_000 {
-		t.Fatalf("cash dividend changed cost basis: %v", p.CostBasis["TCB"])
+	if p.Assets["TCB"].Base != 139*30_000 || p.Assets["TCB"].DividendCheckedAt != 123 {
+		t.Fatalf("cash dividend position: %+v", p.Assets["TCB"])
 	}
 }
 
@@ -290,7 +289,7 @@ func TestHandleCashDividendRejectsInexactBalanceSum(t *testing.T) {
 		t.Fatalf("store writes = %d, want 0", store.puts)
 	}
 	p, _ := LoadPortfolio(ctx, base, 7, 999)
-	if p.Assets["TCB"] != 1 || p.Currency["VND"] != 1 {
+	if p.Assets["TCB"].Quantity != 1 || p.VND != 1 {
 		t.Fatalf("portfolio changed: %+v", p)
 	}
 	rb.AssertSentText(t, "Dividend amount is too large.")
@@ -307,11 +306,11 @@ func TestHandleShareDividendPreservesRatioAndFloors(t *testing.T) {
 		t.Fatalf("handleShareDividend: %v", err)
 	}
 	p, _ := LoadPortfolio(ctx, store, 7, 999)
-	if got, want := p.Assets["TCB"], int64(152); got != want {
+	if got, want := p.Assets["TCB"].Quantity, int64(152); got != want {
 		t.Fatalf("holding = %d, want %d", got, want)
 	}
-	if p.CostBasis["TCB"] != 139*30_000 {
-		t.Fatalf("share dividend changed total cost basis: %v", p.CostBasis["TCB"])
+	if p.Assets["TCB"].Base != 139*30_000 || p.Assets["TCB"].DividendCheckedAt != 123 {
+		t.Fatalf("share dividend position: %+v", p.Assets["TCB"])
 	}
 	rb.AssertSentText(t, "Share dividend (100:10): +13 TCB")
 }
@@ -345,8 +344,8 @@ func TestHandleShareDividendRejectsZeroEntitlement(t *testing.T) {
 		t.Fatalf("store writes = %d, want 0", store.puts)
 	}
 	p, _ := LoadPortfolio(ctx, base, 7, 999)
-	if p.Assets["TCB"] != 9 {
-		t.Fatalf("holding changed to %d", p.Assets["TCB"])
+	if p.Assets["TCB"].Quantity != 9 {
+		t.Fatalf("holding changed to %d", p.Assets["TCB"].Quantity)
 	}
 	rb.AssertSentText(t, "Minimum holding: 10")
 }
@@ -379,7 +378,7 @@ func TestHandleCombinedDividendUsesPreEventHoldingAndOneSave(t *testing.T) {
 		t.Fatalf("store writes = %d, want 1", store.puts)
 	}
 	p, _ := LoadPortfolio(ctx, base, 7, 999)
-	if p.Assets["TCB"] != 152 || p.Currency["VND"] != 209500 || p.CostBasis["TCB"] != 139*30_000 {
+	if p.Assets["TCB"].Quantity != 152 || p.VND != 209500 || p.Assets["TCB"].Base != 139*30_000 || p.Assets["TCB"].DividendCheckedAt != 123 {
 		t.Fatalf("portfolio = %+v", p)
 	}
 	rb.AssertSentText(t, "Dividend for TCB (100:10)")
@@ -401,7 +400,7 @@ func TestHandleCombinedDividendRejectsInexactBalanceSum(t *testing.T) {
 		t.Fatalf("store writes = %d, want 0", store.puts)
 	}
 	p, _ := LoadPortfolio(ctx, base, 7, 999)
-	if p.Assets["TCB"] != 1 || p.Currency["VND"] != 1 {
+	if p.Assets["TCB"].Quantity != 1 || p.VND != 1 {
 		t.Fatalf("portfolio changed: %+v", p)
 	}
 	rb.AssertSentText(t, "Dividend amount is too large.")
@@ -418,7 +417,7 @@ func TestHandleCombinedDividendCreditsCashWhenSharesRoundToZero(t *testing.T) {
 		t.Fatalf("handleDividend: %v", err)
 	}
 	p, _ := LoadPortfolio(ctx, store, 7, 999)
-	if p.Assets["TCB"] != 9 || p.Currency["VND"] != 13600 {
+	if p.Assets["TCB"].Quantity != 9 || p.VND != 13600 {
 		t.Fatalf("portfolio = %+v", p)
 	}
 	rb.AssertSentText(t, "Shares: +0")
@@ -436,7 +435,7 @@ func TestDividendSaveFailureLeavesStoredPortfolioUnchanged(t *testing.T) {
 		t.Fatalf("handleDividend: %v", err)
 	}
 	p, _ := LoadPortfolio(ctx, base, 7, 999)
-	if p.Assets["TCB"] != 139 || p.Currency["VND"] != 1000 {
+	if p.Assets["TCB"].Quantity != 139 || p.VND != 1000 {
 		t.Fatalf("stored portfolio changed: %+v", p)
 	}
 	rb.AssertSentText(t, "Could not save portfolio")
