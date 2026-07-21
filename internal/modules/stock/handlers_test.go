@@ -3,6 +3,7 @@ package stock
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -73,6 +74,42 @@ func TestHandlePriceUsage(t *testing.T) {
 		t.Fatalf("handlePrice: %v", err)
 	}
 	rb.AssertSentText(t, "Usage: /stock_price <ticker>")
+}
+
+func TestHandleBuyAndPartialSellTracksCostBasisAndRealizedPnL(t *testing.T) {
+	ctx := context.Background()
+	price := 30_000.0
+	priceSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprintf(w, `{"data":{"matchedPrice":%v}}`, price)
+	}))
+	t.Cleanup(priceSrv.Close)
+	s := &state{
+		store:  newStockStore(),
+		prices: &PriceClient{HTTP: priceSrv.Client(), URL: priceSrv.URL},
+		nowFn:  func() time.Time { return time.UnixMilli(123) },
+	}
+	rb := testutil.NewRecordingBot(t)
+	if err := s.handleTopup(ctx, rb.Bot, testutil.NewPrivateMessage(7, "/stock_topup 10000000")); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.handleBuy(ctx, rb.Bot, testutil.NewPrivateMessage(7, "/stock_buy 100 TCB")); err != nil {
+		t.Fatal(err)
+	}
+	p, err := LoadPortfolio(ctx, s.store, 7, 999)
+	if err != nil || p.CostBasis["TCB"] != 3_000_000 {
+		t.Fatalf("after buy=%+v err=%v", p, err)
+	}
+	price = 36_000
+	rb.Reset()
+	if err := s.handleSell(ctx, rb.Bot, testutil.NewPrivateMessage(7, "/stock_sell 40 TCB")); err != nil {
+		t.Fatal(err)
+	}
+	rb.AssertSentText(t, "Realized P&L: +240.000 VND (+20.00%)")
+	p, err = LoadPortfolio(ctx, s.store, 7, 999)
+	if err != nil || p.Assets["TCB"] != 60 || p.CostBasis["TCB"] != 1_800_000 {
+		t.Fatalf("after sell=%+v err=%v", p, err)
+	}
 }
 
 func TestMutableHandlersRejectExtraArgs(t *testing.T) {
@@ -207,6 +244,7 @@ func seedStockPortfolio(t *testing.T, store Store, userID int64, held int64, bal
 	t.Helper()
 	p := NewPortfolio(123)
 	p.Assets["TCB"] = held
+	p.CostBasis["TCB"] = float64(held) * 30_000
 	p.Currency["VND"] = balance
 	if err := SavePortfolio(context.Background(), store, userID, p); err != nil {
 		t.Fatalf("seed portfolio: %v", err)
@@ -231,6 +269,9 @@ func TestHandleCashDividendAllowsRepeatedManualAdjustments(t *testing.T) {
 	}
 	if got, want := p.Currency["VND"], float64(418000); got != want {
 		t.Fatalf("balance = %v, want %v", got, want)
+	}
+	if p.CostBasis["TCB"] != 139*30_000 {
+		t.Fatalf("cash dividend changed cost basis: %v", p.CostBasis["TCB"])
 	}
 }
 
@@ -268,6 +309,9 @@ func TestHandleShareDividendPreservesRatioAndFloors(t *testing.T) {
 	p, _ := LoadPortfolio(ctx, store, 7, 999)
 	if got, want := p.Assets["TCB"], int64(152); got != want {
 		t.Fatalf("holding = %d, want %d", got, want)
+	}
+	if p.CostBasis["TCB"] != 139*30_000 {
+		t.Fatalf("share dividend changed total cost basis: %v", p.CostBasis["TCB"])
 	}
 	rb.AssertSentText(t, "Share dividend (100:10): +13 TCB")
 }
@@ -335,7 +379,7 @@ func TestHandleCombinedDividendUsesPreEventHoldingAndOneSave(t *testing.T) {
 		t.Fatalf("store writes = %d, want 1", store.puts)
 	}
 	p, _ := LoadPortfolio(ctx, base, 7, 999)
-	if p.Assets["TCB"] != 152 || p.Currency["VND"] != 209500 {
+	if p.Assets["TCB"] != 152 || p.Currency["VND"] != 209500 || p.CostBasis["TCB"] != 139*30_000 {
 		t.Fatalf("portfolio = %+v", p)
 	}
 	rb.AssertSentText(t, "Dividend for TCB (100:10)")

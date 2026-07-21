@@ -100,6 +100,9 @@ func (s *state) handleBuy(ctx context.Context, b *bot.Bot, update *models.Update
 			insufficientBalance = &balance
 			return errInsufficientUSD
 		}
+		if err := p.AddCostBasis(coin.Symbol, amount); err != nil {
+			return err
+		}
 		p.AddAsset(coin.Symbol, qty)
 		return nil
 	})
@@ -149,12 +152,20 @@ func (s *state) handleSell(ctx context.Context, b *bot.Bot, update *models.Updat
 	defer s.locks.Acquire(strconv.FormatInt(userID, 10))()
 	var insufficientHeldQty float64
 	var insufficientHeld bool
+	var soldBasis float64
 	p, err := UpdatePortfolio(ctx, s.store, userID, s.now().UnixMilli(), func(p *Portfolio) error {
+		heldBefore := p.Assets[coin.Symbol]
 		ok, held := p.DeductAsset(coin.Symbol, qty)
 		if !ok {
 			insufficientHeldQty = held
 			insufficientHeld = true
 			return errInsufficientCoin
+		}
+		remaining := p.Assets[coin.Symbol]
+		var basisErr error
+		soldBasis, basisErr = p.RemoveCostBasis(coin.Symbol, qty, heldBefore, remaining > 0)
+		if basisErr != nil {
+			return basisErr
 		}
 		p.AddUSD(amount)
 		return nil
@@ -168,7 +179,8 @@ func (s *state) handleSell(ctx context.Context, b *bot.Bot, update *models.Updat
 	}
 	return chathelper.Reply(ctx, b, update.Message,
 		"Sold "+FormatCoinQty(qty)+" "+coin.Symbol+" @ "+FormatUSD(price.USD)+" ("+price.Source+")"+
-			"\nReceived: "+FormatUSD(amount)+"\nRemaining: "+FormatUSD(p.USD))
+			"\nReceived: "+FormatUSD(amount)+"\nRealized P&L: "+FormatPnLUSD(amount, soldBasis)+
+			"\nRemaining: "+FormatUSD(p.USD))
 }
 
 func formatInsufficientSellMessage(coin CoinSymbol, requestedUSD, heldQty, priceUSD float64) string {

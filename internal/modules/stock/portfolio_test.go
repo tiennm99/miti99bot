@@ -34,6 +34,7 @@ func TestSaveAndLoadRoundTrip(t *testing.T) {
 	p, _ := LoadPortfolio(context.Background(), store, 42, 1)
 	p.AddCurrency("VND", 5_000_000)
 	p.AddAsset("TCB", 100)
+	p.CostBasis["TCB"] = 3_000_000
 	p.Meta.Invested = 5_000_000
 	if err := SavePortfolio(context.Background(), store, 42, p); err != nil {
 		t.Fatalf("Save: %v", err)

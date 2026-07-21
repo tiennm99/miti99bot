@@ -235,6 +235,7 @@ func TestStockAndGoldPortfolioKeysDoNotCollide(t *testing.T) {
 	stockStore := storage.Typed[stockmod.Portfolio](provider.Collection("stock"))
 	stockPortfolio := stockmod.NewPortfolio(1)
 	stockPortfolio.AddAsset("TCB", 100)
+	stockPortfolio.CostBasis["TCB"] = 3_000_000
 	if err := stockmod.SavePortfolio(ctx, stockStore, 7, stockPortfolio); err != nil {
 		t.Fatalf("save stock: %v", err)
 	}

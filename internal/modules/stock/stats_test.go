@@ -43,6 +43,9 @@ func TestHandleStats_UsesSSIBatchPrices(t *testing.T) {
 	p.AddAsset("MWG", 1800)
 	p.AddAsset("TCB", 4200)
 	p.AddAsset("FPT", 2300)
+	p.CostBasis["MWG"] = 108_000_000
+	p.CostBasis["TCB"] = 105_000_000
+	p.CostBasis["FPT"] = 230_000_000
 	if err := SavePortfolio(ctx, store, 7, p); err != nil {
 		t.Fatalf("SavePortfolio: %v", err)
 	}
@@ -67,11 +70,12 @@ func TestHandleStats_UsesSSIBatchPrices(t *testing.T) {
 
 	text := rb.LastSent().Text()
 	for _, want := range []string{
-		"MWG x1800 @ 70.000 VND = 126.000.000 VND",
-		"TCB x4200 @ 30.000 VND = 126.000.000 VND",
-		"FPT x2300 @ 120.000 VND = 276.000.000 VND",
+		"MWG x1800 | Avg 60.000 VND | Now 70.000 VND | Value 126.000.000 VND | Unrealized P&L +18.000.000 VND (+16.67%)",
+		"TCB x4200 | Avg 25.000 VND | Now 30.000 VND | Value 126.000.000 VND | Unrealized P&L +21.000.000 VND (+20.00%)",
+		"FPT x2300 | Avg 100.000 VND | Now 120.000 VND | Value 276.000.000 VND | Unrealized P&L +46.000.000 VND (+20.00%)",
 		"Total value: 530.335.000 VND",
-		"P&L: -469.665.000 VND (-46.97%)",
+		"Unrealized P&L: +85.000.000 VND (+19.19%)",
+		"Account P&L: -469.665.000 VND (-46.97%)",
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("stats missing %q in:\n%s", want, text)
@@ -79,5 +83,19 @@ func TestHandleStats_UsesSSIBatchPrices(t *testing.T) {
 	}
 	if strings.Contains(text, "(no price)") {
 		t.Fatalf("stats rendered missing prices:\n%s", text)
+	}
+}
+
+func TestStockPortfolioReplyStaysWithinTelegramBudget(t *testing.T) {
+	positions := make([]string, 200)
+	for i := range positions {
+		positions[i] = strings.Repeat("position-data-", 20)
+	}
+	reply := boundedPortfolioReply([]string{"header"}, positions, []string{"summary"})
+	if len(reply) > portfolioReplyLimit {
+		t.Fatalf("reply length = %d, limit = %d", len(reply), portfolioReplyLimit)
+	}
+	if !strings.Contains(reply, "position(s) omitted") || !strings.Contains(reply, "summary") {
+		t.Fatalf("bounded reply lost omission marker or summary: %q", reply)
 	}
 }

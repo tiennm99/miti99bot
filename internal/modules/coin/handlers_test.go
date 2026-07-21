@@ -3,6 +3,7 @@ package coin
 import (
 	"context"
 	"errors"
+	"math"
 	"strings"
 	"testing"
 	"time"
@@ -155,13 +156,18 @@ func TestHandleBuyAndSell(t *testing.T) {
 	if p.USD != 500 || p.Assets["BTC"] != 0.01 {
 		t.Fatalf("after buy = %+v", p)
 	}
+	if p.CostBasis["BTC"] != 500 {
+		t.Fatalf("buy cost basis = %v, want 500", p.CostBasis["BTC"])
+	}
+	s.prices.(fakePriceFetcher).prices["BTC"] = CoinPrice{USD: 60_000, Source: "Binance"}
 	rb.Reset()
-	if err := s.handleSell(ctx, rb.Bot, testutil.NewPrivateMessage(7, "/coin_sell 500 BTC")); err != nil {
+	if err := s.handleSell(ctx, rb.Bot, testutil.NewPrivateMessage(7, "/coin_sell 600 BTC")); err != nil {
 		t.Fatalf("handleSell: %v", err)
 	}
 	rb.AssertSentText(t, "Sold 0.01 BTC")
+	rb.AssertSentText(t, "Realized P&L: +$100.00 (+20.00%)")
 	p, _ = LoadPortfolio(ctx, s.store, 7, 999)
-	if p.USD != 1000 || len(p.Assets) != 0 {
+	if p.USD != 1100 || len(p.Assets) != 0 || len(p.CostBasis) != 0 {
 		t.Fatalf("after sell = %+v", p)
 	}
 }
@@ -339,6 +345,28 @@ func TestStatsWithAndWithoutPrice(t *testing.T) {
 		t.Fatalf("handleStats no price: %v", err)
 	}
 	rb.AssertSentText(t, "price unavailable")
+	if strings.Contains(rb.LastSent().Text(), "Account P&L: +") || strings.Contains(rb.LastSent().Text(), "Account P&L: -") {
+		t.Fatalf("partial prices must not show numeric account P&L: %q", rb.LastSent().Text())
+	}
+}
+
+func TestStatsTreatsOverflowedValuationAsUnavailable(t *testing.T) {
+	ctx := context.Background()
+	s := newTestState(map[string]CoinPrice{"BTC": {USD: math.MaxFloat64, Source: "test"}}, nil)
+	p := NewPortfolio(1)
+	p.Assets["BTC"] = 2
+	p.CostBasis["BTC"] = 1
+	if err := SavePortfolio(ctx, s.store, 7, p); err != nil {
+		t.Fatal(err)
+	}
+	rb := testutil.NewRecordingBot(t)
+	if err := s.handleStats(ctx, rb.Bot, testutil.NewPrivateMessage(7, "/coin_portfolio")); err != nil {
+		t.Fatal(err)
+	}
+	text := rb.LastSent().Text()
+	if !strings.Contains(text, "valuation unavailable") || !strings.Contains(text, "Account P&L: unavailable") {
+		t.Fatalf("overflowed valuation was presented as complete: %q", text)
+	}
 }
 
 func modDepsForTest() modules.Deps {

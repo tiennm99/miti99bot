@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"math"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -179,6 +180,10 @@ func (s *state) handleBuy(ctx context.Context, b *bot.Bot, update *models.Update
 		return chathelper.Reply(ctx, b, update.Message,
 			"Insufficient VND. Need "+FormatVND(cost)+", have "+FormatVND(balance)+".")
 	}
+	if err := p.AddCostBasis(symbol, cost); err != nil {
+		log.Error("stock_add_cost_basis", "user", userID, "ticker", symbol, "err", err)
+		return chathelper.Reply(ctx, b, update.Message, "Could not record purchase cost. Try again later.")
+	}
 	p.AddAsset(symbol, qty)
 	if err := SavePortfolio(ctx, s.store, userID, p); err != nil {
 		log.Error("stock_save_portfolio", "user", userID, "err", err)
@@ -232,12 +237,18 @@ func (s *state) handleSell(ctx context.Context, b *bot.Bot, update *models.Updat
 		log.Error("stock_load_portfolio", "user", userID, "err", err)
 		return chathelper.Reply(ctx, b, update.Message, "Could not load portfolio. Try again later.")
 	}
+	heldBefore := p.Assets[symbol]
 	ok, held := p.DeductAsset(symbol, qty)
 	if !ok {
 		return chathelper.Reply(ctx, b, update.Message,
 			"Insufficient "+symbol+". You have: "+FormatStock(float64(held)))
 	}
 	revenue := float64(qty) * price
+	soldBasis, err := p.RemoveCostBasis(symbol, qty, heldBefore)
+	if err != nil {
+		log.Error("stock_remove_cost_basis", "user", userID, "ticker", symbol, "err", err)
+		return chathelper.Reply(ctx, b, update.Message, "Portfolio cost basis is unavailable. Restart the bot or contact the owner.")
+	}
 	p.AddCurrency("VND", revenue)
 	if err := SavePortfolio(ctx, s.store, userID, p); err != nil {
 		log.Error("stock_save_portfolio", "user", userID, "err", err)
@@ -246,6 +257,7 @@ func (s *state) handleSell(ctx context.Context, b *bot.Bot, update *models.Updat
 	return chathelper.Reply(ctx, b, update.Message,
 		"Sold "+FormatStock(float64(qty))+" "+symbol+
 			" @ "+FormatVND(price)+"\nRevenue: "+FormatVND(revenue)+
+			"\nRealized P&L: "+FormatPnL(revenue, soldBasis)+
 			"\nRemaining: "+FormatVND(p.Currency["VND"]))
 }
 
@@ -450,14 +462,12 @@ func (s *state) handleStats(ctx context.Context, b *bot.Bot, update *models.Upda
 		return chathelper.Reply(ctx, b, update.Message, "Could not load portfolio. Try again later.")
 	}
 
-	var lines []string
-	lines = append(lines, "📊 Portfolio Summary\n")
+	header := []string{"📊 Portfolio Summary", "VND: " + FormatVND(p.Currency["VND"])}
+	var positions []string
 	totalValue := 0.0
-
-	if vnd := p.Currency["VND"]; vnd > 0 {
-		totalValue += vnd
-		lines = append(lines, "VND: "+FormatVND(vnd))
-	}
+	totalValue += p.Currency["VND"]
+	totalBasis := 0.0
+	missingPrice := false
 
 	// Filter out zero-balance assets (DeductAsset removes them, but defensive).
 	type held struct {
@@ -466,13 +476,14 @@ func (s *state) handleStats(ctx context.Context, b *bot.Bot, update *models.Upda
 	}
 	var heldList []held
 	for sym, qty := range p.Assets {
-		if qty != 0 {
+		if qty > 0 {
 			heldList = append(heldList, held{sym, qty})
 		}
 	}
+	sort.Slice(heldList, func(i, j int) bool { return heldList[i].symbol < heldList[j].symbol })
 
 	if len(heldList) > 0 {
-		lines = append(lines, "\nStocks:")
+		header = append(header, "", "Stocks:")
 		fetchCtx, cancel := chathelper.FetchContext(ctx)
 		defer cancel()
 
@@ -487,18 +498,59 @@ func (s *state) handleStats(ctx context.Context, b *bot.Bot, update *models.Upda
 
 		for _, h := range heldList {
 			price := prices[h.symbol]
-			if fetchErr != nil || price <= 0 {
-				lines = append(lines, "  "+h.symbol+" x"+FormatStock(float64(h.qty))+" (no price)")
+			basis := p.CostBasis[h.symbol]
+			average := basis / float64(h.qty)
+			if !isPositiveFiniteCost(price) {
+				missingPrice = true
+				positions = append(positions, "  "+h.symbol+" x"+FormatStock(float64(h.qty))+
+					" | Avg "+FormatVND(average)+" | price unavailable")
 				continue
 			}
 			val := float64(h.qty) * price
+			if !isPositiveFiniteCost(val) || !isPositiveFiniteCost(average) {
+				missingPrice = true
+				positions = append(positions, "  "+h.symbol+" x"+FormatStock(float64(h.qty))+" | valuation unavailable")
+				continue
+			}
 			totalValue += val
-			lines = append(lines, "  "+h.symbol+" x"+FormatStock(float64(h.qty))+
-				" @ "+FormatVND(price)+" = "+FormatVND(val))
+			totalBasis += basis
+			positions = append(positions, "  "+h.symbol+" x"+FormatStock(float64(h.qty))+
+				" | Avg "+FormatVND(average)+" | Now "+FormatVND(price)+
+				" | Value "+FormatVND(val)+" | Unrealized P&L "+FormatPnL(val, basis))
 		}
 	}
-	lines = append(lines, "\nTotal value: "+FormatVND(totalValue))
-	lines = append(lines, "Invested: "+FormatVND(p.Meta.Invested))
-	lines = append(lines, "P&L: "+FormatPnL(totalValue, p.Meta.Invested))
-	return chathelper.Reply(ctx, b, update.Message, strings.Join(lines, "\n"))
+	var summary []string
+	if missingPrice {
+		summary = append(summary,
+			"", "Priced value (partial): "+FormatVND(totalValue),
+			"Unrealized P&L (priced positions): "+FormatPnL(totalValue-p.Currency["VND"], totalBasis),
+			"Invested: "+FormatVND(p.Meta.Invested),
+			"Account P&L: unavailable until all positions have prices")
+	} else {
+		summary = append(summary,
+			"", "Total value: "+FormatVND(totalValue),
+			"Invested: "+FormatVND(p.Meta.Invested),
+			"Unrealized P&L: "+FormatPnL(totalValue-p.Currency["VND"], totalBasis),
+			"Account P&L: "+FormatPnL(totalValue, p.Meta.Invested))
+	}
+	return chathelper.Reply(ctx, b, update.Message, boundedPortfolioReply(header, positions, summary))
+}
+
+const portfolioReplyLimit = 4000
+
+func boundedPortfolioReply(header, positions, summary []string) string {
+	omitted := 0
+	for {
+		lines := append(append(append([]string{}, header...), positions...), summary...)
+		if omitted > 0 {
+			insertAt := len(header) + len(positions)
+			lines = append(lines[:insertAt], append([]string{"  … " + strconv.Itoa(omitted) + " position(s) omitted"}, lines[insertAt:]...)...)
+		}
+		reply := strings.Join(lines, "\n")
+		if len(reply) <= portfolioReplyLimit || len(positions) == 0 {
+			return reply
+		}
+		positions = positions[:len(positions)-1]
+		omitted++
+	}
 }

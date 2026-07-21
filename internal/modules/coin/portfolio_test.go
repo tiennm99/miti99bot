@@ -67,6 +67,22 @@ func TestNormalizeAmountSpecialValues(t *testing.T) {
 	}
 }
 
+func TestLoadPortfolioRejectsCorruptStoredQuantityBeforeNormalization(t *testing.T) {
+	ctx := context.Background()
+	store := &corruptQuantityStore{Store: newCoinStore()}
+	if _, err := LoadPortfolio(ctx, store, 7, 1); err == nil {
+		t.Fatal("LoadPortfolio silently normalized a corrupt quantity")
+	}
+}
+
+type corruptQuantityStore struct{ Store }
+
+func (s *corruptQuantityStore) Get(context.Context, string) (Portfolio, int64, error) {
+	p := NewPortfolio(1)
+	p.Assets["BTC"] = math.NaN()
+	return p, 1, nil
+}
+
 // conflictOnceStore wraps a real typed store and forces exactly one write
 // conflict (after committing a competing value) before delegating, to exercise
 // UpdatePortfolio's optimistic-lock retry.
