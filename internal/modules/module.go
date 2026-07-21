@@ -27,6 +27,18 @@ const (
 // purely for logging/metrics, not flow control.
 type CommandHandler func(ctx context.Context, b *bot.Bot, update *models.Update) error
 
+// CallbackHandler runs in response to inline-keyboard callback data. Callback
+// payloads are not commands and therefore do not participate in command stats.
+type CallbackHandler func(ctx context.Context, b *bot.Bot, update *models.Update) error
+
+// Callback registers an inline-keyboard callback-data prefix owned by a module.
+// Prefixes must be globally non-overlapping so one callback reaches one owner.
+type Callback struct {
+	Prefix     string
+	Visibility Visibility
+	Handler    CallbackHandler
+}
+
 // CronHandler runs when a cron fires — driven by the in-process scheduler
 // (internal/cron) on self-host, or by a POST to /cron/{name} for manual
 // triggers. Crons receive the per-module-prefixed Deps via the registry;
@@ -59,6 +71,7 @@ type Cron struct {
 type Module struct {
 	Name        string
 	Commands    []Command
+	Callbacks   []Callback
 	Crons       []Cron
 	CommandHook func(ctx context.Context, name string, update *models.Update) // optional; called by dispatcher after each authorized command invocation. update carries the originating Telegram update so hooks can attribute usage to a user.
 }

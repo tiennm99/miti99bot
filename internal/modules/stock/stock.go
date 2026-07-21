@@ -7,8 +7,12 @@ import (
 
 // New is the stock module Factory. Eight user-facing commands.
 func New(deps modules.Deps) modules.Module {
-	s := newState(storage.Typed[Portfolio](deps.Store))
+	s := newState(
+		storage.Typed[Portfolio](deps.Store),
+		storage.Typed[PendingDividendAction](deps.Store),
+	)
 	return modules.Module{
+		Callbacks: []modules.Callback{{Prefix: dividendCallbackPrefix, Visibility: modules.VisibilityPublic, Handler: s.handleDividendCallback}},
 		Commands: []modules.Command{
 			{
 				Name:        "stock_price",
