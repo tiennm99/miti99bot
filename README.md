@@ -51,6 +51,28 @@ The bot validates syntax, tickers, and arithmetic safety, but does not look up
 notices or prevent duplicate calls. The caller is responsible for verifying the
 notice and avoiding accidental repeated adjustments.
 
+### Stock and coin P&L accounting
+
+Stock and coin portfolios persist the total remaining cost basis for each open
+position. Buys add their actual spend. Partial sells remove basis using the
+weighted-average method and report realized P&L; full sells remove the position
+and its basis. Stock share dividends add shares without adding cost, which
+lowers the derived average price, while cash dividends do not change position
+basis.
+
+`/stock_portfolio` and `/coin_portfolio` show average entry price and
+unrealized P&L for each priced position. `Account P&L` remains the broader
+account value minus all top-ups, so it also reflects realized proceeds,
+dividend cash, and idle cash. If any current quote is unavailable, totals are
+marked partial and numeric Account P&L is withheld.
+
+On startup, enabled stock and coin modules scan every stored portfolio. Legacy
+holdings without basis are initialized at that startup's current market quote,
+giving them zero initial unrealized P&L. The migration uses optimistic writes,
+records completion in the shared `system` collection, and still verifies the
+invariant on every boot. Startup fails rather than accepting trades when a
+required legacy quote or migration write is unavailable.
+
 ## Layout
 
 ```
@@ -60,7 +82,7 @@ internal/telegram/           Telegram long-polling bot wrapper
 internal/cron/               in-process cron scheduler
 internal/modules/            Module framework, registry, dispatchers, modules
 internal/storage/            typed DocStore[T] (Provider + Typed); mongodb runtime + memory (tests). Values persist as flattened native BSON root documents
-internal/systemstate/        shared `system` collection helper for future startup migrations
+internal/systemstate/        shared `system` collection helper for startup migration records
 compose.yml                  Coolify self-host stack (single bot service)
 docs/deploy-coolify-selfhosted.md    Self-host deploy and operations guide
 ```

@@ -101,8 +101,12 @@ Successful GIF replies include the result behind Telegram spoiler formatting.
 > counts and creates indexes on startup. Deleted legacy command rows are
 > retained with `deleted: true`; `/stats` queries filter those rows from visible
 > results. A historical `system` collection may remain in MongoDB with completed
-> migration records and can be reused if a future one-time startup migration is
-> needed.
+> migration records. Stock and coin documents store `costBasis` by symbol. On
+> every startup, enabled paper-trading modules verify that each positive holding
+> has a valid basis; legacy holdings are initialized from current quotes before
+> Telegram handlers are installed. The bot intentionally fails startup if a
+> required quote or migration write fails. Completed records remain in `system`
+> as audit history, but do not suppress later invariant scans.
 
 ## 2. Coolify
 
