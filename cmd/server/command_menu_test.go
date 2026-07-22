@@ -75,7 +75,6 @@ func TestCommandDiscovery_AllPublicCommandsHaveSafeMetadata(t *testing.T) {
 		"stock_sell":           "<quantity> <ticker>",
 		"stock_cash_dividend":  "<vnd_per_share> <ticker>",
 		"stock_share_dividend": "<ratio(owned:new)> <ticker>",
-		"stock_dividend":       "<vnd_per_share> <ratio(owned:new)> <ticker>",
 		"trongtruonghop":       "[target...]",
 		"tth":                  "[target...]",
 		"wheelofnames":         "<option,...>",
@@ -125,10 +124,13 @@ func TestBotCommandMenu_StockDividendContracts(t *testing.T) {
 			t.Fatalf("description for %s exceeds Telegram limit", command.Command)
 		}
 	}
-	for _, name := range []string{"stock_cash_dividend", "stock_share_dividend", "stock_dividend"} {
+	for _, name := range []string{"stock_cash_dividend", "stock_share_dividend"} {
 		if commands[name] == "" {
 			t.Fatalf("stock menu missing %s: %v", name, commands)
 		}
+	}
+	if _, exists := commands["stock_dividend"]; exists {
+		t.Fatalf("retired stock_dividend remains in public menu: %v", commands)
 	}
 	if _, exists := commands["stock_bonus"]; exists {
 		t.Fatalf("stock_bonus remains in public menu: %v", commands)
