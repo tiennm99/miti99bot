@@ -15,8 +15,8 @@ func FormatVND(n float64) string {
 	return formatVNDNumber(n) + " VND"
 }
 
-// formatVNDNumber renders a VND amount without its currency suffix. Portfolio
-// tables use this because their title declares the currency once.
+// formatVNDNumber renders a VND amount without its currency suffix. Stock
+// portfolio summaries use VND as their implicit currency.
 func formatVNDNumber(n float64) string {
 	return formatGroupedInteger(int64(math.Round(n)))
 }
@@ -52,6 +52,14 @@ func formatCompactVND(n float64) string {
 		result = "-" + result
 	}
 	return result + suffixes[suffixIndex]
+}
+
+// formatThousandVND renders a VND amount in thousands without a currency
+// suffix. Stock portfolio Avg and Now columns declare this unit by convention.
+func formatThousandVND(n float64) string {
+	scaled := math.Round(n) / 1_000
+	result := strings.TrimRight(strings.TrimRight(strconv.FormatFloat(scaled, 'f', 3, 64), "0"), ".")
+	return strings.Replace(result, ".", ",", 1)
 }
 
 func formatGroupedInteger(n int64) string {
@@ -108,11 +116,16 @@ func formatPortfolioPnL(currentValue, invested float64) string {
 	return formatPnL(currentValue, invested, formatVNDNumber)
 }
 
-func formatPortfolioPositionPnL(currentValue, invested float64) string {
-	return formatPnL(currentValue, invested, formatCompactVND)
+func formatPortfolioPositionPnL(currentValue, invested float64) (string, string) {
+	return formatPnLParts(currentValue, invested, formatCompactVND)
 }
 
 func formatPnL(currentValue, invested float64, formatAmount func(float64) string) string {
+	amount, percentage := formatPnLParts(currentValue, invested, formatAmount)
+	return amount + " (" + percentage + ")"
+}
+
+func formatPnLParts(currentValue, invested float64, formatAmount func(float64) string) (string, string) {
 	diff := currentValue - invested
 	pct := 0.0
 	if invested > 0 {
@@ -122,7 +135,7 @@ func formatPnL(currentValue, invested float64, formatAmount func(float64) string
 	if diff >= 0 {
 		sign = "+"
 	}
-	return sign + formatAmount(diff) + " (" + sign + strconv.FormatFloat(pct, 'f', 2, 64) + "%)"
+	return sign + formatAmount(diff), sign + strconv.FormatFloat(pct, 'f', 2, 64) + "%"
 }
 
 func absInt64(n int64) int64 {

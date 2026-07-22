@@ -43,20 +43,21 @@ func (s *state) handleStats(ctx context.Context, b *bot.Bot, update *models.Upda
 				value := held * price.USD
 				if !isPositiveFinite(value) || !isPositiveFinite(average) {
 					missingPrice = true
-					positions = append(positions, []string{symbol, FormatCoinQty(held), "N/A", "N/A", "N/A", "N/A"})
+					positions = append(positions, []string{symbol, FormatCoinQty(held), "N/A", "N/A", "N/A", "N/A", "N/A"})
 					continue
 				}
 				totalValue += value
 				totalBasis += basis
-				positions = append(positions, []string{symbol, FormatCoinQty(held), formatCompactUSD(average), formatCompactUSD(price.USD), formatCompactUSD(value), formatPortfolioPositionPnLUSD(value, basis)})
+				pnlAmount, pnlPercentage := formatPortfolioPositionPnLUSD(value, basis)
+				positions = append(positions, []string{symbol, FormatCoinQty(held), formatCompactUSD(average), formatCompactUSD(price.USD), formatCompactUSD(value), pnlAmount, pnlPercentage})
 			} else {
 				log.Error("coin_fetch_price", "symbol", symbol, "err", err)
 				missingPrice = true
-				positions = append(positions, []string{symbol, FormatCoinQty(held), formatCompactUSD(average), "N/A", "N/A", "N/A"})
+				positions = append(positions, []string{symbol, FormatCoinQty(held), formatCompactUSD(average), "N/A", "N/A", "N/A", "N/A"})
 			}
 		} else {
 			missingPrice = true
-			positions = append(positions, []string{symbol, FormatCoinQty(held), formatCompactUSD(average), "N/A", "N/A", "N/A"})
+			positions = append(positions, []string{symbol, FormatCoinQty(held), formatCompactUSD(average), "N/A", "N/A", "N/A", "N/A"})
 		}
 	}
 	var summary [][]string
@@ -101,7 +102,7 @@ func portfolioTableReply(title string, positions, summary [][]string) string {
 			rows = append(rows, []string{"… " + strconv.Itoa(omitted) + " omitted"})
 		}
 		reply := "<b>" + title + "</b>\n" +
-			chathelper.MonospaceTable([]string{"Ticker", "Qty", "Avg", "Now", "Value", "Unrealized P&L"}, rows) + "\n" +
+			chathelper.MonospaceTable([]string{"Sym", "Qty", "Avg", "Now", "Val", "P&L", "%"}, rows) + "\n" +
 			chathelper.MonospaceTable([]string{"Metric", "Value"}, summary)
 		if len(reply) <= portfolioReplyLimit || len(positions) == 0 {
 			return reply
