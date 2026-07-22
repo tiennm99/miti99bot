@@ -9,7 +9,7 @@ import {
   getWheelRotationDegrees,
   rightPointerClipPath,
 } from './wheel-layout.js';
-import {getContrastingTextColor, getRadialLabelLayout} from './wheel-label-layout.js';
+import {getRadialLabelLayout} from './wheel-label-layout.js';
 import {getTheme} from './themes.js';
 
 const baseFont =
@@ -124,7 +124,7 @@ export const WheelComposition = (props) => {
                   style={{
                     alignItems: 'center',
                     boxSizing: 'border-box',
-                    color: getContrastingTextColor(color),
+                    color: theme.text,
                     display: 'flex',
                     fontSize: label.fontSize,
                     flexDirection: 'column',
@@ -138,6 +138,7 @@ export const WheelComposition = (props) => {
                     padding: `0 ${label.horizontalPadding}px`,
                     position: 'absolute',
                     textAlign: 'center',
+                    textShadow: `0 1px 0 ${theme.textHalo}, 0 -1px 0 ${theme.textHalo}, 1px 0 0 ${theme.textHalo}, -1px 0 0 ${theme.textHalo}`,
                     top: label.y,
                     transform: `translate(-50%, -50%) rotate(${label.rotation}deg)`,
                     transformOrigin: '50% 50%',

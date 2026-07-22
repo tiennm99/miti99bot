@@ -43,7 +43,6 @@ export const estimateTextWidth = (text, fontSize) => {
 
   return (widthUnits + 2) * fontSize;
 };
-
 /**
  * @param {string[]} units
  * @param {number} lineCount
@@ -210,25 +209,4 @@ export const getRadialLabelLayout = ({center, radius, hubRadius, centerDegrees, 
     fontSize,
     lines,
   };
-};
-
-/**
- * @param {string} color
- * @returns {'#111827' | '#ffffff'}
- */
-export const getContrastingTextColor = (color) => {
-  const match = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/iu.exec(color);
-  if (!match) {
-    return '#111827';
-  }
-
-  const redHex = match[1] ?? '00';
-  const greenHex = match[2] ?? '00';
-  const blueHex = match[3] ?? '00';
-  const red = Number.parseInt(redHex, 16) / 255;
-  const green = Number.parseInt(greenHex, 16) / 255;
-  const blue = Number.parseInt(blueHex, 16) / 255;
-  const luminance = 0.2126 * red + 0.7152 * green + 0.0722 * blue;
-
-  return luminance > 0.56 ? '#111827' : '#ffffff';
 };

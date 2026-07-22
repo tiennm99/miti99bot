@@ -1,7 +1,6 @@
 import {describe, expect, test} from 'vitest';
 import {
   estimateTextWidth,
-  getContrastingTextColor,
   getLabelFontSize,
   getLabelLines,
   getLabelTrack,
@@ -241,10 +240,5 @@ describe('wheel label layout', () => {
 
       return !(firstCodeUnit >= 0xdc00 && firstCodeUnit <= 0xdfff) && !(lastCodeUnit >= 0xd800 && lastCodeUnit <= 0xdbff);
     })).toBe(true);
-  });
-
-  test('uses contrast text colors for light and dark slices', () => {
-    expect(getContrastingTextColor('#facc15')).toBe('#111827');
-    expect(getContrastingTextColor('#7f1d1d')).toBe('#ffffff');
   });
 });

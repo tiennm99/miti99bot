@@ -21,7 +21,7 @@ export const themes = {
     text: '#1f2937',
     textHalo: 'rgba(255, 251, 235, 0.92)',
     winnerGlow: 'rgba(251, 146, 60, 0.5)',
-    slices: ['#f43f5e', '#f59e0b', '#84cc16', '#06b6d4', '#8b5cf6', '#ec4899', '#22c55e', '#fb923c'],
+    slices: ['#fb7185', '#f59e0b', '#84cc16', '#06b6d4', '#a78bfa', '#f472b6', '#22c55e', '#fb923c'],
   },
   mono: {
     background: '#f4f4f5',
@@ -33,7 +33,7 @@ export const themes = {
     text: '#18181b',
     textHalo: 'rgba(250, 250, 250, 0.9)',
     winnerGlow: 'rgba(161, 161, 170, 0.45)',
-    slices: ['#e4e4e7', '#a1a1aa', '#d4d4d8', '#71717a', '#f4f4f5', '#52525b'],
+    slices: ['#e4e4e7', '#a1a1aa', '#d4d4d8', '#b8b8bf', '#f4f4f5', '#c4c4ca'],
   },
 };
 
