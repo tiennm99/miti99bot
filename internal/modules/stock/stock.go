@@ -5,7 +5,7 @@ import (
 	"github.com/tiennm99/miti99bot/internal/storage"
 )
 
-// New is the stock module Factory. Eight user-facing commands.
+// New is the stock module Factory. Seven user-facing commands.
 func New(deps modules.Deps) modules.Module {
 	s := newState(
 		storage.Typed[Portfolio](deps.Store),
@@ -55,13 +55,6 @@ func New(deps modules.Deps) modules.Module {
 				Description: "Record share dividend",
 				Parameters:  "<ratio(owned:new)> <ticker>",
 				Handler:     s.handleShareDividend,
-			},
-			{
-				Name:        "stock_dividend",
-				Visibility:  modules.VisibilityPublic,
-				Description: "Record cash and share dividend",
-				Parameters:  "<vnd_per_share> <ratio(owned:new)> <ticker>",
-				Handler:     s.handleDividend,
 			},
 			{
 				Name:        "stock_portfolio",
