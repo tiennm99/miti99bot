@@ -43,6 +43,46 @@ func TestFormatStock(t *testing.T) {
 	}
 }
 
+func TestFormatCompactVND(t *testing.T) {
+	cases := []struct {
+		in   float64
+		want string
+	}{
+		{0, "0"},
+		{999, "999"},
+		{999.4, "999"},
+		{999.5, "1k"},
+		{1_000, "1k"},
+		{25_000, "25k"},
+		{25_350, "25,35k"},
+		{25_351, "25,351k"},
+		{999_499, "999,499k"},
+		{999_999.4, "999,999k"},
+		{999_999.5, "1M"},
+		{1_000_000, "1M"},
+		{1_234_000, "1,234M"},
+		{126_000_000, "126M"},
+		{999_999_999.5, "1B"},
+		{1_250_000_000, "1,25B"},
+		{999_999_999_999.5, "1T"},
+		{1_000_000_000_000, "1T"},
+		{-25_350, "-25,35k"},
+		{-1_250_000_000, "-1,25B"},
+		{25_350.5, "25,351k"},
+	}
+	for _, c := range cases {
+		if got := formatCompactVND(c.in); got != c.want {
+			t.Errorf("formatCompactVND(%v): got %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
+func TestFormatPortfolioPositionPnLUsesCompactAmountAndFullPercentage(t *testing.T) {
+	if got, want := formatPortfolioPositionPnL(1_250_000, 1_000_000), "+250k (+25.00%)"; got != want {
+		t.Fatalf("formatPortfolioPositionPnL: got %q, want %q", got, want)
+	}
+}
+
 func TestFormatShareQuantity(t *testing.T) {
 	cases := []struct {
 		in   int64

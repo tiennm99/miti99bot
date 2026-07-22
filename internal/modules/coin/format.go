@@ -24,6 +24,41 @@ func FormatUSD(n float64) string {
 	return sign + "$" + groupDigits(strconv.FormatInt(whole, 10)) + "." + twoDigits(cents)
 }
 
+// formatCompactUSD renders a position-table amount with at most three scaled
+// fractional digits while preserving the module's dollar/sign convention.
+func formatCompactUSD(n float64) string {
+	if math.IsNaN(n) || math.IsInf(n, 0) {
+		return "invalid USD"
+	}
+	// Use the full formatter's cent rounding at the base/k boundary so an
+	// amount displayed as $1,000.00 is promoted to $1k instead.
+	if math.Round(math.Abs(n)*100)/100 < 1_000 {
+		return FormatUSD(n)
+	}
+
+	sign := ""
+	if n < 0 {
+		sign = "-"
+		n = -n
+	}
+	suffixes := [...]string{"k", "M", "B", "T"}
+	divisor := 1_000.0
+	suffixIndex := 0
+	for suffixIndex < len(suffixes)-1 && n >= divisor*1_000 {
+		divisor *= 1_000
+		suffixIndex++
+	}
+
+	scaled := math.Round(n/divisor*1_000) / 1_000
+	if scaled >= 1_000 && suffixIndex < len(suffixes)-1 {
+		divisor *= 1_000
+		suffixIndex++
+		scaled = math.Round(n/divisor*1_000) / 1_000
+	}
+	amount := strings.TrimRight(strings.TrimRight(strconv.FormatFloat(scaled, 'f', 3, 64), "0"), ".")
+	return sign + "$" + amount + suffixes[suffixIndex]
+}
+
 func FormatCoinQty(n float64) string {
 	s := strconv.FormatFloat(n, 'f', 8, 64)
 	s = strings.TrimRight(s, "0")
@@ -35,6 +70,14 @@ func FormatCoinQty(n float64) string {
 }
 
 func FormatPnLUSD(currentValue, invested float64) string {
+	return formatPnLUSD(currentValue, invested, FormatUSD)
+}
+
+func formatPortfolioPositionPnLUSD(currentValue, invested float64) string {
+	return formatPnLUSD(currentValue, invested, formatCompactUSD)
+}
+
+func formatPnLUSD(currentValue, invested float64, formatAmount func(float64) string) string {
 	diff := currentValue - invested
 	pct := 0.0
 	if invested > 0 {
@@ -44,7 +87,7 @@ func FormatPnLUSD(currentValue, invested float64) string {
 	if diff >= 0 {
 		sign = "+"
 	}
-	return sign + FormatUSD(diff) + " (" + sign + strconv.FormatFloat(pct, 'f', 2, 64) + "%)"
+	return sign + formatAmount(diff) + " (" + sign + strconv.FormatFloat(pct, 'f', 2, 64) + "%)"
 }
 
 func groupDigits(s string) string {
