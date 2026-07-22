@@ -12,6 +12,12 @@ import (
 // and a "VND" suffix (e.g. 15000000 -> "15.000.000 VND"). Manual to avoid
 // locale-dependent formatting.
 func FormatVND(n float64) string {
+	return formatVNDNumber(n) + " VND"
+}
+
+// formatVNDNumber renders a VND amount without its currency suffix. Portfolio
+// tables use this because their title declares the currency once.
+func formatVNDNumber(n float64) string {
 	rounded := int64(math.Round(n))
 	abs := strconv.FormatInt(absInt64(rounded), 10)
 	var sb strings.Builder
@@ -24,7 +30,6 @@ func FormatVND(n float64) string {
 		}
 		sb.WriteByte(abs[i])
 	}
-	sb.WriteString(" VND")
 	return sb.String()
 }
 
@@ -60,6 +65,14 @@ func formatShareQuantity(n int64) string {
 // "+1.234 VND (+12.34%)" or "-500.000 VND (-5.00%)". When invested is zero
 // the percentage is reported as 0.00 to avoid division-by-zero.
 func FormatPnL(currentValue, invested float64) string {
+	return formatPnL(currentValue, invested, FormatVND)
+}
+
+func formatPortfolioPnL(currentValue, invested float64) string {
+	return formatPnL(currentValue, invested, formatVNDNumber)
+}
+
+func formatPnL(currentValue, invested float64, formatAmount func(float64) string) string {
 	diff := currentValue - invested
 	pct := 0.0
 	if invested > 0 {
@@ -69,7 +82,7 @@ func FormatPnL(currentValue, invested float64) string {
 	if diff >= 0 {
 		sign = "+"
 	}
-	return sign + FormatVND(diff) + " (" + sign + strconv.FormatFloat(pct, 'f', 2, 64) + "%)"
+	return sign + formatAmount(diff) + " (" + sign + strconv.FormatFloat(pct, 'f', 2, 64) + "%)"
 }
 
 func absInt64(n int64) int64 {

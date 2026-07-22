@@ -510,7 +510,7 @@ func (s *state) handleStats(ctx context.Context, b *bot.Bot, update *models.Upda
 			average := basis / float64(h.qty)
 			if !isPositiveFiniteCost(price) {
 				missingPrice = true
-				positions = append(positions, []string{h.symbol, FormatStock(float64(h.qty)), FormatVND(average), "N/A", "N/A", "N/A"})
+				positions = append(positions, []string{h.symbol, FormatStock(float64(h.qty)), formatVNDNumber(average), "N/A", "N/A", "N/A"})
 				continue
 			}
 			val := float64(h.qty) * price
@@ -521,28 +521,28 @@ func (s *state) handleStats(ctx context.Context, b *bot.Bot, update *models.Upda
 			}
 			totalValue += val
 			totalBasis += basis
-			positions = append(positions, []string{h.symbol, FormatStock(float64(h.qty)), FormatVND(average), FormatVND(price), FormatVND(val), FormatPnL(val, basis)})
+			positions = append(positions, []string{h.symbol, FormatStock(float64(h.qty)), formatVNDNumber(average), formatVNDNumber(price), formatVNDNumber(val), formatPortfolioPnL(val, basis)})
 		}
 	}
 	var summary [][]string
 	if missingPrice {
 		summary = [][]string{
-			{"VND", FormatVND(p.VND)},
-			{"Priced value (partial)", FormatVND(totalValue)},
-			{"Unrealized P&L (priced)", FormatPnL(totalValue-p.VND, totalBasis)},
-			{"Invested", FormatVND(p.Meta.Invested)},
+			{"Cash", formatVNDNumber(p.VND)},
+			{"Priced value (partial)", formatVNDNumber(totalValue)},
+			{"Unrealized P&L (priced)", formatPortfolioPnL(totalValue-p.VND, totalBasis)},
+			{"Invested", formatVNDNumber(p.Meta.Invested)},
 			{"Account P&L", "Unavailable"},
 		}
 	} else {
 		summary = [][]string{
-			{"VND", FormatVND(p.VND)},
-			{"Total value", FormatVND(totalValue)},
-			{"Invested", FormatVND(p.Meta.Invested)},
-			{"Unrealized P&L", FormatPnL(totalValue-p.VND, totalBasis)},
-			{"Account P&L", FormatPnL(totalValue, p.Meta.Invested)},
+			{"Cash", formatVNDNumber(p.VND)},
+			{"Total value", formatVNDNumber(totalValue)},
+			{"Invested", formatVNDNumber(p.Meta.Invested)},
+			{"Unrealized P&L", formatPortfolioPnL(totalValue-p.VND, totalBasis)},
+			{"Account P&L", formatPortfolioPnL(totalValue, p.Meta.Invested)},
 		}
 	}
-	if err := chathelper.ReplyHTML(ctx, b, update.Message, portfolioTableReply("Stock Portfolio", positions, summary)); err != nil {
+	if err := chathelper.ReplyHTML(ctx, b, update.Message, portfolioTableReply("Stock Portfolio (VND)", positions, summary)); err != nil {
 		return err
 	}
 	return s.notifyDividendEvents(ctx, b, update.Message, userID, p, checkedThrough)
