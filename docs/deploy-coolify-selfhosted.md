@@ -100,7 +100,9 @@ Successful GIF replies include the result behind Telegram spoiler formatting.
 > The `stats` collection uses queryable aggregate documents for command/user
 > counts and creates indexes on startup. Deleted legacy command rows are
 > retained with `deleted: true`; `/stats` queries filter those rows from visible
-> results. A historical `system` collection may remain in MongoDB with completed
+> results. Stats startup uses the idempotent
+> `migration:stats-delete-stock-dividend-v1` migration to retire historical
+> `/stock_dividend` rows without erasing them. A historical `system` collection may remain in MongoDB with completed
 > migration records; keep those records as audit history. Stock stores cash as
 > `vnd`, embeds positions as `assets.<symbol>.{quantity,base,openedAt}`, and
 > retains normalized per-user SSI history under
