@@ -2,7 +2,6 @@ package stock
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -30,7 +29,6 @@ func TestModuleRegistersExpectedCommands(t *testing.T) {
 		"stock_sell",
 		"stock_cash_dividend",
 		"stock_share_dividend",
-		"stock_dividend",
 		"stock_portfolio",
 	} {
 		if !got[name] {
@@ -165,14 +163,6 @@ func TestMutableHandlersRejectExtraArgs(t *testing.T) {
 			},
 			want: "Usage: /stock_share_dividend <ratio(owned:new)> <ticker>",
 		},
-		{
-			name: "dividend",
-			text: "/stock_dividend 1500 100:10 TCB extra",
-			run: func(ctx context.Context, rb *testutil.RecordingBot, upd *models.Update) error {
-				return s.handleDividend(ctx, rb.Bot, upd)
-			},
-			want: "Usage: /stock_dividend <vnd_per_share> <ratio(owned:new)> <ticker>",
-		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -218,12 +208,6 @@ func TestDividendHandlersRejectInvalidNumbers(t *testing.T) {
 		t.Fatalf("share dividend: %v", err)
 	}
 	rb.AssertSentText(t, "owned:new")
-
-	rb.Reset()
-	if err := s.handleDividend(ctx, rb.Bot, testutil.NewPrivateMessage(7, "/stock_dividend Inf 4:1 TCB")); err != nil {
-		t.Fatalf("combined dividend: %v", err)
-	}
-	rb.AssertSentText(t, "positive whole number")
 }
 
 type countingPortfolioStore struct {
@@ -361,84 +345,6 @@ func TestHandleShareDividendFormatsExactLargeMinimum(t *testing.T) {
 		t.Fatalf("handleShareDividend: %v", err)
 	}
 	rb.AssertSentText(t, "Minimum holding: 9.007.199.254.740.993.")
-}
-
-func TestHandleCombinedDividendUsesPreEventHoldingAndOneSave(t *testing.T) {
-	ctx := context.Background()
-	base := newStockStore()
-	seedStockPortfolio(t, base, 7, 139, 1000)
-	store := &countingPortfolioStore{Store: base}
-	s := &state{store: store, nowFn: func() time.Time { return time.UnixMilli(123) }}
-	rb := testutil.NewRecordingBot(t)
-
-	if err := s.handleDividend(ctx, rb.Bot, testutil.NewPrivateMessage(7, "/stock_dividend 1500 100:10 TCB")); err != nil {
-		t.Fatalf("handleDividend: %v", err)
-	}
-	if store.puts != 1 {
-		t.Fatalf("store writes = %d, want 1", store.puts)
-	}
-	p, _ := LoadPortfolio(ctx, base, 7, 999)
-	if p.Assets["TCB"].Quantity != 152 || p.VND != 209500 || p.Assets["TCB"].Base != 139*30_000 || p.Assets["TCB"].OpenedAt != 100 {
-		t.Fatalf("portfolio = %+v", p)
-	}
-	rb.AssertSentText(t, "Dividend for TCB (100:10)")
-	rb.AssertSentText(t, "Cash: 1.500 VND × 139 = 208.500 VND")
-}
-
-func TestHandleCombinedDividendRejectsInexactBalanceSum(t *testing.T) {
-	ctx := context.Background()
-	base := newStockStore()
-	seedStockPortfolio(t, base, 7, 1, 1)
-	store := &countingPortfolioStore{Store: base}
-	s := &state{store: store, nowFn: func() time.Time { return time.UnixMilli(123) }}
-	rb := testutil.NewRecordingBot(t)
-
-	if err := s.handleDividend(ctx, rb.Bot, testutil.NewPrivateMessage(7, "/stock_dividend 9007199254740992 1:1 TCB")); err != nil {
-		t.Fatalf("handleDividend: %v", err)
-	}
-	if store.puts != 0 {
-		t.Fatalf("store writes = %d, want 0", store.puts)
-	}
-	p, _ := LoadPortfolio(ctx, base, 7, 999)
-	if p.Assets["TCB"].Quantity != 1 || p.VND != 1 {
-		t.Fatalf("portfolio changed: %+v", p)
-	}
-	rb.AssertSentText(t, "Dividend amount is too large.")
-}
-
-func TestHandleCombinedDividendCreditsCashWhenSharesRoundToZero(t *testing.T) {
-	ctx := context.Background()
-	store := newStockStore()
-	seedStockPortfolio(t, store, 7, 9, 100)
-	s := &state{store: store, nowFn: func() time.Time { return time.UnixMilli(123) }}
-	rb := testutil.NewRecordingBot(t)
-
-	if err := s.handleDividend(ctx, rb.Bot, testutil.NewPrivateMessage(7, "/stock_dividend 1500 100:10 TCB")); err != nil {
-		t.Fatalf("handleDividend: %v", err)
-	}
-	p, _ := LoadPortfolio(ctx, store, 7, 999)
-	if p.Assets["TCB"].Quantity != 9 || p.VND != 13600 {
-		t.Fatalf("portfolio = %+v", p)
-	}
-	rb.AssertSentText(t, "Shares: +0")
-}
-
-func TestDividendSaveFailureLeavesStoredPortfolioUnchanged(t *testing.T) {
-	ctx := context.Background()
-	base := newStockStore()
-	seedStockPortfolio(t, base, 7, 139, 1000)
-	store := &countingPortfolioStore{Store: base, putErr: errors.New("forced write failure")}
-	s := &state{store: store, nowFn: func() time.Time { return time.UnixMilli(123) }}
-	rb := testutil.NewRecordingBot(t)
-
-	if err := s.handleDividend(ctx, rb.Bot, testutil.NewPrivateMessage(7, "/stock_dividend 1500 100:10 TCB")); err != nil {
-		t.Fatalf("handleDividend: %v", err)
-	}
-	p, _ := LoadPortfolio(ctx, base, 7, 999)
-	if p.Assets["TCB"].Quantity != 139 || p.VND != 1000 {
-		t.Fatalf("stored portfolio changed: %+v", p)
-	}
-	rb.AssertSentText(t, "Could not save portfolio")
 }
 
 func modDepsForTest() modules.Deps {

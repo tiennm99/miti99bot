@@ -118,7 +118,7 @@ func main() {
 	}
 	defer closeProvider()
 
-	if err := stats.InitStore(rootCtx, provider.Collection("stats")); err != nil {
+	if err := initStatsStore(rootCtx, provider); err != nil {
 		log.Fatal("stats storage init failed", "err", err)
 	}
 	if err := lol.InitStore(rootCtx, provider.Collection(lol.CollectionName)); err != nil {
@@ -222,6 +222,20 @@ func main() {
 
 func initStockStore(ctx context.Context, provider storage.Provider) error {
 	return initStockStoreWith(ctx, provider, stock.InitStore)
+}
+
+func initStatsStore(ctx context.Context, provider storage.Provider) error {
+	return initStatsStoreWith(ctx, provider, stats.InitStore)
+}
+
+type statsStoreInitializer func(context.Context, storage.Collection, storage.Collection) error
+
+func initStatsStoreWith(ctx context.Context, provider storage.Provider, init statsStoreInitializer) error {
+	return init(
+		ctx,
+		provider.Collection("stats"),
+		provider.Collection(systemstate.CollectionName),
+	)
 }
 
 type stockStoreInitializer func(context.Context, storage.Collection, storage.Collection) error

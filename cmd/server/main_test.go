@@ -51,6 +51,18 @@ func TestInitStockStoreRunsStartupMigration(t *testing.T) {
 	}
 }
 
+func TestInitStatsStoreRunsStartupMigration(t *testing.T) {
+	ctx := context.Background()
+	provider := storage.NewMemoryProvider()
+	if err := initStatsStore(ctx, provider); err != nil {
+		t.Fatalf("initStatsStore: %v", err)
+	}
+	marker, exists, err := systemstate.New(provider.Collection(systemstate.CollectionName)).Get(ctx, "migration:stats-delete-stock-dividend-v1")
+	if err != nil || !exists || marker.Status != "completed" {
+		t.Fatalf("marker=%+v exists=%v err=%v", marker, exists, err)
+	}
+}
+
 func TestInitStockStorePropagatesMigrationError(t *testing.T) {
 	want := errors.New("migration failed")
 	err := initStockStoreWith(context.Background(), storage.NewMemoryProvider(), func(context.Context, storage.Collection, storage.Collection) error {
@@ -58,6 +70,16 @@ func TestInitStockStorePropagatesMigrationError(t *testing.T) {
 	})
 	if !errors.Is(err, want) {
 		t.Fatalf("initStockStoreWith error=%v, want %v", err, want)
+	}
+}
+
+func TestInitStatsStorePropagatesMigrationError(t *testing.T) {
+	want := errors.New("migration failed")
+	err := initStatsStoreWith(context.Background(), storage.NewMemoryProvider(), func(context.Context, storage.Collection, storage.Collection) error {
+		return want
+	})
+	if !errors.Is(err, want) {
+		t.Fatalf("initStatsStoreWith error=%v, want %v", err, want)
 	}
 }
 

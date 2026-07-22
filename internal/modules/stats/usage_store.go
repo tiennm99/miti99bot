@@ -61,6 +61,9 @@ type docUsageStore struct {
 }
 
 func (s *docUsageStore) Increment(ctx context.Context, cmd string, user usageUser, hasUser bool) error {
+	if isRetiredCommand(cmd) {
+		return nil
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -123,7 +126,7 @@ func (s *docUsageStore) TopCommands(ctx context.Context, limit int) ([]row, erro
 	}
 	totals := make(map[string]int64)
 	for _, e := range entries {
-		if e.Deleted {
+		if e.Deleted || isRetiredCommand(e.Cmd) {
 			continue
 		}
 		totals[e.Cmd] += e.N
@@ -150,7 +153,7 @@ func (s *docUsageStore) TopUsers(ctx context.Context, limit int) ([]row, error) 
 	}
 	totals := make(map[int64]total)
 	for _, e := range entries {
-		if e.Deleted || e.UserID == 0 || e.Username == "" {
+		if e.Deleted || isRetiredCommand(e.Cmd) || e.UserID == 0 || e.Username == "" {
 			continue
 		}
 		t := totals[e.UserID]
@@ -179,7 +182,7 @@ func (s *docUsageStore) CommandsByUser(ctx context.Context, username string, lim
 		found  bool
 	)
 	for _, e := range entries {
-		if !e.Deleted && e.UserID != 0 && e.Username == username {
+		if !e.Deleted && !isRetiredCommand(e.Cmd) && e.UserID != 0 && e.Username == username {
 			userID = e.UserID
 			found = true
 			break
@@ -191,7 +194,7 @@ func (s *docUsageStore) CommandsByUser(ctx context.Context, username string, lim
 
 	rows := make([]row, 0)
 	for _, e := range entries {
-		if !e.Deleted && e.UserID == userID {
+		if !e.Deleted && !isRetiredCommand(e.Cmd) && e.UserID == userID {
 			rows = append(rows, row{display: "/" + e.Cmd, n: e.N})
 		}
 	}
@@ -200,6 +203,9 @@ func (s *docUsageStore) CommandsByUser(ctx context.Context, username string, lim
 }
 
 func (s *docUsageStore) UsersByCommand(ctx context.Context, cmd string, limit int) ([]row, error) {
+	if isRetiredCommand(cmd) {
+		return nil, nil
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -241,6 +247,9 @@ type mongoUsageStore struct {
 }
 
 func (s *mongoUsageStore) Increment(ctx context.Context, cmd string, user usageUser, hasUser bool) error {
+	if isRetiredCommand(cmd) {
+		return nil
+	}
 	userID := int64(0)
 	if hasUser {
 		userID = user.ID
@@ -289,7 +298,7 @@ func (s *mongoUsageStore) Increment(ctx context.Context, cmd string, user usageU
 func (s *mongoUsageStore) TopCommands(ctx context.Context, limit int) ([]row, error) {
 	pipeline := mongo.Pipeline{
 		bson.D{bsonField("$match", bson.D{
-			bsonField("cmd", bson.D{bsonField("$type", "string")}),
+			bsonField("cmd", bson.D{bsonField("$type", "string"), bsonField("$ne", deletedStockDividendCommand)}),
 			bsonField("deleted", bson.D{bsonField("$ne", true)}),
 		})},
 		bson.D{bsonField("$group", bson.D{bsonField("_id", "$cmd"), bsonField("n", bson.D{bsonField("$sum", "$n")})})},
@@ -323,6 +332,7 @@ func (s *mongoUsageStore) TopCommands(ctx context.Context, limit int) ([]row, er
 func (s *mongoUsageStore) TopUsers(ctx context.Context, limit int) ([]row, error) {
 	pipeline := mongo.Pipeline{
 		bson.D{bsonField("$match", bson.D{
+			bsonField("cmd", bson.D{bsonField("$ne", deletedStockDividendCommand)}),
 			bsonField("uid", bson.D{bsonField("$gt", int64(0))}),
 			bsonField("user", bson.D{bsonField("$type", "string"), bsonField("$ne", "")}),
 			bsonField("deleted", bson.D{bsonField("$ne", true)}),
@@ -374,7 +384,7 @@ func (s *mongoUsageStore) CommandsByUser(ctx context.Context, username string, l
 	}
 	cur, err := s.coll.Find(ctx, bson.M{
 		"uid":     userID,
-		"cmd":     bson.M{"$type": "string"},
+		"cmd":     bson.M{"$type": "string", "$ne": deletedStockDividendCommand},
 		"deleted": bson.M{"$ne": true},
 	}, opts)
 	if err != nil {
@@ -397,6 +407,9 @@ func (s *mongoUsageStore) CommandsByUser(ctx context.Context, username string, l
 }
 
 func (s *mongoUsageStore) UsersByCommand(ctx context.Context, cmd string, limit int) ([]row, error) {
+	if isRetiredCommand(cmd) {
+		return nil, nil
+	}
 	opts := options.Find().
 		SetProjection(bson.M{"user": 1, "n": 1}).
 		SetSort(bson.D{bsonField("n", -1), bsonField("user", 1)})
@@ -434,6 +447,7 @@ func (s *mongoUsageStore) userIDByUsername(ctx context.Context, username string)
 	}
 	err := s.coll.FindOne(ctx,
 		bson.M{
+			"cmd":     bson.M{"$ne": deletedStockDividendCommand},
 			"uid":     bson.M{"$gt": int64(0)},
 			"user":    username,
 			"deleted": bson.M{"$ne": true},
@@ -448,6 +462,10 @@ func (s *mongoUsageStore) userIDByUsername(ctx context.Context, username string)
 		return 0, false, fmt.Errorf("mongo stats find user %s: %w", username, err)
 	}
 	return doc.UserID, true, nil
+}
+
+func isRetiredCommand(cmd string) bool {
+	return cmd == deletedStockDividendCommand
 }
 
 func withLimit(pipeline mongo.Pipeline, limit int) mongo.Pipeline {
