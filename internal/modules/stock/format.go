@@ -18,10 +18,46 @@ func FormatVND(n float64) string {
 // formatVNDNumber renders a VND amount without its currency suffix. Portfolio
 // tables use this because their title declares the currency once.
 func formatVNDNumber(n float64) string {
-	rounded := int64(math.Round(n))
-	abs := strconv.FormatInt(absInt64(rounded), 10)
-	var sb strings.Builder
+	return formatGroupedInteger(int64(math.Round(n)))
+}
+
+// formatCompactVND renders a position-table amount using the smallest suitable
+// financial suffix. Values are first rounded to the nearest VND, matching the
+// module's full VND formatter.
+func formatCompactVND(n float64) string {
+	rounded := math.Round(n)
+	abs := math.Abs(rounded)
+	if abs < 1_000 {
+		return formatVNDNumber(rounded)
+	}
+
+	suffixes := [...]string{"k", "M", "B", "T"}
+	divisor := 1_000.0
+	suffixIndex := 0
+	for suffixIndex < len(suffixes)-1 && abs >= divisor*1_000 {
+		divisor *= 1_000
+		suffixIndex++
+	}
+
+	scaled := math.Round(abs/divisor*1_000) / 1_000
+	if scaled >= 1_000 && suffixIndex < len(suffixes)-1 {
+		divisor *= 1_000
+		suffixIndex++
+		scaled = math.Round(abs/divisor*1_000) / 1_000
+	}
+
+	result := strings.TrimRight(strings.TrimRight(strconv.FormatFloat(scaled, 'f', 3, 64), "0"), ".")
+	result = strings.Replace(result, ".", ",", 1)
 	if rounded < 0 {
+		result = "-" + result
+	}
+	return result + suffixes[suffixIndex]
+}
+
+func formatGroupedInteger(n int64) string {
+	abs := strconv.FormatInt(absInt64(n), 10)
+	var sb strings.Builder
+	if n < 0 {
 		sb.WriteByte('-')
 	}
 	for i := 0; i < len(abs); i++ {
@@ -70,6 +106,10 @@ func FormatPnL(currentValue, invested float64) string {
 
 func formatPortfolioPnL(currentValue, invested float64) string {
 	return formatPnL(currentValue, invested, formatVNDNumber)
+}
+
+func formatPortfolioPositionPnL(currentValue, invested float64) string {
+	return formatPnL(currentValue, invested, formatCompactVND)
 }
 
 func formatPnL(currentValue, invested float64, formatAmount func(float64) string) string {

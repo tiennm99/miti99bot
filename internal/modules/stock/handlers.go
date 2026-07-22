@@ -510,7 +510,7 @@ func (s *state) handleStats(ctx context.Context, b *bot.Bot, update *models.Upda
 			average := basis / float64(h.qty)
 			if !isPositiveFiniteCost(price) {
 				missingPrice = true
-				positions = append(positions, []string{h.symbol, FormatStock(float64(h.qty)), formatVNDNumber(average), "N/A", "N/A", "N/A"})
+				positions = append(positions, []string{h.symbol, FormatStock(float64(h.qty)), formatCompactVND(average), "N/A", "N/A", "N/A"})
 				continue
 			}
 			val := float64(h.qty) * price
@@ -521,7 +521,7 @@ func (s *state) handleStats(ctx context.Context, b *bot.Bot, update *models.Upda
 			}
 			totalValue += val
 			totalBasis += basis
-			positions = append(positions, []string{h.symbol, FormatStock(float64(h.qty)), formatVNDNumber(average), formatVNDNumber(price), formatVNDNumber(val), formatPortfolioPnL(val, basis)})
+			positions = append(positions, []string{h.symbol, FormatStock(float64(h.qty)), formatCompactVND(average), formatCompactVND(price), formatCompactVND(val), formatPortfolioPositionPnL(val, basis)})
 		}
 	}
 	var summary [][]string

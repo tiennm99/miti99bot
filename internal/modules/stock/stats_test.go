@@ -71,7 +71,10 @@ func TestHandleStats_UsesSSIBatchPrices(t *testing.T) {
 		"<pre>",
 		"Ticker",
 		"MWG",
-		"126.000.000",
+		"60k",
+		"70k",
+		"126M",
+		"+18M (+16.67%)",
 		"Cash",
 		"Total value",
 		"530.335.000",
@@ -89,6 +92,90 @@ func TestHandleStats_UsesSSIBatchPrices(t *testing.T) {
 	}
 	if strings.Count(text, "VND") != 1 {
 		t.Fatalf("stats should declare VND only in the title:\n%s", text)
+	}
+}
+
+func TestHandleStats_UnavailablePriceKeepsCompactAverage(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 6, 25, 12, 0, 0, 0, time.UTC)
+	priceSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":[]}`))
+	}))
+	t.Cleanup(priceSrv.Close)
+
+	store := newStockStore()
+	p := NewPortfolio(now.UnixMilli())
+	p.VND = 1_000_000
+	p.Meta.Invested = 3_535_000
+	if err := p.BuyTicker("TCB", 100, 2_535_000, 1); err != nil {
+		t.Fatal(err)
+	}
+	if err := SavePortfolio(ctx, store, 7, p); err != nil {
+		t.Fatal(err)
+	}
+
+	s := &state{
+		store:  store,
+		prices: &PriceClient{HTTP: priceSrv.Client(), URL: priceSrv.URL},
+		nowFn:  func() time.Time { return now },
+	}
+	rb := testutil.NewRecordingBot(t)
+	if err := s.handleStats(ctx, rb.Bot, testutil.NewPrivateMessage(7, "/stock_portfolio")); err != nil {
+		t.Fatal(err)
+	}
+
+	text := rb.LastSent().Text()
+	for _, want := range []string{"TCB", "25,35k", "N/A", "Priced value (partial)", "Account P&amp;L", "Unavailable"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("portfolio missing %q in:\n%s", want, text)
+		}
+	}
+	if got := strings.Count(text, "N/A"); got != 3 {
+		t.Fatalf("missing-price position has %d N/A cells, want 3:\n%s", got, text)
+	}
+}
+
+func TestHandleStats_OverflowedValuationKeepsMonetaryCellsUnavailable(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 6, 25, 12, 0, 0, 0, time.UTC)
+	priceSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":[{"stockSymbol":"FPT","matchedPrice":1.7976931348623157e308}]}`))
+	}))
+	t.Cleanup(priceSrv.Close)
+
+	store := newStockStore()
+	p := NewPortfolio(now.UnixMilli())
+	p.Meta.Invested = 2_000
+	if err := p.BuyTicker("FPT", 2, 2_000, 1); err != nil {
+		t.Fatal(err)
+	}
+	if err := SavePortfolio(ctx, store, 7, p); err != nil {
+		t.Fatal(err)
+	}
+
+	s := &state{
+		store:  store,
+		prices: &PriceClient{HTTP: priceSrv.Client(), URL: priceSrv.URL},
+		nowFn:  func() time.Time { return now },
+	}
+	rb := testutil.NewRecordingBot(t)
+	if err := s.handleStats(ctx, rb.Bot, testutil.NewPrivateMessage(7, "/stock_portfolio")); err != nil {
+		t.Fatal(err)
+	}
+
+	text := rb.LastSent().Text()
+	for _, want := range []string{"FPT", "Account P&amp;L", "Unavailable"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("overflow portfolio missing %q in:\n%s", want, text)
+		}
+	}
+	if got := strings.Count(text, "N/A"); got != 4 {
+		t.Fatalf("overflowed position has %d N/A monetary cells, want 4:\n%s", got, text)
+	}
+	if strings.Contains(text, "1k") {
+		t.Fatalf("overflowed position exposed its average instead of N/A:\n%s", text)
 	}
 }
 

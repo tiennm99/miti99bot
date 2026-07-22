@@ -334,7 +334,7 @@ func TestStatsWithAndWithoutPrice(t *testing.T) {
 		t.Fatalf("handleStats: %v", err)
 	}
 	text := rb.LastSent().Text()
-	for _, want := range []string{"Coin Portfolio", "<pre>", "BTC", "0.01", "P&amp;L"} {
+	for _, want := range []string{"Coin Portfolio", "<pre>", "BTC", "0.01", "$50k", "$500.00", "+$0.00 (+0.00%)", "P&amp;L"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("stats missing %q in %q", want, text)
 		}
@@ -345,8 +345,41 @@ func TestStatsWithAndWithoutPrice(t *testing.T) {
 		t.Fatalf("handleStats no price: %v", err)
 	}
 	rb.AssertSentText(t, "N/A")
+	rb.AssertSentText(t, "$50k")
 	if strings.Contains(rb.LastSent().Text(), "Account P&L: +") || strings.Contains(rb.LastSent().Text(), "Account P&L: -") {
 		t.Fatalf("partial prices must not show numeric account P&L: %q", rb.LastSent().Text())
+	}
+}
+
+func TestStatsCompactsOnlyPositionMonetaryCells(t *testing.T) {
+	ctx := context.Background()
+	s := newTestState(map[string]CoinPrice{"BTC": {USD: 1_250, Source: "test"}}, nil)
+	p := NewPortfolio(1)
+	p.USD = 1_234
+	p.Meta.Invested = 2_001_234
+	p.Assets["BTC"] = AssetPosition{Quantity: 2_000, Base: 2_000_000}
+	if err := SavePortfolio(ctx, s.store, 7, p); err != nil {
+		t.Fatal(err)
+	}
+
+	rb := testutil.NewRecordingBot(t)
+	if err := s.handleStats(ctx, rb.Bot, testutil.NewPrivateMessage(7, "/coin_portfolio")); err != nil {
+		t.Fatal(err)
+	}
+	text := rb.LastSent().Text()
+	for _, want := range []string{
+		"BTC",
+		"$1k",
+		"$1.25k",
+		"$2.5M",
+		"+$500k (+25.00%)",
+		"$1,234.00",
+		"$2,501,234.00",
+		"+$500,000.00 (+25.00%)",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("portfolio missing %q in:\n%s", want, text)
+		}
 	}
 }
 

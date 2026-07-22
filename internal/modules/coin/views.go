@@ -48,15 +48,15 @@ func (s *state) handleStats(ctx context.Context, b *bot.Bot, update *models.Upda
 				}
 				totalValue += value
 				totalBasis += basis
-				positions = append(positions, []string{symbol, FormatCoinQty(held), FormatUSD(average), FormatUSD(price.USD), FormatUSD(value), FormatPnLUSD(value, basis)})
+				positions = append(positions, []string{symbol, FormatCoinQty(held), formatCompactUSD(average), formatCompactUSD(price.USD), formatCompactUSD(value), formatPortfolioPositionPnLUSD(value, basis)})
 			} else {
 				log.Error("coin_fetch_price", "symbol", symbol, "err", err)
 				missingPrice = true
-				positions = append(positions, []string{symbol, FormatCoinQty(held), FormatUSD(average), "N/A", "N/A", "N/A"})
+				positions = append(positions, []string{symbol, FormatCoinQty(held), formatCompactUSD(average), "N/A", "N/A", "N/A"})
 			}
 		} else {
 			missingPrice = true
-			positions = append(positions, []string{symbol, FormatCoinQty(held), FormatUSD(average), "N/A", "N/A", "N/A"})
+			positions = append(positions, []string{symbol, FormatCoinQty(held), formatCompactUSD(average), "N/A", "N/A", "N/A"})
 		}
 	}
 	var summary [][]string
