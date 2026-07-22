@@ -67,18 +67,19 @@ func TestHandleStats_UsesSSIBatchPrices(t *testing.T) {
 
 	text := rb.LastSent().Text()
 	for _, want := range []string{
-		"Stock Portfolio (VND)",
+		"Stock Portfolio",
 		"<pre>",
-		"Ticker",
+		"Sym",
 		"MWG",
-		"60k",
-		"70k",
+		"60",
+		"70",
 		"126M",
-		"+18M (+16.67%)",
+		"+18M",
+		"+16.67%",
 		"Cash",
 		"Total value",
 		"530.335.000",
-		"Unrealized P&amp;L",
+		"P&amp;L",
 		"+85.000.000 (+19.19%)",
 		"Account P&amp;L",
 		"-469.665.000 (-46.97%)",
@@ -90,8 +91,8 @@ func TestHandleStats_UsesSSIBatchPrices(t *testing.T) {
 	if strings.Contains(text, "N/A") {
 		t.Fatalf("stats rendered missing prices:\n%s", text)
 	}
-	if strings.Count(text, "VND") != 1 {
-		t.Fatalf("stats should declare VND only in the title:\n%s", text)
+	if strings.Contains(text, "VND") {
+		t.Fatalf("stock portfolio should use implicit VND:\n%s", text)
 	}
 }
 
@@ -126,13 +127,13 @@ func TestHandleStats_UnavailablePriceKeepsCompactAverage(t *testing.T) {
 	}
 
 	text := rb.LastSent().Text()
-	for _, want := range []string{"TCB", "25,35k", "N/A", "Priced value (partial)", "Account P&amp;L", "Unavailable"} {
+	for _, want := range []string{"TCB", "25,35", "N/A", "Priced value (partial)", "Account P&amp;L", "Unavailable"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("portfolio missing %q in:\n%s", want, text)
 		}
 	}
-	if got := strings.Count(text, "N/A"); got != 3 {
-		t.Fatalf("missing-price position has %d N/A cells, want 3:\n%s", got, text)
+	if got := strings.Count(text, "N/A"); got != 4 {
+		t.Fatalf("missing-price position has %d N/A cells, want 4:\n%s", got, text)
 	}
 }
 
@@ -171,8 +172,8 @@ func TestHandleStats_OverflowedValuationKeepsMonetaryCellsUnavailable(t *testing
 			t.Fatalf("overflow portfolio missing %q in:\n%s", want, text)
 		}
 	}
-	if got := strings.Count(text, "N/A"); got != 4 {
-		t.Fatalf("overflowed position has %d N/A monetary cells, want 4:\n%s", got, text)
+	if got := strings.Count(text, "N/A"); got != 5 {
+		t.Fatalf("overflowed position has %d N/A monetary cells, want 5:\n%s", got, text)
 	}
 	if strings.Contains(text, "1k") {
 		t.Fatalf("overflowed position exposed its average instead of N/A:\n%s", text)

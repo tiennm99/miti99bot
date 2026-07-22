@@ -334,7 +334,7 @@ func TestStatsWithAndWithoutPrice(t *testing.T) {
 		t.Fatalf("handleStats: %v", err)
 	}
 	text := rb.LastSent().Text()
-	for _, want := range []string{"Coin Portfolio", "<pre>", "BTC", "0.01", "$50k", "$500.00", "+$0.00 (+0.00%)", "P&amp;L"} {
+	for _, want := range []string{"Coin Portfolio", "<pre>", "Sym", "BTC", "0.01", "50k", "500.00", "+0.00", "+0.00%", "P&amp;L"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("stats missing %q in %q", want, text)
 		}
@@ -345,7 +345,7 @@ func TestStatsWithAndWithoutPrice(t *testing.T) {
 		t.Fatalf("handleStats no price: %v", err)
 	}
 	rb.AssertSentText(t, "N/A")
-	rb.AssertSentText(t, "$50k")
+	rb.AssertSentText(t, "50k")
 	if strings.Contains(rb.LastSent().Text(), "Account P&L: +") || strings.Contains(rb.LastSent().Text(), "Account P&L: -") {
 		t.Fatalf("partial prices must not show numeric account P&L: %q", rb.LastSent().Text())
 	}
@@ -369,10 +369,11 @@ func TestStatsCompactsOnlyPositionMonetaryCells(t *testing.T) {
 	text := rb.LastSent().Text()
 	for _, want := range []string{
 		"BTC",
-		"$1k",
-		"$1.25k",
-		"$2.5M",
-		"+$500k (+25.00%)",
+		"1k",
+		"1.25k",
+		"2.5M",
+		"+500k",
+		"+25.00%",
 		"$1,234.00",
 		"$2,501,234.00",
 		"+$500,000.00 (+25.00%)",

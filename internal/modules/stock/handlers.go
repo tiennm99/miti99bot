@@ -510,18 +510,19 @@ func (s *state) handleStats(ctx context.Context, b *bot.Bot, update *models.Upda
 			average := basis / float64(h.qty)
 			if !isPositiveFiniteCost(price) {
 				missingPrice = true
-				positions = append(positions, []string{h.symbol, FormatStock(float64(h.qty)), formatCompactVND(average), "N/A", "N/A", "N/A"})
+				positions = append(positions, []string{h.symbol, FormatStock(float64(h.qty)), formatThousandVND(average), "N/A", "N/A", "N/A", "N/A"})
 				continue
 			}
 			val := float64(h.qty) * price
 			if !isPositiveFiniteCost(val) || !isPositiveFiniteCost(average) {
 				missingPrice = true
-				positions = append(positions, []string{h.symbol, FormatStock(float64(h.qty)), "N/A", "N/A", "N/A", "N/A"})
+				positions = append(positions, []string{h.symbol, FormatStock(float64(h.qty)), "N/A", "N/A", "N/A", "N/A", "N/A"})
 				continue
 			}
 			totalValue += val
 			totalBasis += basis
-			positions = append(positions, []string{h.symbol, FormatStock(float64(h.qty)), formatCompactVND(average), formatCompactVND(price), formatCompactVND(val), formatPortfolioPositionPnL(val, basis)})
+			pnlAmount, pnlPercentage := formatPortfolioPositionPnL(val, basis)
+			positions = append(positions, []string{h.symbol, FormatStock(float64(h.qty)), formatThousandVND(average), formatThousandVND(price), formatCompactVND(val), pnlAmount, pnlPercentage})
 		}
 	}
 	var summary [][]string
@@ -542,7 +543,7 @@ func (s *state) handleStats(ctx context.Context, b *bot.Bot, update *models.Upda
 			{"Account P&L", formatPortfolioPnL(totalValue, p.Meta.Invested)},
 		}
 	}
-	if err := chathelper.ReplyHTML(ctx, b, update.Message, portfolioTableReply("Stock Portfolio (VND)", positions, summary)); err != nil {
+	if err := chathelper.ReplyHTML(ctx, b, update.Message, portfolioTableReply("Stock Portfolio", positions, summary)); err != nil {
 		return err
 	}
 	return s.notifyDividendEvents(ctx, b, update.Message, userID, p, checkedThrough)
@@ -558,7 +559,7 @@ func portfolioTableReply(title string, positions, summary [][]string) string {
 			rows = append(rows, []string{"… " + strconv.Itoa(omitted) + " omitted"})
 		}
 		reply := "<b>" + title + "</b>\n" +
-			chathelper.MonospaceTable([]string{"Ticker", "Qty", "Avg", "Now", "Value", "Unrealized P&L"}, rows) + "\n" +
+			chathelper.MonospaceTable([]string{"Sym", "Qty", "Avg", "Now", "Val", "P&L", "%"}, rows) + "\n" +
 			chathelper.MonospaceTable([]string{"Metric", "Value"}, summary)
 		if len(reply) <= portfolioReplyLimit || len(positions) == 0 {
 			return reply
