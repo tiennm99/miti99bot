@@ -43,7 +43,9 @@ Stock dividends are manual portfolio adjustments:
 
 - `/stock_cash_dividend <vnd_per_share> <ticker>` credits a positive whole-VND amount for each pre-event share held. Eg: `/stock_cash_dividend 1500 TCB`.
 - `/stock_share_dividend <ratio(owned:new)> <ticker>` adds `floor(pre_event_shares × new / owned)` whole shares. Eg: `/stock_share_dividend 100:10 TCB`.
-- `/stock_dividend <vnd_per_share> <ratio(owned:new)> <ticker>` applies both parts from the same pre-event holding and saves them together. Eg: `/stock_dividend 1500 100:10 TCB`.
+
+The combined `/stock_dividend` shortcut was retired. Use the specialized cash
+and share commands above for new adjustments.
 
 Ratios use `owned:new` exactly as written in the issuer notice. Equivalent
 unreduced ratios are accepted and the entered ratio is preserved in the reply.
