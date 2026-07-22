@@ -23,118 +23,77 @@ const (
 	dividendFetchWorkers = 4
 )
 
-type dividendCheckResult struct {
-	symbol   string
-	openedAt int64
-	after    time.Time
-	events   []DividendEvent
-	err      error
+type dividendRef struct {
+	symbol  string
+	eventID string
 }
 
-func (s *state) notifyDividendEvents(ctx context.Context, b *bot.Bot, msg *models.Message, userID int64, p Portfolio, checkedThrough time.Time) error {
-	if s.dividends == nil || s.pending == nil || len(p.Assets) == 0 {
-		return nil
-	}
-	s.cleanupExpiredDividends(ctx, checkedThrough.UnixMilli())
+type dividendFetchJob struct {
+	symbol    string
+	after     time.Time
+	through   time.Time
+	recent    bool
+	targetIDs map[string]struct{}
+}
 
-	type holding struct {
-		symbol string
-		qty    int64
-		after  time.Time
+type dividendCheckResult struct {
+	job    dividendFetchJob
+	events []DividendEvent
+	err    error
+}
+
+func (job dividendFetchJob) includes(event DividendEvent) bool {
+	if event.Symbol != job.symbol || event.PublishedAt.Before(job.after) || event.PublishedAt.After(job.through) {
+		return false
 	}
-	holdings := make([]holding, 0, len(p.Assets))
-	for symbol, position := range p.Assets {
-		if position.Quantity > 0 {
-			holdings = append(holdings, holding{
-				symbol: symbol,
-				qty:    position.Quantity,
-				after:  time.UnixMilli(position.DividendCheckedAt),
-			})
+	if job.recent {
+		return true
+	}
+	_, wanted := job.targetIDs[event.ProviderID]
+	return wanted
+}
+
+func (s *state) notifyDividendEvents(ctx context.Context, b *bot.Bot, msg *models.Message, userID int64, snapshot Portfolio, checkedThrough time.Time) error {
+	if s.pending != nil {
+		s.cleanupExpiredDividends(ctx, checkedThrough.UnixMilli())
+	}
+
+	failed, err := s.syncDividendHistory(ctx, userID, snapshot, checkedThrough)
+	if err != nil {
+		log.Error("stock_save_dividend_history", "user", userID, "err", err)
+		if replyErr := chathelper.Reply(ctx, b, msg, "Dividend events were checked, but the history could not be saved. Try again later."); replyErr != nil {
+			return replyErr
 		}
-	}
-	if len(holdings) == 0 {
 		return nil
 	}
-	sort.Slice(holdings, func(i, j int) bool { return holdings[i].symbol < holdings[j].symbol })
 
-	fetchCtx, cancel := context.WithTimeout(ctx, dividendFetchTimeout)
-	defer cancel()
-	results := make([]dividendCheckResult, len(holdings))
-	sem := make(chan struct{}, dividendFetchWorkers)
-	var wg sync.WaitGroup
-	for index, h := range holdings {
-		index, h := index, h
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			sem <- struct{}{}
-			defer func() { <-sem }()
-			events, err := s.dividends.FetchDividendEvents(fetchCtx, h.symbol, h.after, checkedThrough)
-			results[index] = dividendCheckResult{
-				symbol:   h.symbol,
-				openedAt: p.Assets[h.symbol].OpenedAt,
-				after:    h.after,
-				events:   events,
-				err:      err,
-			}
-		}()
+	latest, err := LoadPortfolio(ctx, s.store, userID, checkedThrough.UnixMilli())
+	if err != nil {
+		return err
 	}
-	wg.Wait()
-
-	successful := make([]string, 0, len(results))
-	failed := make([]string, 0)
-	for _, result := range results {
-		if result.err != nil {
-			log.Error("stock_dividend_events_checked",
-				"user", userID,
-				"ticker", result.symbol,
-				"from", result.after.UnixMilli(),
-				"through", checkedThrough.UnixMilli(),
-				"events", 0,
-				"status", "error",
-				"err", result.err)
-			failed = append(failed, result.symbol)
+	refs := sortedDividendRefs(latest)
+	for _, ref := range refs {
+		position, held := latest.Assets[ref.symbol]
+		if !held || position.Quantity <= 0 {
 			continue
 		}
-		log.Info("stock_dividend_events_checked",
-			"user", userID,
-			"ticker", result.symbol,
-			"from", result.after.UnixMilli(),
-			"through", checkedThrough.UnixMilli(),
-			"events", len(result.events),
-			"status", "success")
-		sort.Slice(result.events, func(i, j int) bool {
-			if result.events[i].PublishedAt.Equal(result.events[j].PublishedAt) {
-				return result.events[i].ProviderID < result.events[j].ProviderID
-			}
-			return result.events[i].PublishedAt.Before(result.events[j].PublishedAt)
-		})
-		delivered := true
-		for _, event := range result.events {
-			if _, applied := p.AppliedDividendEvents[dividendLedgerKey(event.ProviderID)]; applied {
-				continue
-			}
-			if err := s.sendDividendSuggestion(ctx, b, msg, userID, result.openedAt, checkedThrough, event); err != nil {
-				log.Error("stock_send_dividend_suggestion", "user", userID, "ticker", result.symbol, "event", event.ProviderID, "err", err)
-				delivered = false
-				break
-			}
+		record, exists := latest.dividendRecord(ref.symbol, ref.eventID)
+		if !exists || record.Processed {
+			continue
 		}
-		if delivered {
-			successful = append(successful, result.symbol)
-		} else {
-			failed = append(failed, result.symbol)
+		if !dividendRecordDue(record, checkedThrough) {
+			if err := s.sendFutureDividendNotice(ctx, b, msg, userID, position.OpenedAt, ref); err != nil {
+				log.Error("stock_send_dividend_notice", "user", userID, "ticker", ref.symbol, "event", ref.eventID, "err", err)
+				failed = append(failed, ref.symbol)
+			}
+			continue
+		}
+		if err := s.sendDividendSuggestion(ctx, b, msg, userID, position.OpenedAt, ref); err != nil {
+			log.Error("stock_send_dividend_suggestion", "user", userID, "ticker", ref.symbol, "event", ref.eventID, "err", err)
+			failed = append(failed, ref.symbol)
 		}
 	}
 
-	if len(successful) > 0 {
-		if err := s.advanceDividendCursors(ctx, userID, successful, checkedThrough.UnixMilli()); err != nil {
-			log.Error("stock_save_dividend_cursors", "user", userID, "err", err)
-			if replyErr := chathelper.Reply(ctx, b, msg, "Dividend events were checked, but the check time could not be saved. You may see the same suggestions again."); replyErr != nil {
-				return replyErr
-			}
-		}
-	}
 	if len(failed) > 0 {
 		sort.Strings(failed)
 		failed = uniqueStrings(failed)
@@ -143,64 +102,196 @@ func (s *state) notifyDividendEvents(ctx context.Context, b *bot.Bot, msg *model
 	return nil
 }
 
-func (s *state) advanceDividendCursors(ctx context.Context, userID int64, symbols []string, checkedThrough int64) error {
+func (s *state) syncDividendHistory(ctx context.Context, userID int64, snapshot Portfolio, now time.Time) ([]string, error) {
+	jobs := dividendFetchJobs(snapshot, now)
+	results := s.fetchDividendJobs(ctx, jobs)
+	failed := make([]string, 0)
+
 	defer s.locks.Acquire(strconv.FormatInt(userID, 10))()
-	p, err := LoadPortfolio(ctx, s.store, userID, checkedThrough)
+	latest, err := LoadPortfolio(ctx, s.store, userID, now.UnixMilli())
 	if err != nil {
-		return err
+		return nil, err
 	}
-	changed := false
-	for _, symbol := range symbols {
-		position, ok := p.Assets[symbol]
-		if ok && position.DividendCheckedAt < checkedThrough {
-			position.DividendCheckedAt = checkedThrough
-			p.Assets[symbol] = position
-			changed = true
+	changed := latest.pruneDividendHistory(now)
+	for _, result := range results {
+		if result.err != nil {
+			log.Error("stock_dividend_events_checked",
+				"user", userID,
+				"ticker", result.job.symbol,
+				"from", result.job.after.UnixMilli(),
+				"through", result.job.through.UnixMilli(),
+				"events", 0,
+				"status", "error",
+				"err", result.err)
+			failed = append(failed, result.job.symbol)
+			continue
+		}
+		log.Info("stock_dividend_events_checked",
+			"user", userID,
+			"ticker", result.job.symbol,
+			"from", result.job.after.UnixMilli(),
+			"through", result.job.through.UnixMilli(),
+			"events", len(result.events),
+			"status", "success")
+		for _, event := range result.events {
+			if !result.job.includes(event) {
+				continue
+			}
+			if dividendRecordExpired(dividendRecordFromEvent(event), now) {
+				continue
+			}
+			if latest.upsertDividendEvent(event) {
+				changed = true
+			}
 		}
 	}
-	if !changed {
-		return nil
+	if changed {
+		if err := SavePortfolio(ctx, s.store, userID, latest); err != nil {
+			return failed, err
+		}
 	}
-	return SavePortfolio(ctx, s.store, userID, p)
+	return failed, nil
 }
 
-func (s *state) sendDividendSuggestion(ctx context.Context, b *bot.Bot, msg *models.Message, userID, expectedOpenedAt int64, checkedThrough time.Time, event DividendEvent) error {
+func dividendFetchJobs(p Portfolio, now time.Time) []dividendFetchJob {
+	recentAfter := now.Add(-dividendDiscoveryWindow)
+	jobs := make([]dividendFetchJob, 0, len(p.Assets))
+	for symbol, position := range p.Assets {
+		if position.Quantity > 0 {
+			jobs = append(jobs, dividendFetchJob{symbol: symbol, after: recentAfter, through: now, recent: true})
+		}
+	}
+
+	type historicalKey struct {
+		symbol string
+		day    int64
+	}
+	historical := map[historicalKey]map[string]struct{}{}
+	for symbol, events := range p.Dividends {
+		if position, held := p.Assets[symbol]; !held || position.Quantity <= 0 {
+			continue
+		}
+		for eventID, event := range events {
+			if event.Processed || event.PublishedAt <= 0 || !millisTime(event.PublishedAt).Before(recentAfter) {
+				continue
+			}
+			if event.RecordDate != 0 && !dividendRecordDue(event, now) {
+				continue
+			}
+			day := startOfSaigonDay(millisTime(event.PublishedAt))
+			key := historicalKey{symbol: symbol, day: day.UnixMilli()}
+			if historical[key] == nil {
+				historical[key] = map[string]struct{}{}
+			}
+			historical[key][eventID] = struct{}{}
+		}
+	}
+	for key, targetIDs := range historical {
+		day := millisTime(key.day)
+		jobs = append(jobs, dividendFetchJob{
+			symbol: key.symbol, after: day, through: day.Add(24*time.Hour - time.Millisecond), targetIDs: targetIDs,
+		})
+	}
+	sort.Slice(jobs, func(i, j int) bool {
+		if jobs[i].symbol != jobs[j].symbol {
+			return jobs[i].symbol < jobs[j].symbol
+		}
+		return jobs[i].after.Before(jobs[j].after)
+	})
+	return jobs
+}
+
+func (s *state) fetchDividendJobs(ctx context.Context, jobs []dividendFetchJob) []dividendCheckResult {
+	if len(jobs) == 0 || s.dividends == nil {
+		return nil
+	}
+	results := make([]dividendCheckResult, len(jobs))
+	fetchCtx, cancel := context.WithTimeout(ctx, dividendFetchTimeout)
+	defer cancel()
+	sem := make(chan struct{}, dividendFetchWorkers)
+	var wg sync.WaitGroup
+	for index, job := range jobs {
+		index, job := index, job
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			events, err := s.dividends.FetchDividendEvents(fetchCtx, job.symbol, job.after, job.through)
+			results[index] = dividendCheckResult{job: job, events: events, err: err}
+		}()
+	}
+	wg.Wait()
+	return results
+}
+
+func sortedDividendRefs(p Portfolio) []dividendRef {
+	refs := make([]dividendRef, 0)
+	for symbol, events := range p.Dividends {
+		for eventID := range events {
+			refs = append(refs, dividendRef{symbol: symbol, eventID: eventID})
+		}
+	}
+	sort.Slice(refs, func(i, j int) bool {
+		left := p.Dividends[refs[i].symbol][refs[i].eventID]
+		right := p.Dividends[refs[j].symbol][refs[j].eventID]
+		if left.PublishedAt != right.PublishedAt {
+			return left.PublishedAt < right.PublishedAt
+		}
+		if refs[i].symbol != refs[j].symbol {
+			return refs[i].symbol < refs[j].symbol
+		}
+		return refs[i].eventID < refs[j].eventID
+	})
+	return refs
+}
+
+func (s *state) sendFutureDividendNotice(ctx context.Context, b *bot.Bot, msg *models.Message, userID, expectedOpenedAt int64, ref dividendRef) error {
 	defer s.locks.Acquire(strconv.FormatInt(userID, 10))()
 
 	now := s.now()
-	latest, err := LoadPortfolio(ctx, s.store, userID, now.UnixMilli())
+	p, err := LoadPortfolio(ctx, s.store, userID, now.UnixMilli())
 	if err != nil {
 		return err
 	}
-	if _, applied := latest.AppliedDividendEvents[dividendLedgerKey(event.ProviderID)]; applied {
+	record, exists := p.dividendRecord(ref.symbol, ref.eventID)
+	if !exists || record.Processed || dividendRecordDue(record, now) {
 		return nil
 	}
-	position, held := latest.Assets[event.Symbol]
+	position, held := p.Assets[ref.symbol]
 	if !held || position.Quantity <= 0 || position.OpenedAt != expectedOpenedAt {
 		return nil
 	}
-	observedHolding := position.Quantity
-	hasPending, err := s.hasPendingDividendEvent(ctx, userID, event.ProviderID, now.UnixMilli())
+	if _, err := b.SendMessage(ctx, &bot.SendMessageParams{
+		ChatID:          msg.Chat.ID,
+		MessageThreadID: msg.MessageThreadID,
+		Text:            dividendEventText(record.event(ref.symbol, ref.eventID), position.Quantity, false),
+		ParseMode:       models.ParseModeHTML,
+	}); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s *state) sendDividendSuggestion(ctx context.Context, b *bot.Bot, msg *models.Message, userID, expectedOpenedAt int64, ref dividendRef) error {
+	defer s.locks.Acquire(strconv.FormatInt(userID, 10))()
+
+	now := s.now()
+	p, err := LoadPortfolio(ctx, s.store, userID, now.UnixMilli())
 	if err != nil {
 		return err
 	}
-	if hasPending {
+	record, exists := p.dividendRecord(ref.symbol, ref.eventID)
+	if !exists || record.Processed || !dividendRecordDue(record, now) {
+		return nil
+	}
+	position, held := p.Assets[ref.symbol]
+	if !held || position.Quantity <= 0 || position.OpenedAt != expectedOpenedAt || !positionOpenedByRecordDate(position, record) {
 		return nil
 	}
 	action := PendingDividendAction{
-		OwnerUserID:      userID,
-		ChatID:           msg.Chat.ID,
-		ProviderEventID:  event.ProviderID,
-		Symbol:           event.Symbol,
-		Kind:             event.Kind,
-		VNDPerShare:      event.VNDPerShare,
-		OwnedShares:      event.OwnedShares,
-		NewShares:        event.NewShares,
-		ObservedHolding:  observedHolding,
-		PositionOpenedAt: position.OpenedAt,
-		CheckThrough:     checkedThrough.UnixMilli(),
-		CreatedAt:        now.UnixMilli(),
-		ExpiresAt:        now.Add(pendingDividendTTL).UnixMilli(),
+		OwnerUserID: userID, ChatID: msg.Chat.ID, ProviderEventID: ref.eventID, Symbol: ref.symbol,
+		PositionOpenedAt: position.OpenedAt, CreatedAt: now.UnixMilli(), ExpiresAt: now.Add(pendingDividendTTL).UnixMilli(),
 	}
 	token, err := s.createPendingDividend(ctx, action)
 	if err != nil {
@@ -210,11 +301,10 @@ func (s *state) sendDividendSuggestion(ctx context.Context, b *bot.Bot, msg *mod
 	sent, err := b.SendMessage(ctx, &bot.SendMessageParams{
 		ChatID:          msg.Chat.ID,
 		MessageThreadID: msg.MessageThreadID,
-		Text:            dividendEventText(event, observedHolding),
+		Text:            dividendEventText(record.event(ref.symbol, ref.eventID), position.Quantity, true),
 		ParseMode:       models.ParseModeHTML,
 		ReplyMarkup: &models.InlineKeyboardMarkup{InlineKeyboard: [][]models.InlineKeyboardButton{{{
-			Text:         "Apply dividend",
-			CallbackData: dividendCallbackPrefix + token,
+			Text: "Apply dividend", CallbackData: dividendCallbackPrefix + token,
 		}}}},
 	})
 	if err != nil {
@@ -230,28 +320,7 @@ func (s *state) sendDividendSuggestion(ctx context.Context, b *bot.Bot, msg *mod
 	return nil
 }
 
-func (s *state) hasPendingDividendEvent(ctx context.Context, userID int64, providerEventID string, now int64) (bool, error) {
-	keys, err := s.pending.List(ctx, pendingDividendPrefix)
-	if err != nil {
-		return false, err
-	}
-	for _, key := range keys {
-		action, _, getErr := s.pending.Get(ctx, key)
-		if getErr != nil {
-			continue
-		}
-		if action.ExpiresAt <= now || action.MessageID == 0 {
-			_ = s.pending.Delete(ctx, key)
-			continue
-		}
-		if action.OwnerUserID == userID && action.ProviderEventID == providerEventID {
-			return true, nil
-		}
-	}
-	return false, nil
-}
-
-func dividendEventText(event DividendEvent, observedHolding int64) string {
+func dividendEventText(event DividendEvent, observedHolding int64, actionable bool) string {
 	var value string
 	switch event.Kind {
 	case DividendKindCash:
@@ -259,15 +328,18 @@ func dividendEventText(event DividendEvent, observedHolding int64) string {
 	case DividendKindShares:
 		value = strconv.FormatInt(event.OwnedShares, 10) + ":" + strconv.FormatInt(event.NewShares, 10) + " shares"
 	}
-	lines := []string{
-		"<b>Recent dividend event · " + html.EscapeString(event.Symbol) + "</b>",
-		html.EscapeString(value),
+	headline := "Upcoming dividend event · "
+	if actionable {
+		headline = "Dividend ready to apply · "
 	}
+	lines := []string{"<b>" + headline + html.EscapeString(event.Symbol) + "</b>", html.EscapeString(value)}
 	if !event.ExDate.IsZero() {
 		lines = append(lines, "Ex-right: "+event.ExDate.Format("02/01/2006"))
 	}
 	if !event.RecordDate.IsZero() {
 		lines = append(lines, "Record: "+event.RecordDate.Format("02/01/2006"))
+	} else {
+		lines = append(lines, "Record: awaiting SSI update")
 	}
 	if !event.PaymentDate.IsZero() {
 		lines = append(lines, "Payment/trading: "+event.PaymentDate.Format("02/01/2006"))
@@ -275,12 +347,16 @@ func dividendEventText(event DividendEvent, observedHolding int64) string {
 	if title := truncateRunes(strings.TrimSpace(event.Title), 240); title != "" {
 		lines = append(lines, html.EscapeString(title))
 	}
-	lines = append(lines,
-		"SSI event: <code>"+html.EscapeString(event.ProviderID)+"</code>",
-		"Observed holding: "+html.EscapeString(formatShareQuantity(observedHolding))+" shares.",
-		"The dividend uses your current holding when you accept.",
-		"Button expires in 24 hours.",
-	)
+	lines = append(lines, "SSI event: <code>"+html.EscapeString(event.ProviderID)+"</code>")
+	if actionable {
+		lines = append(lines,
+			"Current holding: "+html.EscapeString(formatShareQuantity(observedHolding))+" shares.",
+			"The dividend uses your current holding when you accept.",
+			"Button expires in 24 hours.",
+		)
+	} else {
+		lines = append(lines, "Approval becomes available from Record date.")
+	}
 	return strings.Join(lines, "\n")
 }
 

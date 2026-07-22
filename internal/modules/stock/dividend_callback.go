@@ -32,6 +32,19 @@ func removeDividendButton(ctx context.Context, b *bot.Bot, chatID int64, message
 	return err
 }
 
+func (s *state) invalidateDividendAction(ctx context.Context, b *bot.Bot, actionKey string, action PendingDividendAction) (error, error) {
+	var deleteErr error
+	if s.pending != nil {
+		deleteErr = s.pending.Delete(ctx, actionKey)
+	}
+	return deleteErr, removeDividendButton(ctx, b, action.ChatID, action.MessageID)
+}
+
+func (s *state) rejectDividendAction(ctx context.Context, b *bot.Bot, queryID, actionKey string, action PendingDividendAction, text string) error {
+	_, _ = s.invalidateDividendAction(ctx, b, actionKey, action)
+	return answerDividendCallback(ctx, b, queryID, text, true)
+}
+
 func (s *state) handleDividendCallback(ctx context.Context, b *bot.Bot, update *models.Update) error {
 	if update == nil || update.CallbackQuery == nil {
 		return nil
@@ -73,9 +86,7 @@ func (s *state) resolveDividendCallback(ctx context.Context, b *bot.Bot, query *
 	}
 	now := s.now().UnixMilli()
 	if action.ExpiresAt <= now {
-		_ = s.pending.Delete(ctx, actionKey)
-		_ = removeDividendButton(ctx, b, action.ChatID, action.MessageID)
-		err = answerDividendCallback(ctx, b, query.ID, "This suggestion expired. Run /stock_portfolio again.", true)
+		err = s.rejectDividendAction(ctx, b, query.ID, actionKey, action, "This suggestion expired. Run /stock_portfolio again.")
 		return PendingDividendAction{}, nil, "", true, err
 	}
 	return action, msg, actionKey, false, nil
@@ -97,45 +108,47 @@ func (s *state) consumeDividendAction(ctx context.Context, b *bot.Bot, query *mo
 		log.Error("stock_load_portfolio", "user", action.OwnerUserID, "err", err)
 		return answerDividendCallback(ctx, b, query.ID, "Could not load your portfolio. Try again.", true)
 	}
-	eventKey := dividendLedgerKey(action.ProviderEventID)
-	if _, applied := p.AppliedDividendEvents[eventKey]; applied {
-		_ = s.pending.Delete(ctx, actionKey)
-		_ = removeDividendButton(ctx, b, action.ChatID, action.MessageID)
-		return answerDividendCallback(ctx, b, query.ID, "This dividend was already applied.", true)
+	record, exists := p.dividendRecord(action.Symbol, action.ProviderEventID)
+	if !exists {
+		return s.rejectDividendAction(ctx, b, query.ID, actionKey, action, "This dividend is no longer available.")
+	}
+	if record.Processed {
+		return s.rejectDividendAction(ctx, b, query.ID, actionKey, action, "This dividend was already applied.")
+	}
+	if !dividendRecordDue(record, s.now()) {
+		return s.rejectDividendAction(ctx, b, query.ID, actionKey, action, "This dividend is not available before Record date.")
 	}
 	position, held := p.Assets[action.Symbol]
 	if !held || position.Quantity <= 0 {
-		_ = s.pending.Delete(ctx, actionKey)
-		_ = removeDividendButton(ctx, b, action.ChatID, action.MessageID)
-		return answerDividendCallback(ctx, b, query.ID, "You no longer hold "+action.Symbol+". Dividend not applied.", true)
+		return s.rejectDividendAction(ctx, b, query.ID, actionKey, action, "You no longer hold "+action.Symbol+". Dividend not applied.")
 	}
 	if position.OpenedAt != action.PositionOpenedAt {
-		_ = s.pending.Delete(ctx, actionKey)
-		_ = removeDividendButton(ctx, b, action.ChatID, action.MessageID)
-		return answerDividendCallback(ctx, b, query.ID, "This "+action.Symbol+" position was closed after the suggestion. Run /stock_portfolio again.", true)
+		return s.rejectDividendAction(ctx, b, query.ID, actionKey, action, "This "+action.Symbol+" position was closed after the suggestion. Run /stock_portfolio again.")
+	}
+	if !positionOpenedByRecordDate(position, record) {
+		return s.rejectDividendAction(ctx, b, query.ID, actionKey, action, "This "+action.Symbol+" position was opened after Record date. Dividend not applied.")
 	}
 
-	result, err := applySuggestedDividend(&p, action, position.Quantity, now)
+	result, err := applySuggestedDividend(&p, action.Symbol, record, position.Quantity, now)
 	if err != nil {
 		log.Error("stock_apply_suggested_dividend", "user", action.OwnerUserID, "ticker", action.Symbol, "event", action.ProviderEventID, "err", err)
 		return answerDividendCallback(ctx, b, query.ID, "Could not safely apply this dividend.", true)
 	}
-	if p.AppliedDividendEvents == nil {
-		p.AppliedDividendEvents = map[string]int64{}
-	}
-	p.AppliedDividendEvents[eventKey] = now
+	record.Processed = true
+	p.setDividendRecord(action.Symbol, action.ProviderEventID, record)
 	if err := SavePortfolio(ctx, s.store, action.OwnerUserID, p); err != nil {
 		log.Error("stock_save_portfolio", "user", action.OwnerUserID, "err", err)
 		return answerDividendCallback(ctx, b, query.ID, "Could not save your portfolio. Try again.", true)
 	}
 
-	// The portfolio ledger is the source of truth for idempotency. Cleanup and
+	// The portfolio history is the source of truth for idempotency. Cleanup and
 	// Telegram UI updates are best-effort after the atomic portfolio save.
-	if err := s.pending.Delete(ctx, actionKey); err != nil {
-		log.Error("stock_delete_dividend_action", "err", err)
+	deleteErr, removeErr := s.invalidateDividendAction(ctx, b, actionKey, action)
+	if deleteErr != nil {
+		log.Error("stock_delete_dividend_action", "err", deleteErr)
 	}
-	if err := removeDividendButton(ctx, b, action.ChatID, action.MessageID); err != nil {
-		log.Error("stock_remove_dividend_button", "user", action.OwnerUserID, "ticker", action.Symbol, "err", err)
+	if removeErr != nil {
+		log.Error("stock_remove_dividend_button", "user", action.OwnerUserID, "ticker", action.Symbol, "err", removeErr)
 	}
 	if err := answerDividendCallback(ctx, b, query.ID, "Dividend applied.", false); err != nil {
 		log.Error("stock_answer_dividend_callback", "user", action.OwnerUserID, "ticker", action.Symbol, "err", err)
@@ -143,11 +156,10 @@ func (s *state) consumeDividendAction(ctx context.Context, b *bot.Bot, query *mo
 	return chathelper.Reply(ctx, b, msg, result)
 }
 
-func applySuggestedDividend(p *Portfolio, action PendingDividendAction, held, now int64) (string, error) {
-	preservedCursor := max(p.Assets[action.Symbol].DividendCheckedAt, action.CheckThrough)
-	switch action.Kind {
+func applySuggestedDividend(p *Portfolio, symbol string, record DividendRecord, held, now int64) (string, error) {
+	switch record.Kind {
 	case DividendKindCash:
-		total, err := cashDividendTotal(held, action.VNDPerShare)
+		total, err := cashDividendTotal(held, record.VNDPerShare)
 		if err != nil {
 			return "", err
 		}
@@ -155,17 +167,16 @@ func applySuggestedDividend(p *Portfolio, action PendingDividendAction, held, no
 		if err != nil {
 			return "", err
 		}
-		if err := p.ApplyDividend(action.Symbol, held, balance, now); err != nil {
+		if err := p.ApplyDividend(symbol, held, balance, now); err != nil {
 			return "", err
 		}
-		preserveDividendCursor(p, action.Symbol, preservedCursor)
-		return "Applied cash dividend for " + action.Symbol + ": " + FormatVND(float64(action.VNDPerShare)) +
+		return "Applied cash dividend for " + symbol + ": " + FormatVND(float64(record.VNDPerShare)) +
 			" × " + formatShareQuantity(held) + " = " + FormatVND(float64(total)) +
 			"\nBalance: " + FormatVND(balance), nil
 
 	case DividendKindShares:
-		ratio := shareRatio{owned: action.OwnedShares, new: action.NewShares,
-			raw: strconv.FormatInt(action.OwnedShares, 10) + ":" + strconv.FormatInt(action.NewShares, 10)}
+		ratio := shareRatio{owned: record.OwnedShares, new: record.NewShares,
+			raw: strconv.FormatInt(record.OwnedShares, 10) + ":" + strconv.FormatInt(record.NewShares, 10)}
 		newShares, err := shareDividendEntitlement(held, ratio)
 		if err != nil {
 			return "", err
@@ -177,20 +188,13 @@ func applySuggestedDividend(p *Portfolio, action PendingDividendAction, held, no
 		if err != nil {
 			return "", err
 		}
-		if err := p.ApplyDividend(action.Symbol, finalHolding, p.VND, now); err != nil {
+		if err := p.ApplyDividend(symbol, finalHolding, p.VND, now); err != nil {
 			return "", err
 		}
-		preserveDividendCursor(p, action.Symbol, preservedCursor)
-		return "Applied share dividend for " + action.Symbol + " (" + ratio.raw + "): +" +
+		return "Applied share dividend for " + symbol + " (" + ratio.raw + "): +" +
 			formatShareQuantity(newShares) + "\nHolding: " + formatShareQuantity(held) + " → " +
 			formatShareQuantity(finalHolding), nil
 	default:
 		return "", errors.New("unsupported dividend kind")
 	}
-}
-
-func preserveDividendCursor(p *Portfolio, symbol string, cursor int64) {
-	position := p.Assets[symbol]
-	position.DividendCheckedAt = cursor
-	p.Assets[symbol] = position
 }

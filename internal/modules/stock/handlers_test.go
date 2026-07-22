@@ -243,7 +243,7 @@ func (s *countingPortfolioStore) Put(ctx context.Context, id string, p Portfolio
 func seedStockPortfolio(t *testing.T, store Store, userID int64, held int64, balance float64) {
 	t.Helper()
 	p := NewPortfolio(123)
-	p.Assets["TCB"] = AssetPosition{Quantity: held, Base: float64(held) * 30_000, DividendCheckedAt: 100}
+	p.Assets["TCB"] = AssetPosition{Quantity: held, Base: float64(held) * 30_000, OpenedAt: 100}
 	p.VND = balance
 	if err := SavePortfolio(context.Background(), store, userID, p); err != nil {
 		t.Fatalf("seed portfolio: %v", err)
@@ -269,7 +269,7 @@ func TestHandleCashDividendAllowsRepeatedManualAdjustments(t *testing.T) {
 	if got, want := p.VND, float64(418000); got != want {
 		t.Fatalf("balance = %v, want %v", got, want)
 	}
-	if p.Assets["TCB"].Base != 139*30_000 || p.Assets["TCB"].DividendCheckedAt != 123 {
+	if p.Assets["TCB"].Base != 139*30_000 || p.Assets["TCB"].OpenedAt != 100 {
 		t.Fatalf("cash dividend position: %+v", p.Assets["TCB"])
 	}
 }
@@ -309,7 +309,7 @@ func TestHandleShareDividendPreservesRatioAndFloors(t *testing.T) {
 	if got, want := p.Assets["TCB"].Quantity, int64(152); got != want {
 		t.Fatalf("holding = %d, want %d", got, want)
 	}
-	if p.Assets["TCB"].Base != 139*30_000 || p.Assets["TCB"].DividendCheckedAt != 123 {
+	if p.Assets["TCB"].Base != 139*30_000 || p.Assets["TCB"].OpenedAt != 100 {
 		t.Fatalf("share dividend position: %+v", p.Assets["TCB"])
 	}
 	rb.AssertSentText(t, "Share dividend (100:10): +13 TCB")
@@ -378,7 +378,7 @@ func TestHandleCombinedDividendUsesPreEventHoldingAndOneSave(t *testing.T) {
 		t.Fatalf("store writes = %d, want 1", store.puts)
 	}
 	p, _ := LoadPortfolio(ctx, base, 7, 999)
-	if p.Assets["TCB"].Quantity != 152 || p.VND != 209500 || p.Assets["TCB"].Base != 139*30_000 || p.Assets["TCB"].DividendCheckedAt != 123 {
+	if p.Assets["TCB"].Quantity != 152 || p.VND != 209500 || p.Assets["TCB"].Base != 139*30_000 || p.Assets["TCB"].OpenedAt != 100 {
 		t.Fatalf("portfolio = %+v", p)
 	}
 	rb.AssertSentText(t, "Dividend for TCB (100:10)")

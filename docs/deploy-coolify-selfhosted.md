@@ -102,11 +102,16 @@ Successful GIF replies include the result behind Telegram spoiler formatting.
 > retained with `deleted: true`; `/stats` queries filter those rows from visible
 > results. A historical `system` collection may remain in MongoDB with completed
 > migration records; keep those records as audit history. Stock stores cash as
-> `vnd`, embeds positions as
-> `assets.<symbol>.{quantity,base,dividendCheckedAt,openedAt}`, and retains
-> applied dividend identities under `appliedDividendEvents`. Coin stores cash as
-> `usd` and embeds positions as `assets.<symbol>.{quantity,base}`. No completed
-> one-time migration code runs at startup.
+> `vnd`, embeds positions as `assets.<symbol>.{quantity,base,openedAt}`, and
+> retains normalized per-user SSI history under
+> `dividends.<symbol>.<ssi_event_id>`. Unprocessed retained dividend events are
+> replayed on every `/stock_portfolio` until they are processed or expire after
+> 90 days; events with no Record date stay informational while SSI is
+> rechecked, and later SSI responses that omit an event do not delete the
+> retained record. Coin stores cash as `usd` and embeds positions as
+> `assets.<symbol>.{quantity,base}`. Stock startup maintenance runs the
+> idempotent `migration:stock-dividend-history-v1` migration to remove the
+> retired dividend cursor and hashed applied-event ledger.
 
 ## 2. Coolify
 

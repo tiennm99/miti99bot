@@ -48,19 +48,34 @@ Stock dividends are manual portfolio adjustments:
 Ratios use `owned:new` exactly as written in the issuer notice. Equivalent
 unreduced ratios are accepted and the entered ratio is preserved in the reply.
 The bot validates syntax, tickers, and arithmetic safety. `/stock_portfolio`
-also checks SSI iBoard for cash and explicit share-dividend events published
-since each holding's last successful check. The portfolio is always sent first;
-each event then appears in its own message with an `Apply dividend` button. If
-no relevant event exists, no additional message is sent.
+also checks SSI iBoard for cash and explicit share-dividend events published in
+the preceding 30 days. The portfolio is always sent first. Every retained
+unprocessed event is re-sent on each `/stock_portfolio` until it is processed
+or expires after 90 days: future events are informational messages without a
+button, while events from Record date include an `Apply dividend` button.
+Events with no Record date remain informational while the bot rechecks their
+original publication window for SSI updates.
 
 Suggestions expire after 24 hours and are bound to the Telegram user who
 requested the portfolio, the originating chat, and the event message. Another
 group member cannot apply them. Acceptance calculates from the user's current
-holding at click time, records the provider event atomically with the portfolio
-change, and prevents the same SSI event from being applied twice. SSI iBoard is
-an undocumented, best-effort source; failures do not prevent the portfolio from
-being shown. The bot does not persist dated lots, so suggestions are not legal
-record-date entitlement calculations. Users should verify the issuer notice.
+holding at click time and marks the per-user event processed atomically with the
+portfolio change. The current position must have opened on or before Record
+date. SSI iBoard is an undocumented, best-effort source; failures do not prevent
+the portfolio from being shown. The bot does not persist dated lots, so
+suggestions are not legal record-date entitlement calculations. Users should
+verify the issuer notice.
+
+Repeated portfolio requests can create multiple valid buttons for the same
+event. Processing is idempotent: the first accepted button marks the event
+processed, and later buttons cannot credit it again.
+
+Normalized SSI history is retained under
+`dividends.<ticker>.<ssi_event_id>`, separate from active assets so a full sale
+does not permit the same event to be applied after a repurchase. Records are
+removed 90 days after Record date. If SSI never supplies Record date, they are
+removed 90 days after publication. A later SSI response that omits an event
+does not remove or suppress the retained per-user record.
 
 The manual commands remain available, but they do not carry an SSI event ID.
 Applying an event manually and then accepting its button can therefore record
@@ -70,7 +85,7 @@ the same dividend twice; use one method for a given event.
 
 Stock and coin portfolios embed each open position under `assets.<symbol>`.
 Both store `quantity` and total remaining `base`; stock positions additionally
-store `dividendCheckedAt` and an `openedAt` lifecycle marker. Stock cash is
+store an `openedAt` lifecycle marker. Stock cash is
 stored directly as `vnd`; coin cash remains `usd`. Buys add their actual spend.
 Partial sells remove basis using the weighted-average method and report realized
 P&L; full sells remove the position and its basis. Stock share dividends add
@@ -83,20 +98,13 @@ account value minus all top-ups, so it also reflects realized proceeds,
 dividend cash, and idle cash. If any current quote is unavailable, totals are
 marked partial and numeric Account P&L is withheld.
 
-For stock positions, `dividendCheckedAt` is the dividend-event discovery cursor.
-It is initialized when a position is first bought, preserved across later buys
-and sells, and advanced after a successful event check or when a manual stock
-dividend is recorded. Failed checks do not advance it. A full exit removes the
-cursor; reopening the position starts it again. Coin positions do not store a
-dividend cursor. Applied SSI event identities are retained in the stock
-portfolio as `appliedDividendEvents.<hashed_provider_event_id> =
-<applied_at_unix_milliseconds>` for idempotency and audit history. SSI queries
-overlap the previous Asia/Saigon calendar day to avoid missing provider rows
-whose publication time has only day precision; pending and applied provider IDs
-suppress duplicate suggestions. The stock-only `assets.<ticker>.openedAt`
-marker identifies the current position lifecycle and invalidates suggestion
-buttons after a full sale and later repurchase. Existing positions adopt this
-behavior without a startup migration.
+Stock dividend discovery has no per-position cursor. SSI queries use a rolling
+30-day publication window and overlap the previous Asia/Saigon calendar day at
+the provider boundary; caller-side filtering restores the exact interval.
+Per-user event history provides notification state and processing idempotency.
+The stock-only `assets.<ticker>.openedAt` marker identifies the current position
+lifecycle, invalidates buttons after a full sale and later repurchase, and
+prevents a position opened after Record date from applying an older event.
 
 ## Layout
 

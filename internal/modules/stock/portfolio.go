@@ -14,21 +14,38 @@ type Store = storage.DocStore[Portfolio]
 
 const CollectionName = "stock"
 
-// AssetPosition keeps the complete persisted state for one stock ticker.
-// Base is total remaining VND cost, not average price. DividendCheckedAt is
-// the cursor for future dividend-event discovery.
+// AssetPosition keeps the complete persisted state for one open stock ticker.
+// Base is total remaining VND cost, not average price.
 type AssetPosition struct {
-	Quantity          int64   `json:"quantity" bson:"quantity"`
-	Base              float64 `json:"base" bson:"base"`
-	DividendCheckedAt int64   `json:"dividendCheckedAt" bson:"dividendCheckedAt"`
-	OpenedAt          int64   `json:"openedAt,omitempty" bson:"openedAt,omitempty"`
+	Quantity int64   `json:"quantity" bson:"quantity"`
+	Base     float64 `json:"base" bson:"base"`
+	OpenedAt int64   `json:"openedAt,omitempty" bson:"openedAt,omitempty"`
+}
+
+// DividendRecord is one normalized SSI event in a user's retained history.
+// The raw SSI event ID is the containing map key.
+type DividendRecord struct {
+	Kind        DividendKind `json:"kind" bson:"kind"`
+	PublishedAt int64        `json:"publishedAt" bson:"publishedAt"`
+	ExDate      int64        `json:"exDate,omitempty" bson:"exDate,omitempty"`
+	RecordDate  int64        `json:"recordDate,omitempty" bson:"recordDate,omitempty"`
+	PaymentDate int64        `json:"paymentDate,omitempty" bson:"paymentDate,omitempty"`
+
+	VNDPerShare int64 `json:"vndPerShare,omitempty" bson:"vndPerShare,omitempty"`
+	OwnedShares int64 `json:"ownedShares,omitempty" bson:"ownedShares,omitempty"`
+	NewShares   int64 `json:"newShares,omitempty" bson:"newShares,omitempty"`
+
+	Title     string `json:"title,omitempty" bson:"title,omitempty"`
+	SourceURL string `json:"sourceUrl,omitempty" bson:"sourceUrl,omitempty"`
+
+	Processed bool `json:"processed" bson:"processed"`
 }
 
 type Portfolio struct {
-	VND                   float64                  `json:"vnd" bson:"vnd"`
-	Assets                map[string]AssetPosition `json:"assets" bson:"assets"`
-	AppliedDividendEvents map[string]int64         `json:"appliedDividendEvents,omitempty" bson:"appliedDividendEvents,omitempty"`
-	Meta                  PortfolioMeta            `json:"meta" bson:"meta"`
+	VND       float64                              `json:"vnd" bson:"vnd"`
+	Assets    map[string]AssetPosition             `json:"assets" bson:"assets"`
+	Dividends map[string]map[string]DividendRecord `json:"dividends,omitempty" bson:"dividends,omitempty"`
+	Meta      PortfolioMeta                        `json:"meta" bson:"meta"`
 }
 
 type PortfolioMeta struct {
@@ -37,7 +54,11 @@ type PortfolioMeta struct {
 }
 
 func NewPortfolio(now int64) Portfolio {
-	return Portfolio{Assets: map[string]AssetPosition{}, Meta: PortfolioMeta{CreatedAt: now}}
+	return Portfolio{
+		Assets:    map[string]AssetPosition{},
+		Dividends: map[string]map[string]DividendRecord{},
+		Meta:      PortfolioMeta{CreatedAt: now},
+	}
 }
 
 func portfolioKey(userID int64) string {
@@ -51,8 +72,8 @@ func LoadPortfolio(ctx context.Context, store Store, userID int64, now int64) (P
 		if p.Assets == nil {
 			p.Assets = map[string]AssetPosition{}
 		}
-		if p.AppliedDividendEvents == nil {
-			p.AppliedDividendEvents = map[string]int64{}
+		if p.Dividends == nil {
+			p.Dividends = map[string]map[string]DividendRecord{}
 		}
 		if p.Meta.CreatedAt == 0 {
 			p.Meta.CreatedAt = now
@@ -87,13 +108,19 @@ func (p Portfolio) Validate() error {
 		if err != nil || canonical != symbol {
 			return fmt.Errorf("stock: invalid ticker %q", symbol)
 		}
-		if position.Quantity <= 0 || !isPositiveFiniteCost(position.Base) || position.DividendCheckedAt <= 0 || position.OpenedAt < 0 {
+		if position.Quantity <= 0 || !isPositiveFiniteCost(position.Base) || position.OpenedAt < 0 {
 			return fmt.Errorf("stock: %s has invalid position", symbol)
 		}
 	}
-	for eventID, appliedAt := range p.AppliedDividendEvents {
-		if eventID == "" || len(eventID) > 128 || appliedAt <= 0 {
-			return fmt.Errorf("stock: invalid applied dividend event")
+	for symbol, events := range p.Dividends {
+		canonical, err := normalizeStockSymbol(symbol)
+		if err != nil || canonical != symbol || events == nil {
+			return fmt.Errorf("stock: invalid dividend ticker %q", symbol)
+		}
+		for eventID, event := range events {
+			if !ssiProviderIDPattern.MatchString(eventID) || !event.valid() {
+				return fmt.Errorf("stock: invalid dividend event %q for %s", eventID, symbol)
+			}
 		}
 	}
 	return nil
@@ -111,8 +138,8 @@ func (p *Portfolio) DeductVND(amount float64) (ok bool, balance float64) {
 	return true, p.VND
 }
 
-// BuyTicker adds quantity and basis. DividendCheckedAt is set only when opening
-// a new position so later buys cannot skip events after the original buy.
+// BuyTicker adds quantity and basis. OpenedAt identifies the current position
+// lifecycle and is reset only after a full exit.
 func (p *Portfolio) BuyTicker(symbol string, quantity int64, base float64, now int64) error {
 	if quantity <= 0 || !isPositiveFiniteCost(base) || now <= 0 {
 		return fmt.Errorf("stock: invalid purchase position")
@@ -130,9 +157,6 @@ func (p *Portfolio) BuyTicker(symbol string, quantity int64, base float64, now i
 	if !isPositiveFiniteCost(position.Base) {
 		return fmt.Errorf("stock: cost basis overflows")
 	}
-	if position.DividendCheckedAt == 0 {
-		position.DividendCheckedAt = now
-	}
 	if isOpening {
 		position.OpenedAt = now
 	}
@@ -140,8 +164,8 @@ func (p *Portfolio) BuyTicker(symbol string, quantity int64, base float64, now i
 	return nil
 }
 
-// SellTicker removes proportional weighted-average basis while preserving the
-// dividend cursor. A full exit removes the entire ticker document.
+// SellTicker removes proportional weighted-average basis. A full exit removes
+// the active position but retained dividend history remains separate.
 func (p *Portfolio) SellTicker(symbol string, quantity int64) (remaining int64, soldBase float64, ok bool, err error) {
 	position, exists := p.Assets[symbol]
 	if !exists || position.Quantity < quantity || quantity <= 0 {
@@ -170,7 +194,6 @@ func (p *Portfolio) ApplyDividend(symbol string, quantity int64, vnd float64, no
 		return fmt.Errorf("stock: invalid dividend position")
 	}
 	position.Quantity = quantity
-	position.DividendCheckedAt = now
 	p.Assets[symbol] = position
 	p.VND = vnd
 	return nil
