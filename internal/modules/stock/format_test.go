@@ -77,9 +77,29 @@ func TestFormatCompactVND(t *testing.T) {
 	}
 }
 
-func TestFormatPortfolioPositionPnLUsesCompactAmountAndFullPercentage(t *testing.T) {
-	if got, want := formatPortfolioPositionPnL(1_250_000, 1_000_000), "+250k (+25.00%)"; got != want {
-		t.Fatalf("formatPortfolioPositionPnL: got %q, want %q", got, want)
+func TestFormatThousandVND(t *testing.T) {
+	cases := []struct {
+		in   float64
+		want string
+	}{
+		{0, "0"},
+		{999, "0,999"},
+		{1_000, "1"},
+		{25_350, "25,35"},
+		{1_250_000, "1250"},
+		{-25_350, "-25,35"},
+	}
+	for _, c := range cases {
+		if got := formatThousandVND(c.in); got != c.want {
+			t.Errorf("formatThousandVND(%v): got %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
+func TestFormatPortfolioPositionPnLSplitsAmountAndPercentage(t *testing.T) {
+	amount, percentage := formatPortfolioPositionPnL(1_250_000, 1_000_000)
+	if amount != "+250k" || percentage != "+25.00%" {
+		t.Fatalf("formatPortfolioPositionPnL: got (%q, %q)", amount, percentage)
 	}
 }
 
