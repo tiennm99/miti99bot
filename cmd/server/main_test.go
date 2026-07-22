@@ -1,13 +1,17 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/tiennm99/miti99bot/internal/modules"
+	"github.com/tiennm99/miti99bot/internal/modules/stock"
 	"github.com/tiennm99/miti99bot/internal/storage"
+	"github.com/tiennm99/miti99bot/internal/systemstate"
 )
 
 func TestResolveCommitSHA(t *testing.T) {
@@ -29,6 +33,31 @@ func TestResolveCommitSHA(t *testing.T) {
 	gitSHA = ""
 	if got := resolveCommitSHA("   "); got != "unknown" {
 		t.Errorf("both empty: got %q, want unknown", got)
+	}
+}
+
+func TestInitStockStoreRunsStartupMigration(t *testing.T) {
+	ctx := context.Background()
+	provider := storage.NewMemoryProvider()
+	if err := initStockStore(ctx, provider); err != nil {
+		t.Fatalf("initStockStore: %v", err)
+	}
+	marker, exists, err := systemstate.New(provider.Collection(systemstate.CollectionName)).Get(ctx, "migration:stock-dividend-history-v1")
+	if err != nil || !exists || marker.Status != "completed" {
+		t.Fatalf("marker=%+v exists=%v err=%v", marker, exists, err)
+	}
+	if _, _, err := storage.Typed[stock.Portfolio](provider.Collection(stock.CollectionName)).Get(ctx, "user:1"); !errors.Is(err, storage.ErrNotFound) {
+		t.Fatalf("unexpected portfolio lookup error: %v", err)
+	}
+}
+
+func TestInitStockStorePropagatesMigrationError(t *testing.T) {
+	want := errors.New("migration failed")
+	err := initStockStoreWith(context.Background(), storage.NewMemoryProvider(), func(context.Context, storage.Collection, storage.Collection) error {
+		return want
+	})
+	if !errors.Is(err, want) {
+		t.Fatalf("initStockStoreWith error=%v, want %v", err, want)
 	}
 }
 

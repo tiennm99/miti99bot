@@ -16,7 +16,7 @@ func TestLoadPortfolioFirstTimeUser(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p.VND != 0 || p.Assets == nil || p.Meta.CreatedAt != 1234567890 {
+	if p.VND != 0 || p.Assets == nil || p.Dividends == nil || p.Meta.CreatedAt != 1234567890 {
 		t.Fatalf("portfolio=%+v", p)
 	}
 }
@@ -30,6 +30,9 @@ func TestSaveAndLoadRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	p.Meta.Invested = 5_000_000
+	p.Dividends["TCB"] = map[string]DividendRecord{
+		"2612974": {Kind: DividendKindCash, PublishedAt: 2, RecordDate: 3, VNDPerShare: 1500},
+	}
 	if err := SavePortfolio(ctx, store, 42, p); err != nil {
 		t.Fatal(err)
 	}
@@ -38,12 +41,12 @@ func TestSaveAndLoadRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	position := got.Assets["TCB"]
-	if got.VND != 5_000_000 || position.Quantity != 100 || position.Base != 3_000_000 || position.DividendCheckedAt != 10 || got.Meta.CreatedAt != 1 {
+	if got.VND != 5_000_000 || position.Quantity != 100 || position.Base != 3_000_000 || position.OpenedAt != 10 || got.Meta.CreatedAt != 1 || got.Dividends["TCB"]["2612974"].VNDPerShare != 1500 {
 		t.Fatalf("portfolio=%+v", got)
 	}
 }
 
-func TestBuyPreservesDividendCheckedAtAndSellUsesWeightedBasis(t *testing.T) {
+func TestBuyPreservesOpenedAtAndSellUsesWeightedBasis(t *testing.T) {
 	p := NewPortfolio(1)
 	if err := p.BuyTicker("TCB", 100, 2_000_000, 10); err != nil {
 		t.Fatal(err)
@@ -52,27 +55,46 @@ func TestBuyPreservesDividendCheckedAtAndSellUsesWeightedBasis(t *testing.T) {
 		t.Fatal(err)
 	}
 	position := p.Assets["TCB"]
-	if position.DividendCheckedAt != 10 {
-		t.Fatalf("additional buy changed dividend cursor to %d", position.DividendCheckedAt)
+	if position.OpenedAt != 10 {
+		t.Fatalf("additional buy changed openedAt to %d", position.OpenedAt)
 	}
 	remaining, soldBase, ok, err := p.SellTicker("TCB", 60)
 	if err != nil || !ok || remaining != 90 || soldBase != 1_400_000 {
 		t.Fatalf("remaining=%d soldBase=%v ok=%v err=%v", remaining, soldBase, ok, err)
 	}
 	position = p.Assets["TCB"]
-	if position.Base != 2_100_000 || position.DividendCheckedAt != 10 {
+	if position.Base != 2_100_000 || position.OpenedAt != 10 {
 		t.Fatalf("position=%+v", position)
 	}
 }
 
-func TestDividendAdvancesCursorWithoutChangingBase(t *testing.T) {
+func TestDividendDoesNotChangeLifecycleOrBase(t *testing.T) {
 	p := NewPortfolio(1)
 	_ = p.BuyTicker("TCB", 100, 3_000_000, 10)
 	if err := p.ApplyDividend("TCB", 110, 500_000, 30); err != nil {
 		t.Fatal(err)
 	}
 	position := p.Assets["TCB"]
-	if position.Quantity != 110 || position.Base != 3_000_000 || position.DividendCheckedAt != 30 || p.VND != 500_000 {
+	if position.Quantity != 110 || position.Base != 3_000_000 || position.OpenedAt != 10 || p.VND != 500_000 {
 		t.Fatalf("portfolio=%+v", p)
+	}
+}
+
+func TestFullSaleKeepsDividendHistorySeparate(t *testing.T) {
+	p := NewPortfolio(1)
+	if err := p.BuyTicker("TCB", 100, 3_000_000, 10); err != nil {
+		t.Fatal(err)
+	}
+	p.Dividends["TCB"] = map[string]DividendRecord{
+		"2612974": {Kind: DividendKindCash, PublishedAt: 2, VNDPerShare: 1500, Processed: true},
+	}
+	if _, _, ok, err := p.SellTicker("TCB", 100); err != nil || !ok {
+		t.Fatalf("full sale: ok=%v err=%v", ok, err)
+	}
+	if _, ok := p.Assets["TCB"]; ok {
+		t.Fatal("full sale retained active asset")
+	}
+	if !p.Dividends["TCB"]["2612974"].Processed {
+		t.Fatal("full sale removed dividend history")
 	}
 }

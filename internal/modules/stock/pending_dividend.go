@@ -3,11 +3,11 @@ package stock
 import (
 	"context"
 	"crypto/rand"
-	"crypto/sha256"
 	"encoding/base64"
 	"errors"
 	"fmt"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/tiennm99/miti99bot/internal/storage"
@@ -18,38 +18,28 @@ const (
 	pendingDividendPrefix  = "pending-dividend:"
 	pendingDividendTTL     = 24 * time.Hour
 	dividendTokenBytes     = 16
+	dividendTokenLength    = 22
 )
 
 var dividendTokenPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{22}$`)
 
 type PendingDividendStore = storage.DocStore[PendingDividendAction]
 
-// PendingDividendAction is the trusted server-side half of an inline button.
-// Telegram receives only an opaque random token; all financial values and the
-// owner binding remain in storage.
+// PendingDividendAction is the server-side half of an inline button. Financial
+// values live in the user's dividend history; Telegram receives only an opaque
+// random token.
 type PendingDividendAction struct {
-	OwnerUserID      int64        `json:"ownerUserId" bson:"ownerUserId"`
-	ChatID           int64        `json:"chatId" bson:"chatId"`
-	MessageID        int          `json:"messageId" bson:"messageId"`
-	ProviderEventID  string       `json:"providerEventId" bson:"providerEventId"`
-	Symbol           string       `json:"symbol" bson:"symbol"`
-	Kind             DividendKind `json:"kind" bson:"kind"`
-	VNDPerShare      int64        `json:"vndPerShare,omitempty" bson:"vndPerShare,omitempty"`
-	OwnedShares      int64        `json:"ownedShares,omitempty" bson:"ownedShares,omitempty"`
-	NewShares        int64        `json:"newShares,omitempty" bson:"newShares,omitempty"`
-	ObservedHolding  int64        `json:"observedHolding" bson:"observedHolding"`
-	PositionOpenedAt int64        `json:"positionOpenedAt,omitempty" bson:"positionOpenedAt,omitempty"`
-	CheckThrough     int64        `json:"checkThrough" bson:"checkThrough"`
-	CreatedAt        int64        `json:"createdAt" bson:"createdAt"`
-	ExpiresAt        int64        `json:"expiresAt" bson:"expiresAt"`
+	OwnerUserID      int64  `json:"ownerUserId" bson:"ownerUserId"`
+	ChatID           int64  `json:"chatId" bson:"chatId"`
+	MessageID        int    `json:"messageId" bson:"messageId"`
+	ProviderEventID  string `json:"providerEventId" bson:"providerEventId"`
+	Symbol           string `json:"symbol" bson:"symbol"`
+	PositionOpenedAt int64  `json:"positionOpenedAt,omitempty" bson:"positionOpenedAt,omitempty"`
+	CreatedAt        int64  `json:"createdAt" bson:"createdAt"`
+	ExpiresAt        int64  `json:"expiresAt" bson:"expiresAt"`
 }
 
 func pendingDividendKey(token string) string { return pendingDividendPrefix + token }
-
-func dividendLedgerKey(providerID string) string {
-	sum := sha256.Sum256([]byte("ssi:" + providerID))
-	return "ssi:" + base64.RawURLEncoding.EncodeToString(sum[:16])
-}
 
 func generateDividendToken() (string, error) {
 	raw := make([]byte, dividendTokenBytes)
@@ -59,12 +49,16 @@ func generateDividendToken() (string, error) {
 	return base64.RawURLEncoding.EncodeToString(raw), nil
 }
 
+func validDividendToken(token string) bool {
+	return len(token) == dividendTokenLength && dividendTokenPattern.MatchString(token)
+}
+
 func callbackToken(data string) (string, bool) {
-	if len(data) != len(dividendCallbackPrefix)+22 || data[:len(dividendCallbackPrefix)] != dividendCallbackPrefix {
+	token, ok := strings.CutPrefix(data, dividendCallbackPrefix)
+	if !ok || !validDividendToken(token) {
 		return "", false
 	}
-	token := data[len(dividendCallbackPrefix):]
-	return token, dividendTokenPattern.MatchString(token)
+	return token, true
 }
 
 func (s *state) createPendingDividend(ctx context.Context, action PendingDividendAction) (string, error) {
@@ -80,7 +74,7 @@ func (s *state) createPendingDividend(ctx context.Context, action PendingDividen
 		if err != nil {
 			return "", err
 		}
-		if !dividendTokenPattern.MatchString(token) {
+		if !validDividendToken(token) {
 			return "", errors.New("stock: invalid generated dividend token")
 		}
 		err = s.pending.PutVersioned(ctx, pendingDividendKey(token), 0, action)

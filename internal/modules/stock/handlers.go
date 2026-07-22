@@ -311,7 +311,7 @@ func (s *state) handleCashDividend(ctx context.Context, b *bot.Bot, update *mode
 		return chathelper.Reply(ctx, b, update.Message, "Dividend amount is too large.")
 	}
 	if err := p.ApplyDividend(symbol, held, balance, s.now().UnixMilli()); err != nil {
-		return chathelper.Reply(ctx, b, update.Message, "Could not update dividend checkpoint. Try again later.")
+		return chathelper.Reply(ctx, b, update.Message, "Could not apply this dividend. Try again later.")
 	}
 	if err := SavePortfolio(ctx, s.store, userID, p); err != nil {
 		log.Error("stock_save_portfolio", "user", userID, "err", err)
@@ -374,7 +374,7 @@ func (s *state) handleShareDividend(ctx context.Context, b *bot.Bot, update *mod
 		return chathelper.Reply(ctx, b, update.Message, "Share dividend is too large.")
 	}
 	if err := p.ApplyDividend(symbol, finalHolding, p.VND, s.now().UnixMilli()); err != nil {
-		return chathelper.Reply(ctx, b, update.Message, "Could not update dividend checkpoint. Try again later.")
+		return chathelper.Reply(ctx, b, update.Message, "Could not apply this dividend. Try again later.")
 	}
 	if err := SavePortfolio(ctx, s.store, userID, p); err != nil {
 		log.Error("stock_save_portfolio", "user", userID, "err", err)
@@ -443,7 +443,7 @@ func (s *state) handleDividend(ctx context.Context, b *bot.Bot, update *models.U
 	}
 
 	if err := p.ApplyDividend(symbol, finalHolding, balance, s.now().UnixMilli()); err != nil {
-		return chathelper.Reply(ctx, b, update.Message, "Could not update dividend checkpoint. Try again later.")
+		return chathelper.Reply(ctx, b, update.Message, "Could not apply this dividend. Try again later.")
 	}
 	if err := SavePortfolio(ctx, s.store, userID, p); err != nil {
 		log.Error("stock_save_portfolio", "user", userID, "err", err)
@@ -457,9 +457,9 @@ func (s *state) handleDividend(ctx context.Context, b *bot.Bot, update *models.U
 			"\nBalance: "+FormatVND(balance))
 }
 
-// handleStats renders the portfolio first, then checks each held ticker for
-// dividend events. Cursor persistence reloads and merges under the user lock,
-// so network calls never block concurrent portfolio mutations.
+// handleStats renders the portfolio first, then synchronizes dividend history
+// for each held ticker. Network calls never hold the user lock, while history
+// merging and notification state updates reload under it.
 func (s *state) handleStats(ctx context.Context, b *bot.Bot, update *models.Update) error {
 	userID, ok := senderInfo(update)
 	if !ok {
