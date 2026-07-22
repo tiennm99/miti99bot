@@ -67,16 +67,18 @@ func TestHandleStats_UsesSSIBatchPrices(t *testing.T) {
 
 	text := rb.LastSent().Text()
 	for _, want := range []string{
+		"Stock Portfolio (VND)",
 		"<pre>",
 		"Ticker",
 		"MWG",
-		"126.000.000 VND",
+		"126.000.000",
+		"Cash",
 		"Total value",
-		"530.335.000 VND",
+		"530.335.000",
 		"Unrealized P&amp;L",
-		"+85.000.000 VND (+19.19%)",
+		"+85.000.000 (+19.19%)",
 		"Account P&amp;L",
-		"-469.665.000 VND (-46.97%)",
+		"-469.665.000 (-46.97%)",
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("stats missing %q in:\n%s", want, text)
@@ -84,6 +86,9 @@ func TestHandleStats_UsesSSIBatchPrices(t *testing.T) {
 	}
 	if strings.Contains(text, "N/A") {
 		t.Fatalf("stats rendered missing prices:\n%s", text)
+	}
+	if strings.Count(text, "VND") != 1 {
+		t.Fatalf("stats should declare VND only in the title:\n%s", text)
 	}
 }
 
