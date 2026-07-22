@@ -92,8 +92,10 @@ P&L; full sells remove the position and its basis. Stock share dividends add
 shares without adding cost, which lowers the derived average price, while cash
 dividends do not change position basis.
 
-`/stock_portfolio` and `/coin_portfolio` show aligned monospace tables with
-average entry price and unrealized P&L for each priced position. `Account P&L` remains the broader
+`/stock_portfolio` and `/coin_portfolio` show compact aligned monospace tables
+with separate unrealized P&L amount and percentage columns for each priced
+position. Stock `Avg` and `Now` use thousand VND as their implicit unit; coin
+position amounts use implicit USD without a `$` prefix. `Account P&L` remains the broader
 account value minus all top-ups, so it also reflects realized proceeds,
 dividend cash, and idle cash. If any current quote is unavailable, totals are
 marked partial and numeric Account P&L is withheld.
