@@ -1,0 +1,24 @@
+{
+  "decision": "PASS",
+  "score": 9.6,
+  "criticalCount": 0,
+  "acceptanceCoverage": [
+    "default 30-day and explicit 1..90 parsing are covered by stock_events_test.go",
+    "exact (after, through] filtering, pagination, CorId deduplication, and deterministic ordering are covered by dividend_events_ssi_test.go",
+    "senderless execution, empty results, upstream failures, registration metadata, and bounded reply chunking are covered by stock_events_test.go",
+    "native menu metadata is covered by cmd/server/command_menu_test.go",
+    "README and handler usage match /stock_events <ticker> [days]",
+    "raw name, title, description, dates, value, and ratio are copied and rendered without dividend normalization",
+    "provider fixtures prove malformed optional dates remain raw/displayable, malformed non-empty publicDate is rejected, and missing publicDate uses a parseable optional cursor"
+  ],
+  "regressionProof": [
+    "the shared FetchDividendEvents contract remains signature-compatible and the strict normalizeEvent plus parseSSIDividendDates block is byte-for-byte unchanged from HEAD",
+    "the generic provider test verifies non-dividend rows do not leak into dividend discovery",
+    "focused stock and server tests passed",
+    "the full repository test suite passed",
+    "the stock package race test passed",
+    "vet, build, lint, and diff checks passed"
+  ],
+  "contractStatus": "CHANGED",
+  "blockingReasons": []
+}
