@@ -37,6 +37,15 @@ Future commands must follow the
 [command parameter conventions](docs/command-parameter-conventions.md). Keep
 command metadata, handler usage text, tests, and documentation aligned.
 
+### Stock corporate events
+
+`/stock_events <ticker> [days]` lists SSI iBoard corporate actions for a VN
+stock without reading or changing a portfolio. The lookback defaults to 30
+days; `days` must be a whole number from 1 to 90. Results are returned in
+chronological order, split into Telegram-safe chunks when needed, and show the
+raw SSI corporate-action details. The feature is best-effort because SSI's API
+is undocumented.
+
 ### Stock dividend commands
 
 Stock dividends are manual portfolio adjustments:

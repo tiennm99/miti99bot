@@ -5,7 +5,7 @@ import (
 	"github.com/tiennm99/miti99bot/internal/storage"
 )
 
-// New is the stock module Factory. Seven user-facing commands.
+// New is the stock module Factory. Eight user-facing commands.
 func New(deps modules.Deps) modules.Module {
 	s := newState(
 		storage.Typed[Portfolio](deps.Store),
@@ -14,6 +14,13 @@ func New(deps modules.Deps) modules.Module {
 	return modules.Module{
 		Callbacks: []modules.Callback{{Prefix: dividendCallbackPrefix, Visibility: modules.VisibilityPublic, Handler: s.handleDividendCallback}},
 		Commands: []modules.Command{
+			{
+				Name:        "stock_events",
+				Visibility:  modules.VisibilityPublic,
+				Description: "Show SSI corporate actions for a VN stock",
+				Parameters:  "<ticker> [days]",
+				Handler:     s.handleStockEvents,
+			},
 			{
 				Name:        "stock_price",
 				Visibility:  modules.VisibilityPublic,

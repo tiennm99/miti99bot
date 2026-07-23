@@ -25,6 +25,7 @@ type state struct {
 	pending          PendingDividendStore
 	prices           *PriceClient
 	dividends        DividendEventProvider
+	events           SSIStockEventProvider
 	locks            keylock.Map
 	nowFn            func() time.Time
 	newDividendToken func() (string, error)
@@ -39,11 +40,13 @@ func (s *state) now() time.Time {
 
 // newState builds the default state used by the module factory.
 func newState(store Store, pending PendingDividendStore) *state {
+	ssi := &SSIDividendProvider{}
 	return &state{
 		store:     store,
 		pending:   pending,
 		prices:    &PriceClient{},
-		dividends: &SSIDividendProvider{},
+		dividends: ssi,
+		events:    ssi,
 	}
 }
 
