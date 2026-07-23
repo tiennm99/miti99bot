@@ -1,0 +1,9 @@
+{
+  "decision": "PASS",
+  "disprovenClaims": [],
+  "unverifiedClaims": [
+    "The implementation cannot prove that every production SSI corporate-action variant remains representable because the endpoint is undocumented. The raw DTO path copies every decoded eventListCode and optional display field without a dividend-type filter (internal/modules/stock/dividend_events_ssi.go:147-180,227-263), while README.md:42-47 correctly limits the promise to eligible, best-effort SSI rows. Fixtures exercise AGM, ISS, OTHER, FALLBACK, and DIV shapes, including malformed optional dates and raw decimal fields (internal/modules/stock/dividend_events_ssi_test.go:82-144), but they are not an authoritative enumeration of SSI's live schema."
+  ],
+  "missingProof": [],
+  "reachableRegressions": []
+}
