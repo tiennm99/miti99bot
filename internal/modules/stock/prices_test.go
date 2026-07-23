@@ -44,6 +44,179 @@ func TestPriceClient_HappyPath(t *testing.T) {
 	}
 }
 
+func TestPriceClient_FetchSSIQuoteOneRequest(t *testing.T) {
+	requests := 0
+	c, _ := newTestPriceClient(t, func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		if r.Method != http.MethodGet {
+			t.Errorf("method = %s, want GET", r.Method)
+		}
+		if r.URL.Path != "/stock/TCB" {
+			t.Errorf("path = %q, want /stock/TCB", r.URL.Path)
+		}
+		for header, want := range map[string]string{
+			"Accept":  "application/json",
+			"Origin":  "https://iboard.ssi.com.vn",
+			"Referer": "https://iboard.ssi.com.vn/",
+		} {
+			if got := r.Header.Get(header); got != want {
+				t.Errorf("%s = %q, want %q", header, got, want)
+			}
+		}
+		if got := r.Header.Get("User-Agent"); !strings.Contains(got, "miti99bot") {
+			t.Errorf("User-Agent = %q, want miti99bot", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":{
+			"stockSymbol":"TCB",
+			"companyNameVi":"Ngân hàng TMCP Kỹ Thương Việt Nam",
+			"companyNameEn":"Vietnam Technological and Commercial Joint Stock Bank",
+			"exchange":"HOSE",
+			"refPrice":30000,
+			"openPrice":29500,
+			"highest":31000,
+			"lowest":29200,
+			"matchedPrice":30500,
+			"nmTotalTradedQty":1234567
+		}}`))
+	})
+
+	got, err := c.fetchSSIQuote(context.Background(), "TCB")
+	if err != nil {
+		t.Fatalf("fetchSSIQuote: %v", err)
+	}
+	if requests != 1 {
+		t.Fatalf("requests = %d, want 1", requests)
+	}
+	if got.StockSymbol != "TCB" ||
+		got.CompanyNameVi != "Ngân hàng TMCP Kỹ Thương Việt Nam" ||
+		got.CompanyNameEn != "Vietnam Technological and Commercial Joint Stock Bank" ||
+		got.Exchange != "HOSE" ||
+		got.RefPrice != 30000 ||
+		got.OpenPrice != 29500 ||
+		got.Highest != 31000 ||
+		got.Lowest != 29200 ||
+		got.MatchedPrice != 30500 ||
+		got.NMTotalTradedQty == nil ||
+		*got.NMTotalTradedQty != 1234567 {
+		t.Fatalf("quote = %+v", got)
+	}
+}
+
+func TestPriceClient_LegacyQuotesIgnoreDetailSchemaDrift(t *testing.T) {
+	t.Run("single", func(t *testing.T) {
+		c, _ := newTestPriceClient(t, func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte(`{"data":{
+				"stockSymbol":"TCB",
+				"matchedPrice":24500,
+				"companyNameVi":{"unexpected":"object"},
+				"companyNameEn":123,
+				"exchange":false,
+				"refPrice":"bad",
+				"openPrice":null,
+				"highest":[],
+				"lowest":{},
+				"nmTotalTradedQty":"unknown"
+			}}`))
+		})
+		got, err := c.FetchPrice(context.Background(), "TCB")
+		if err != nil {
+			t.Fatalf("FetchPrice: %v", err)
+		}
+		if got != 24500 {
+			t.Fatalf("price = %v, want 24500", got)
+		}
+	})
+
+	t.Run("batch", func(t *testing.T) {
+		c, _ := newTestPriceClient(t, func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte(`{"data":[{
+				"stockSymbol":"TCB",
+				"matchedPrice":24500,
+				"companyNameVi":123,
+				"exchange":{"unexpected":"object"},
+				"openPrice":"bad",
+				"nmTotalTradedQty":null
+			}]}`))
+		})
+		got, err := c.FetchPrices(context.Background(), []string{"TCB"})
+		if err != nil {
+			t.Fatalf("FetchPrices: %v", err)
+		}
+		if got["TCB"] != 24500 {
+			t.Fatalf("prices = %+v, want TCB=24500", got)
+		}
+	})
+}
+
+func TestPriceClient_FetchSSIQuoteStopsRedirectWithoutMutatingLegacyClient(t *testing.T) {
+	requests := 0
+	c, srv := newTestPriceClient(t, func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		if r.URL.Path == "/stock/TCB" {
+			http.Redirect(w, r, "/quote", http.StatusFound)
+			return
+		}
+		if r.URL.Path != "/quote" {
+			t.Errorf("path = %q, want /quote", r.URL.Path)
+		}
+		_, _ = w.Write([]byte(`{"data":{"stockSymbol":"TCB","matchedPrice":24500}}`))
+	})
+
+	_, err := c.fetchSSIQuote(context.Background(), "TCB")
+	if err == nil || !strings.Contains(err.Error(), "SSI status 302") {
+		t.Fatalf("fetchSSIQuote error = %v, want SSI status 302", err)
+	}
+	if requests != 1 {
+		t.Fatalf("detail requests = %d, want 1", requests)
+	}
+
+	requests = 0
+	got, err := c.FetchPrice(context.Background(), "TCB")
+	if err != nil {
+		t.Fatalf("legacy FetchPrice through redirect: %v", err)
+	}
+	if got != 24500 || requests != 2 {
+		t.Fatalf("legacy price = %v, requests = %d; want 24500 and 2", got, requests)
+	}
+	if c.HTTP.CheckRedirect != nil {
+		t.Fatalf("shared client CheckRedirect was mutated after request to %s", srv.URL)
+	}
+}
+
+func TestPriceClient_FetchSSIQuoteFailureUsesOneRequest(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		body string
+		want error
+	}{
+		{name: "no price", body: `{"data":{"stockSymbol":"TCB","matchedPrice":0}}`, want: ErrNoPrice},
+		{name: "malformed", body: `{"data":`, want: nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			requests := 0
+			c, _ := newTestPriceClient(t, func(w http.ResponseWriter, _ *http.Request) {
+				requests++
+				_, _ = w.Write([]byte(tc.body))
+			})
+
+			_, err := c.fetchSSIQuote(context.Background(), "TCB")
+			if err == nil {
+				t.Fatal("fetchSSIQuote: expected error")
+			}
+			if tc.want != nil && !errors.Is(err, tc.want) {
+				t.Fatalf("error = %v, want %v", err, tc.want)
+			}
+			if tc.want == nil && !strings.Contains(err.Error(), "SSI decode") {
+				t.Fatalf("error = %v, want SSI decode error", err)
+			}
+			if requests != 1 {
+				t.Fatalf("requests = %d, want 1", requests)
+			}
+		})
+	}
+}
+
 func TestPriceClient_BatchHappyPath(t *testing.T) {
 	c, _ := newTestPriceClient(t, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {

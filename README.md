@@ -46,6 +46,16 @@ chronological order, split into Telegram-safe chunks when needed, and show the
 raw SSI corporate-action details. The feature is best-effort because SSI's API
 is undocumented.
 
+### Stock quote details
+
+`/stock_info <ticker>` shows a compact SSI iBoard quote snapshot: company,
+exchange, current price, gain/loss since open, change versus the reference
+price, open/high/low prices, and normal traded volume. It makes exactly one
+SSI single-ticker request and does not use the KBS or VCI price fallbacks.
+Unavailable optional fields are shown as `N/A`. This read-only command is
+best-effort because SSI's API is undocumented. The existing `/stock_price`
+command and its provider fallbacks are unchanged.
+
 ### Stock dividend commands
 
 Stock dividends are manual portfolio adjustments:

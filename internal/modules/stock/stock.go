@@ -5,7 +5,7 @@ import (
 	"github.com/tiennm99/miti99bot/internal/storage"
 )
 
-// New is the stock module Factory. Eight user-facing commands.
+// New is the stock module Factory. Nine user-facing commands.
 func New(deps modules.Deps) modules.Module {
 	s := newState(
 		storage.Typed[Portfolio](deps.Store),
@@ -27,6 +27,13 @@ func New(deps modules.Deps) modules.Module {
 				Description: "Show current VN stock price",
 				Parameters:  "<ticker>",
 				Handler:     s.handlePrice,
+			},
+			{
+				Name:        "stock_info",
+				Visibility:  modules.VisibilityPublic,
+				Description: "Show detailed SSI quote for a VN stock",
+				Parameters:  "<ticker>",
+				Handler:     s.handleStockInfo,
 			},
 			{
 				Name:        "stock_topup",

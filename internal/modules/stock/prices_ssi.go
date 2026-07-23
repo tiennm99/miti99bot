@@ -21,6 +21,10 @@ type ssiSingleResponse struct {
 	Data ssiStockQuote `json:"data"`
 }
 
+type ssiQuoteDetailResponse struct {
+	Data ssiStockQuoteDetail `json:"data"`
+}
+
 type ssiMultipleResponse struct {
 	Data []ssiStockQuote `json:"data"`
 }
@@ -28,6 +32,19 @@ type ssiMultipleResponse struct {
 type ssiStockQuote struct {
 	StockSymbol  string  `json:"stockSymbol"`
 	MatchedPrice float64 `json:"matchedPrice"`
+}
+
+type ssiStockQuoteDetail struct {
+	StockSymbol      string   `json:"stockSymbol"`
+	CompanyNameVi    string   `json:"companyNameVi"`
+	CompanyNameEn    string   `json:"companyNameEn"`
+	Exchange         string   `json:"exchange"`
+	RefPrice         float64  `json:"refPrice"`
+	OpenPrice        float64  `json:"openPrice"`
+	Highest          float64  `json:"highest"`
+	Lowest           float64  `json:"lowest"`
+	MatchedPrice     float64  `json:"matchedPrice"`
+	NMTotalTradedQty *float64 `json:"nmTotalTradedQty"`
 }
 
 func (c *PriceClient) baseURL() string {
@@ -56,6 +73,35 @@ func (c *PriceClient) fetchSSIPrice(ctx context.Context, ticker string) (float64
 		return 0, fmt.Errorf("%w: SSI quote has no matchedPrice for %s", ErrNoPrice, strings.ToUpper(ticker))
 	}
 	return price, nil
+}
+
+// fetchSSIQuote returns the detailed SSI quote using exactly one single-stock
+// request. It intentionally bypasses FetchPrice and its KBS/VCI fallbacks.
+func (c *PriceClient) fetchSSIQuote(ctx context.Context, ticker string) (ssiStockQuoteDetail, error) {
+	if ticker == "" {
+		return ssiStockQuoteDetail{}, errors.New("stock: ticker is empty")
+	}
+	full := c.baseURL() + "/stock/" + url.PathEscape(ticker)
+	req, err := newSSIRequest(ctx, http.MethodGet, full, nil)
+	if err != nil {
+		return ssiStockQuoteDetail{}, err
+	}
+
+	// A redirect would turn one command into multiple outbound requests. Clone
+	// the client shallowly so only this detail request disables redirects.
+	client := *c.httpClient()
+	client.CheckRedirect = func(*http.Request, []*http.Request) error {
+		return http.ErrUseLastResponse
+	}
+
+	var body ssiQuoteDetailResponse
+	if err := doSSIJSON(&client, req, &body); err != nil {
+		return ssiStockQuoteDetail{}, err
+	}
+	if body.Data.MatchedPrice <= 0 {
+		return ssiStockQuoteDetail{}, fmt.Errorf("%w: SSI quote has no matchedPrice for %s", ErrNoPrice, strings.ToUpper(ticker))
+	}
+	return body.Data, nil
 }
 
 func (c *PriceClient) fetchSSIPrices(ctx context.Context, tickers []string) (map[string]float64, error) {
@@ -108,7 +154,11 @@ func newSSIRequest(ctx context.Context, method, full string, body io.Reader) (*h
 }
 
 func (c *PriceClient) doSSIJSON(req *http.Request, dst any) error {
-	resp, err := c.httpClient().Do(req)
+	return doSSIJSON(c.httpClient(), req, dst)
+}
+
+func doSSIJSON(client *http.Client, req *http.Request, dst any) error {
+	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("stock: SSI request: %w", err)
 	}
