@@ -111,30 +111,100 @@ func (p *SSIDividendProvider) endpoint() string {
 // described share dividends. SSI is queried with a one-calendar-day overlap in
 // Asia/Saigon, then results are filtered by publication time to (after, through].
 func (p *SSIDividendProvider) FetchDividendEvents(ctx context.Context, symbol string, after, through time.Time) ([]DividendEvent, error) {
-	symbol = strings.ToUpper(strings.TrimSpace(symbol))
-	if symbol == "" {
-		return nil, errors.New("stock: dividend symbol is empty")
-	}
-	if after.IsZero() || through.IsZero() || !through.After(after) {
-		return nil, errors.New("stock: invalid dividend event range")
+	symbol, from, to, err := prepareSSIEventFetch(
+		symbol,
+		after,
+		through,
+		"stock: dividend symbol is empty",
+		"stock: invalid dividend event range",
+	)
+	if err != nil {
+		return nil, err
 	}
 
-	from := after.In(saigonLocation).AddDate(0, 0, -1)
-	to := through.In(saigonLocation)
+	rawEvents, err := p.fetchUniqueCorporateActions(ctx, symbol, from, to, "dividend")
+	if err != nil {
+		return nil, err
+	}
 	lowerBound := startOfSaigonDay(after).AddDate(0, 0, -1)
-	seen := make(map[string]struct{})
 	events := make([]DividendEvent, 0)
+	for _, raw := range rawEvents {
+		event, ok := p.normalizeEvent(raw, symbol)
+		if !ok || event.PublishedAt.Before(lowerBound) || event.PublishedAt.After(through) {
+			continue
+		}
+		events = append(events, event)
+	}
+	sort.Slice(events, func(i, j int) bool {
+		if events[i].PublishedAt.Equal(events[j].PublishedAt) {
+			return events[i].ProviderID < events[j].ProviderID
+		}
+		return events[i].PublishedAt.Before(events[j].PublishedAt)
+	})
+	return events, nil
+}
+
+// FetchStockEvents returns all displayable SSI corporate actions. It is
+// intentionally separate from FetchDividendEvents so read-only event listing
+// cannot relax portfolio dividend validation.
+func (p *SSIDividendProvider) FetchStockEvents(ctx context.Context, symbol string, after, through time.Time) ([]SSIStockEvent, error) {
+	symbol, from, to, err := prepareSSIEventFetch(
+		symbol,
+		after,
+		through,
+		"stock: event symbol is empty",
+		"stock: invalid stock event range",
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	rawEvents, err := p.fetchUniqueCorporateActions(ctx, symbol, from, to, "event")
+	if err != nil {
+		return nil, err
+	}
+	events := make([]SSIStockEvent, 0)
+	for _, raw := range rawEvents {
+		event, ok := p.copyStockEvent(raw, symbol)
+		if !ok || !event.cursorAt.After(after) || event.cursorAt.After(through) {
+			continue
+		}
+		events = append(events, event)
+	}
+	sort.Slice(events, func(i, j int) bool {
+		if events[i].cursorAt.Equal(events[j].cursorAt) {
+			return events[i].CorID < events[j].CorID
+		}
+		return events[i].cursorAt.Before(events[j].cursorAt)
+	})
+	return events, nil
+}
+
+func prepareSSIEventFetch(symbol string, after, through time.Time, emptyErr, rangeErr string) (normalized string, from, to time.Time, err error) {
+	normalized = strings.ToUpper(strings.TrimSpace(symbol))
+	if normalized == "" {
+		return "", time.Time{}, time.Time{}, errors.New(emptyErr)
+	}
+	if after.IsZero() || through.IsZero() || !through.After(after) {
+		return "", time.Time{}, time.Time{}, errors.New(rangeErr)
+	}
+	return normalized, after.In(saigonLocation).AddDate(0, 0, -1), through.In(saigonLocation), nil
+}
+
+func (p *SSIDividendProvider) fetchUniqueCorporateActions(ctx context.Context, symbol string, from, to time.Time, kind string) ([]ssiDividendEvent, error) {
+	seen := make(map[string]struct{})
+	events := make([]ssiDividendEvent, 0)
 	totalPages := 1
 	for page := 1; page <= totalPages; page++ {
 		if page > ssiDividendMaxPages {
-			return nil, fmt.Errorf("stock: SSI dividend response exceeds %d pages", ssiDividendMaxPages)
+			return nil, fmt.Errorf("stock: SSI %s response exceeds %d pages", kind, ssiDividendMaxPages)
 		}
 		body, err := p.fetchPage(ctx, symbol, from, to, page)
 		if err != nil {
-			return nil, fmt.Errorf("stock: fetch SSI dividend page %d: %w", page, err)
+			return nil, fmt.Errorf("stock: fetch SSI %s page %d: %w", kind, page, err)
 		}
 		if body.Paging.TotalPage > ssiDividendMaxPages {
-			return nil, fmt.Errorf("stock: SSI dividend response has %d pages, maximum is %d", body.Paging.TotalPage, ssiDividendMaxPages)
+			return nil, fmt.Errorf("stock: SSI %s response has %d pages, maximum is %d", kind, body.Paging.TotalPage, ssiDividendMaxPages)
 		}
 		if body.Paging.TotalPage > totalPages {
 			totalPages = body.Paging.TotalPage
@@ -148,20 +218,49 @@ func (p *SSIDividendProvider) FetchDividendEvents(ctx context.Context, symbol st
 				continue
 			}
 			seen[id] = struct{}{}
-			event, ok := p.normalizeEvent(raw, symbol)
-			if !ok || event.PublishedAt.Before(lowerBound) || event.PublishedAt.After(through) {
-				continue
-			}
-			events = append(events, event)
+			events = append(events, raw)
 		}
 	}
-	sort.Slice(events, func(i, j int) bool {
-		if events[i].PublishedAt.Equal(events[j].PublishedAt) {
-			return events[i].ProviderID < events[j].ProviderID
-		}
-		return events[i].PublishedAt.Before(events[j].PublishedAt)
-	})
 	return events, nil
+}
+
+func (p *SSIDividendProvider) copyStockEvent(raw ssiDividendEvent, requestedSymbol string) (SSIStockEvent, bool) {
+	symbol := strings.ToUpper(strings.TrimSpace(raw.Symbol))
+	if symbol != requestedSymbol {
+		return SSIStockEvent{}, false
+	}
+	cursorAt, ok := ssiStockEventCursor(raw)
+	if !ok {
+		return SSIStockEvent{}, false
+	}
+	return SSIStockEvent{
+		CorID:            strings.TrimSpace(raw.CorID),
+		Symbol:           symbol,
+		EventListCode:    strings.TrimSpace(raw.EventListCode),
+		EventName:        strings.TrimSpace(raw.EventName),
+		EventTitle:       strings.TrimSpace(raw.EventTitle),
+		EventDescription: strings.TrimSpace(raw.EventDescription),
+		PublicDate:       strings.TrimSpace(raw.PublicDate),
+		ExrightDate:      strings.TrimSpace(raw.ExrightDate),
+		RecordDate:       strings.TrimSpace(raw.RecordDate),
+		IssueDate:        strings.TrimSpace(raw.IssueDate),
+		Value:            strings.TrimSpace(string(raw.Value)),
+		Ratio:            strings.TrimSpace(string(raw.Ratio)),
+		SourceURL:        p.eventSourceURL(symbol, raw.CorID),
+		cursorAt:         cursorAt,
+	}, true
+}
+
+func ssiStockEventCursor(raw ssiDividendEvent) (time.Time, bool) {
+	if strings.TrimSpace(raw.PublicDate) != "" {
+		return parseSSIDate(raw.PublicDate)
+	}
+	for _, candidate := range []string{raw.ExrightDate, raw.RecordDate, raw.IssueDate} {
+		if parsed, ok := parseSSIDate(candidate); ok {
+			return parsed, true
+		}
+	}
+	return time.Time{}, false
 }
 
 func startOfSaigonDay(value time.Time) time.Time {

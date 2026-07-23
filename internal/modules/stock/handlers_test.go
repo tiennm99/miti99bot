@@ -24,6 +24,7 @@ func TestModuleRegistersExpectedCommands(t *testing.T) {
 	}
 	for _, name := range []string{
 		"stock_price",
+		"stock_events",
 		"stock_topup",
 		"stock_buy",
 		"stock_sell",

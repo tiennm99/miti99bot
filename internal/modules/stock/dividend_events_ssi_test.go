@@ -79,6 +79,90 @@ func TestSSIDividendProviderPaginatesDeduplicatesFiltersAndNormalizes(t *testing
 	}
 }
 
+func TestSSIStockEventProviderIncludesAllTypesPaginatesDeduplicatesFiltersAndOrders(t *testing.T) {
+	t.Parallel()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		page, _ := strconv.Atoi(r.URL.Query().Get("page"))
+		w.Header().Set("Content-Type", "application/json")
+		switch page {
+		case 1:
+			_, _ = fmt.Fprint(w, `{"code":"SUCCESS","status":"ok","paging":{"totalPage":2,"page":1},"data":[
+				{"CorId":"meeting","symbol":"TCB","eventListCode":"AGM","eventName":"Annual meeting","eventTitle":"Meeting title","eventDescription":"Meeting description","publicDate":"11/06/2026 12:00:00","recordDate":"malformed-raw-date","value":"123.45","ratio":"0.25"},
+				{"CorId":"tie-b","symbol":"TCB","eventListCode":"OTHER","eventTitle":"Second by ID","publicDate":"12/06/2026 00:00:00"},
+				{"CorId":"at-after","symbol":"TCB","eventListCode":"OTHER","publicDate":"10/06/2026 12:00:00"},
+				{"CorId":"overlap-only","symbol":"TCB","eventListCode":"OTHER","publicDate":"10/06/2026 00:00:00"},
+				{"CorId":"too-old","symbol":"TCB","eventListCode":"OTHER","publicDate":"08/06/2026 23:59:59"},
+				{"CorId":"wrong-symbol","symbol":"ACB","eventListCode":"AGM","publicDate":"11/06/2026"}
+			]}`)
+		case 2:
+			_, _ = fmt.Fprint(w, `{"code":"SUCCESS","status":"ok","paging":{"totalPage":2,"page":2},"data":[
+				{"CorId":"meeting","symbol":"TCB","eventListCode":"AGM","eventTitle":"duplicate","publicDate":"11/06/2026 12:00:00"},
+				{"CorId":"tie-a","symbol":"TCB","eventListCode":"ISS","eventName":"Rights issue","eventTitle":"First by ID","publicDate":"12/06/2026 00:00:00","exrightDate":"20/06/2026","issueDate":"30/06/2026"},
+				{"CorId":"after-through","symbol":"TCB","eventListCode":"OTHER","publicDate":"12/06/2026 00:00:01"},
+				{"CorId":"bad-date","symbol":"TCB","eventListCode":"OTHER","publicDate":"not-a-date","exrightDate":"11/06/2026"},
+				{"CorId":"fallback-date","symbol":"TCB","eventListCode":"FALLBACK","eventDescription":"raw fallback event","exrightDate":"bad-optional","recordDate":"11/06/2026","issueDate":"also-bad"}
+			]}`)
+		default:
+			t.Fatalf("unexpected page %d", page)
+		}
+	}))
+	defer server.Close()
+
+	provider := &SSIDividendProvider{HTTP: server.Client(), BaseURL: server.URL}
+	events, err := provider.FetchStockEvents(context.Background(), " tcb ", saigonTime(t, "10/06/2026 12:00:00"), saigonTime(t, "12/06/2026 00:00:00"))
+	if err != nil {
+		t.Fatalf("FetchStockEvents: %v", err)
+	}
+	if len(events) != 4 {
+		t.Fatalf("events = %+v, want fallback, meeting, and two tie events", events)
+	}
+	if events[0].CorID != "fallback-date" || events[0].PublicDate != "" || events[0].ExrightDate != "bad-optional" || events[0].RecordDate != "11/06/2026" {
+		t.Fatalf("fallback cursor/raw fields = %+v", events[0])
+	}
+	if events[1].CorID != "meeting" || events[1].EventListCode != "AGM" || events[1].EventName != "Annual meeting" || events[1].EventTitle != "Meeting title" || events[1].EventDescription != "Meeting description" || events[1].RecordDate != "malformed-raw-date" || events[1].Value != "123.45" || events[1].Ratio != "0.25" {
+		t.Fatalf("generic non-dividend raw event = %+v", events[1])
+	}
+	if events[2].CorID != "tie-a" || events[3].CorID != "tie-b" {
+		t.Fatalf("tie order = %q, %q", events[2].CorID, events[3].CorID)
+	}
+	if events[2].ExrightDate != "20/06/2026" || events[2].IssueDate != "30/06/2026" || events[2].SourceURL == "" {
+		t.Fatalf("raw event dates/source missing: %+v", events[2])
+	}
+	for _, event := range events {
+		if event.CorID == "bad-date" {
+			t.Fatalf("malformed publicDate was accepted via optional fallback: %+v", event)
+		}
+	}
+
+	dividends, err := provider.FetchDividendEvents(context.Background(), "TCB", saigonTime(t, "10/06/2026 12:00:00"), saigonTime(t, "12/06/2026 00:00:00"))
+	if err != nil {
+		t.Fatalf("FetchDividendEvents: %v", err)
+	}
+	if len(dividends) != 0 {
+		t.Fatalf("generic events leaked into dividend path: %+v", dividends)
+	}
+}
+
+func TestSSIStockEventProviderRequiresEveryPageAndValidRange(t *testing.T) {
+	t.Parallel()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("page") == "2" {
+			http.Error(w, "upstream unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		_, _ = fmt.Fprint(w, `{"code":"SUCCESS","status":"ok","paging":{"totalPage":2,"page":1},"data":[]}`)
+	}))
+	defer server.Close()
+	provider := &SSIDividendProvider{HTTP: server.Client(), BaseURL: server.URL}
+	now := saigonTime(t, "12/06/2026")
+	if events, err := provider.FetchStockEvents(context.Background(), "TCB", now.Add(-24*time.Hour), now); err == nil || events != nil {
+		t.Fatalf("partial events, err = %+v, %v", events, err)
+	}
+	if _, err := provider.FetchStockEvents(context.Background(), "TCB", now, now); err == nil {
+		t.Fatal("equal range accepted")
+	}
+}
+
 func TestSSIDividendProviderUsesDayOverlapAndDateFallback(t *testing.T) {
 	t.Parallel()
 	server := dividendTestServer(t, http.StatusOK, `{"code":"SUCCESS","status":"ok","paging":{"totalPage":1,"page":1},"data":[
