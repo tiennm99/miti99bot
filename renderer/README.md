@@ -31,6 +31,9 @@ Response is `image/gif` with winner metadata headers:
 
 `X-Wheel-Winner` is URL-encoded so non-ASCII labels are safe in HTTP headers.
 
+The GIF includes a winner celebration with a deterministic confetti burst
+during the hold phase, using colors from the chosen theme palette.
+
 ## Local
 
 Install dependencies and Chromium once:
