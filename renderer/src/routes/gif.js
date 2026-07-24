@@ -5,7 +5,6 @@ import {parseWheelRequest} from '../schemas/wheel-request.js';
 
 /**
  * @typedef {import('../config.js').AppConfig} AppConfig
- * @typedef {import('../lib/render-semaphore.js').createRenderSemaphore} CreateRenderSemaphore
  * @typedef {import('../schemas/wheel-request.js').WheelRenderRequest} WheelRenderRequest
  */
 

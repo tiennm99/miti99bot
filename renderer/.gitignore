@@ -8,3 +8,4 @@ coverage/
 fixtures/*.gif
 /wheel.gif
 *.log
+.claude/settings.local.json

@@ -20,12 +20,5 @@ export const createRenderSemaphore = (max) => {
     release() {
       active = Math.max(0, active - 1);
     },
-
-    /**
-     * @returns {{active: number, max: number}}
-     */
-    state() {
-      return {active, max};
-    },
   };
 };
