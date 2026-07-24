@@ -11,6 +11,7 @@ import {
 } from './wheel-layout.js';
 import {getRadialLabelLayout} from './wheel-label-layout.js';
 import {getTheme} from './themes.js';
+import {Confetti} from './Confetti.jsx';
 
 const baseFont =
   'Quicksand, Inter, "Noto Sans", "Noto Sans Vietnamese", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
@@ -181,6 +182,8 @@ export const WheelComposition = (props) => {
           }}
         />
       </div>
+
+      <Confetti colors={theme.slices} seed={props.winnerIndex} startFrame={holdStartFrame} />
     </AbsoluteFill>
   );
 };
