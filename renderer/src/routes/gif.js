@@ -1,7 +1,22 @@
+import {timingSafeEqual} from 'node:crypto';
 import {ZodError} from 'zod';
 import {isRenderTimeoutError} from '../lib/render-errors.js';
 import {pickWinnerIndex} from '../lib/winner.js';
 import {parseWheelRequest} from '../schemas/wheel-request.js';
+
+/**
+ * Length-guarded constant-time string comparison so token checks do not leak
+ * information through response timing.
+ *
+ * @param {string} a
+ * @param {string} b
+ * @returns {boolean}
+ */
+const safeEqual = (a, b) => {
+  const aBuffer = Buffer.from(a);
+  const bBuffer = Buffer.from(b);
+  return aBuffer.length === bBuffer.length && timingSafeEqual(aBuffer, bBuffer);
+};
 
 /**
  * @typedef {import('../config.js').AppConfig} AppConfig
@@ -31,7 +46,7 @@ export const registerGifRoute = async (app, deps) => {
   app.post('/api/gif', async (request, reply) => {
     if (deps.config.apiToken) {
       const expected = `Bearer ${deps.config.apiToken}`;
-      if (request.headers.authorization !== expected) {
+      if (!safeEqual(request.headers.authorization ?? '', expected)) {
         return reply.code(401).send({error: 'unauthorized'});
       }
     }
