@@ -31,8 +31,16 @@ Response is `image/gif` with winner metadata headers:
 
 `X-Wheel-Winner` is URL-encoded so non-ASCII labels are safe in HTTP headers.
 
-The GIF includes a winner celebration with a deterministic confetti burst
-during the hold phase, using colors from the chosen theme palette.
+The GIF ends on a winner celebration: the wheel settles, the winning slice is
+outlined, the winner's name appears over the hub, and a deterministic two-cannon
+confetti burst crosses the wheel. Each theme carries its own confetti palette,
+chosen for contrast against that theme's background rather than reusing the
+slice colors. The celebration starts a few frames before the wheel
+mathematically settles, so it lands on the perceived stop.
+
+Labels stay radial but flip where needed so every name reads upright in the
+final frame, which is the frame most chat clients show as the GIF's poster
+image.
 
 ## Local
 
