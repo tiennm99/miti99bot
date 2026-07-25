@@ -77,7 +77,44 @@ describe('confetti layout', () => {
     expect(large.width).toBeCloseTo(small.width * 4);
   });
 
-  test('reference size keeps gravity at the tuned constant', () => {
+  test('keeps particles thick enough to survive GIF quantization', () => {
+    for (const size of [384, 480, 512]) {
+      const particles = createConfettiParticles({
+        colors: ['#000'],
+        count: 70,
+        random: makeRandom(),
+        size,
+      });
+
+      for (const particle of particles) {
+        expect(particle.height).toBeGreaterThanOrEqual(3);
+        expect(particle.width).toBeGreaterThanOrEqual(3);
+      }
+    }
+  });
+
+  test('launches from two cannons framing the wheel, not from the hub', () => {
+    const size = CONFETTI_REFERENCE_SIZE;
+    const particles = createConfettiParticles({
+      colors: ['#000'],
+      count: 20,
+      random: makeRandom(),
+      size,
+    });
+    const hubRadius = size * 0.09;
+
+    for (const particle of particles) {
+      const distanceFromHub = Math.hypot(particle.originX - size / 2, particle.originY - size / 2);
+
+      expect(distanceFromHub).toBeGreaterThan(hubRadius);
+      // Upward launch: negative vy points up in screen coordinates.
+      expect(particle.vy).toBeLessThan(0);
+      // Inward launch: left cannon throws right, right cannon throws left.
+      expect(particle.originX < size / 2 ? particle.vx > 0 : particle.vx < 0).toBe(true);
+    }
+  });
+
+  test('drag gives a terminal fall speed instead of unbounded acceleration', () => {
     const [particle] = createConfettiParticles({
       colors: ['#000'],
       count: 1,
@@ -85,32 +122,133 @@ describe('confetti layout', () => {
       size: CONFETTI_REFERENCE_SIZE,
     });
 
-    expect(particle?.gravity).toBe(1500);
+    if (!particle) {
+      throw new Error('expected one particle');
+    }
+
+    expect(particle.drag).toBeGreaterThan(0);
+
+    const terminalSpeed = particle.gravity / particle.drag;
+    const late = getConfettiParticleState(particle, 6);
+    const later = getConfettiParticleState(particle, 7);
+
+    expect(later.y - late.y).toBeCloseTo(terminalSpeed, 0);
   });
 
-  test('particle starts at its origin and accelerates downward', () => {
-    const particle = {
-      color: '#000',
-      gravity: 1500,
-      height: 8,
-      originX: 100,
-      originY: 200,
-      rotationSpeed: 90,
-      startRotation: 10,
-      vx: 50,
-      vy: -300,
-      width: 8,
-    };
-
-    expect(getConfettiParticleState(particle, 0)).toEqual({
-      rotation: 10,
-      x: 100,
-      y: 200,
+  test('particle sits at its muzzle until its launch delay elapses', () => {
+    const [particle] = createConfettiParticles({
+      colors: ['#000'],
+      count: 4,
+      random: makeRandom(),
+      size: CONFETTI_REFERENCE_SIZE,
     });
 
-    const later = getConfettiParticleState(particle, 1);
-    expect(later.x).toBe(150);
-    expect(later.y).toBe(650); // 200 - 300 + 0.5 * 1500
-    expect(later.rotation).toBe(100);
+    if (!particle) {
+      throw new Error('expected one particle');
+    }
+
+    const atLaunch = getConfettiParticleState(particle, particle.delay);
+
+    expect(atLaunch.x).toBeCloseTo(particle.originX);
+    expect(atLaunch.y).toBeCloseTo(particle.originY);
+
+    // Orientation at launch is pulled toward the direction of travel, because
+    // that is where the streak is strongest. It is a blend, not a snap, so
+    // assert it sits closer to travel than the particle's own tumble does.
+    const travelDegrees = (Math.atan2(particle.vy, particle.vx) * 180) / Math.PI;
+    /** @param {number} degrees */
+    const offFromTravel = (degrees) =>
+      Math.abs((((degrees - travelDegrees) % 360) + 540) % 360 - 180);
+
+    expect(offFromTravel(atLaunch.rotation)).toBeLessThanOrEqual(
+      offFromTravel(particle.startRotation),
+    );
+  });
+
+  test('streaks while fast and relaxes to its own tumble once slow', () => {
+    const particles = createConfettiParticles({
+      colors: ['#000'],
+      count: 12,
+      random: makeRandom(),
+      size: CONFETTI_REFERENCE_SIZE,
+    });
+
+    for (const particle of particles) {
+      const launch = getConfettiParticleState(particle, particle.delay);
+      const settled = getConfettiParticleState(particle, particle.delay + 3);
+
+      expect(launch.stretch).toBeGreaterThan(1);
+      expect(launch.stretch).toBeLessThanOrEqual(1.8);
+      expect(settled.stretch).toBeLessThan(launch.stretch);
+      expect(settled.stretch).toBeGreaterThanOrEqual(1);
+    }
+  });
+
+  test('keeps the streaked long axis short enough to read as paper', () => {
+    for (const size of [384, 480, 512]) {
+      const particles = createConfettiParticles({
+        colors: ['#000'],
+        count: 70,
+        random: makeRandom(),
+        size,
+      });
+
+      for (const particle of particles) {
+        const {stretch} = getConfettiParticleState(particle, particle.delay);
+
+        expect(particle.width * stretch).toBeLessThanOrEqual(40);
+        // Stretching runs along the long axis only, so the thin dimension still
+        // survives GIF quantization.
+        expect(particle.height).toBeGreaterThanOrEqual(3);
+      }
+    }
+  });
+
+  test('holds a second volley back so a long celebration does not thin out', () => {
+    const longWindow = createConfettiParticles({
+      colors: ['#000'],
+      count: 70,
+      random: makeRandom(),
+      size: CONFETTI_REFERENCE_SIZE,
+      windowSeconds: 2.47,
+    });
+    const late = longWindow.filter((particle) => particle.delay > 0.8);
+
+    expect(late.length).toBeGreaterThan(8);
+
+    // Every particle must still launch inside the window it was built for.
+    for (const particle of longWindow) {
+      expect(particle.delay).toBeLessThan(2.47 * 0.6);
+    }
+  });
+
+  test('collapses the second volley into the first on a short celebration', () => {
+    const shortWindow = createConfettiParticles({
+      colors: ['#000'],
+      count: 70,
+      random: makeRandom(),
+      size: CONFETTI_REFERENCE_SIZE,
+      windowSeconds: 0.47,
+    });
+
+    for (const particle of shortWindow) {
+      expect(particle.delay).toBeLessThan(0.47);
+    }
+  });
+
+  test('rises before it falls', () => {
+    const particles = createConfettiParticles({
+      colors: ['#000'],
+      count: 12,
+      random: makeRandom(),
+      size: CONFETTI_REFERENCE_SIZE,
+    });
+
+    for (const particle of particles) {
+      const launch = getConfettiParticleState(particle, particle.delay);
+      const soonAfter = getConfettiParticleState(particle, particle.delay + 0.15);
+
+      expect(soonAfter.y).toBeLessThan(launch.y);
+    }
   });
 });

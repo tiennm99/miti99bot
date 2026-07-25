@@ -24,6 +24,16 @@ const minLabelFontSize = 8;
 const preferredLabelFontSize = 14;
 
 /**
+ * Line box as a multiple of the font size.
+ *
+ * Vietnamese stacks a tone mark above and a dot below the same vowel, so a
+ * ratio of exactly 1 leaves marks from adjacent wrapped lines touching, and any
+ * font fallback with taller metrics clips against the label's `overflow:
+ * hidden`. Exported so the composition renders the same box this module sizes.
+ */
+export const labelLineHeightRatio = 1.16;
+
+/**
  * @param {string} text
  * @param {number} fontSize
  * @returns {number}
@@ -175,13 +185,25 @@ export const getLabelFontSize = (radius, optionCount, text = '', trackWidth = Nu
  * @param {number} input.centerDegrees
  * @param {number} input.optionCount
  * @param {string} input.text
+ * @param {number} [input.winnerCenterDegrees] center angle of the winning slice
  * @returns {RadialLabelLayout}
  */
-export const getRadialLabelLayout = ({center, radius, hubRadius, centerDegrees, optionCount, text}) => {
+export const getRadialLabelLayout = ({
+  center,
+  radius,
+  hubRadius,
+  centerDegrees,
+  optionCount,
+  text,
+  winnerCenterDegrees = 0,
+}) => {
   const track = getLabelTrack(radius, hubRadius);
   const radians = (centerDegrees * Math.PI) / 180;
   const baseFontSize = getLabelFontSize(radius, optionCount);
   const availableHeight = (2 * Math.PI * track.midRadius) / optionCount;
+  // Counted against the bare font size, not the line box: the fitted size below
+  // shrinks the text if the taller boxes overflow, so charging the ratio here
+  // too would drop a line that still fits once shrunk.
   const maxLines = Math.max(1, Math.min(3, Math.floor(availableHeight / baseFontSize)));
   const horizontalPadding = Math.max(4, radius * 0.02);
   const contentWidth = Math.max(1, track.width - horizontalPadding * 2);
@@ -197,16 +219,34 @@ export const getRadialLabelLayout = ({center, radius, hubRadius, centerDegrees, 
   const fontSize = shouldWrap
     ? getLabelFontSize(radius, optionCount, longestLine, contentWidth)
     : singleLineFontSize;
+  // Shrink to fit the taller line box rather than letting `overflow: hidden`
+  // crop the last line.
+  const blockHeight = fontSize * labelLineHeightRatio * lines.length;
+  const fittedFontSize =
+    blockHeight > availableHeight
+      ? Math.max(minLabelFontSize, Math.floor(fontSize * (availableHeight / blockHeight)))
+      : fontSize;
+  // Labels stay radial, but a slice whose rest-frame angle points left would
+  // render its text mirrored. Flipping by the angle the slice lands at makes
+  // every label upright in the final frame, which is the frame chat clients
+  // show as the GIF's poster image.
+  //
+  // The boundary is inclusive at 90 and exclusive at 270 so the two labels that
+  // land exactly vertical — which happens on every option count divisible by
+  // four — both read in the same direction. Neither is mirrored either way, but
+  // opposite reading directions make the pair look like a mistake.
+  const restAngle = (((centerDegrees - winnerCenterDegrees) % 360) + 360) % 360;
+  const flip = restAngle >= 90 && restAngle < 270 ? 180 : 0;
 
   return {
     x: center + Math.cos(radians) * track.midRadius,
     y: center + Math.sin(radians) * track.midRadius,
     width: track.width,
     contentWidth,
-    height: Math.min(availableHeight, fontSize * lines.length),
+    height: Math.min(availableHeight, fittedFontSize * labelLineHeightRatio * lines.length),
     horizontalPadding,
-    rotation: centerDegrees,
-    fontSize,
+    rotation: centerDegrees + flip,
+    fontSize: fittedFontSize,
     lines,
   };
 };

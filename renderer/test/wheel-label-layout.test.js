@@ -5,7 +5,9 @@ import {
   getLabelLines,
   getLabelTrack,
   getRadialLabelLayout,
+  labelLineHeightRatio,
 } from '../src/remotion/wheel-label-layout.js';
+import {getFinalWheelRotationDegrees, getSliceCenterDegrees} from '../src/remotion/wheel-layout.js';
 
 describe('wheel label layout', () => {
   const readableExample = 'Chiều nay uống CraneTea';
@@ -50,7 +52,7 @@ describe('wheel label layout', () => {
     expect(layout.rotation).toBe(centerDegrees);
   });
 
-  test('keeps left-side text aligned with the slice instead of flipping it upright', () => {
+  test('flips labels that would rest mirrored so the poster frame reads upright', () => {
     const layout = getRadialLabelLayout({
       center: 256,
       radius: 210,
@@ -58,9 +60,82 @@ describe('wheel label layout', () => {
       centerDegrees: 180,
       optionCount: 8,
       text: 'left side',
+      winnerCenterDegrees: 0,
     });
 
-    expect(layout.rotation).toBe(180);
+    expect(layout.rotation).toBe(360);
+  });
+
+  test('gives both exactly-vertical labels the same reading direction', () => {
+    // Option counts divisible by four always land two labels at exactly 90 and
+    // 270 degrees. Radial layout cannot make those horizontal, but it can stop
+    // them pointing opposite ways.
+    for (const optionCount of [4, 8, 12, 16, 20, 24, 32]) {
+      const winnerIndex = 1;
+      const winnerCenterDegrees = getSliceCenterDegrees(optionCount, winnerIndex);
+      const restRotation = getFinalWheelRotationDegrees(optionCount, winnerIndex);
+      /** @type {number[]} */
+      const verticalScreenAngles = [];
+
+      for (let index = 0; index < optionCount; index += 1) {
+        const layout = getRadialLabelLayout({
+          center: 256,
+          radius: 210,
+          hubRadius: 46,
+          centerDegrees: getSliceCenterDegrees(optionCount, index),
+          optionCount,
+          text: 'name',
+          winnerCenterDegrees,
+        });
+        const screenAngle = (((layout.rotation + restRotation) % 360) + 360) % 360;
+
+        if (Math.abs(screenAngle - 90) < 0.001 || Math.abs(screenAngle - 270) < 0.001) {
+          verticalScreenAngles.push(Math.round(screenAngle));
+        }
+      }
+
+      expect(verticalScreenAngles).toHaveLength(2);
+      expect(new Set(verticalScreenAngles).size).toBe(1);
+    }
+  });
+
+  test('leaves every label upright once the wheel rests on the winner', () => {
+    for (const optionCount of [2, 3, 6, 8, 9, 16]) {
+      for (const winnerIndex of [0, 1, optionCount - 1]) {
+        const winnerCenterDegrees = getSliceCenterDegrees(optionCount, winnerIndex);
+
+        for (let index = 0; index < optionCount; index += 1) {
+          const layout = getRadialLabelLayout({
+            center: 256,
+            radius: 210,
+            hubRadius: 46,
+            centerDegrees: getSliceCenterDegrees(optionCount, index),
+            optionCount,
+            text: 'name',
+            winnerCenterDegrees,
+          });
+          // Angle the text actually sits at once the wheel has stopped.
+          const restRotation = getFinalWheelRotationDegrees(optionCount, winnerIndex);
+          const screenAngle = (((layout.rotation + restRotation) % 360) + 360) % 360;
+
+          expect(screenAngle > 90 && screenAngle < 270).toBe(false);
+        }
+      }
+    }
+  });
+
+  test('fits the taller line box instead of cropping the last line', () => {
+    // Vietnamese stacks a mark above and below the same vowel, so the rendered
+    // block is taller than fontSize x lines and must still fit the wedge.
+    for (const optionCount of [2, 4, 8, 12, 16, 24, 32]) {
+      const layout = get512Layout({optionCount});
+      const availableHeight =
+        (2 * Math.PI * getLabelTrack(supportedRadius, supportedHubRadius).midRadius) / optionCount;
+      const renderedHeight = layout.fontSize * labelLineHeightRatio * layout.lines.length;
+
+      expect(renderedHeight).toBeLessThanOrEqual(availableHeight);
+      expect(layout.height).toBeLessThanOrEqual(availableHeight);
+    }
   });
 
   test('keeps short labels on one line at the base size', () => {
