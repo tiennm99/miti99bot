@@ -84,6 +84,42 @@ func teamLabel(t Team) string {
 	return "TBD"
 }
 
+// declaredOutcome returns a team's upstream-declared series outcome ("win" or
+// "loss"), or "" when upstream has not published one. Two distinct upstream
+// shapes collapse to "": a missing `result` object, and the far more common
+// `{"outcome": null, "gameWins": 0}`.
+func declaredOutcome(t Team) string {
+	if t.Result == nil {
+		return ""
+	}
+	return t.Result.Outcome
+}
+
+// seriesWins returns a team's games won in the series, 0 when upstream has sent
+// no result. Only meaningful once an outcome has been declared — see
+// scoreIsPublished.
+func seriesWins(t Team) int {
+	if t.Result == nil {
+		return 0
+	}
+	return t.Result.GameWins
+}
+
+// scoreIsPublished reports whether a finished series has a score we can quote.
+//
+// lolesports drives `event.state` off the broadcast timeline and fills
+// `result.outcome`/`result.gameWins` from a separate per-game ingestion path,
+// so a match reads as "completed" for hours before (or without ever) gaining a
+// score. In that window every team carries `{"outcome": null, "gameWins": 0}`,
+// which a nil-check cannot catch because the object itself is present — and
+// Go's zero value for the absent gameWins then renders as a literal 0.
+//
+// An outcome on either side is enough: it proves the ingestion ran, so the
+// gameWins alongside it are real even if the other side's result is sparse.
+func scoreIsPublished(t1, t2 Team) bool {
+	return declaredOutcome(t1) != "" || declaredOutcome(t2) != ""
+}
+
 // formatEventLine renders one match as a single line. Already HTML-safe;
 // caller can join with "\n" inside a league section.
 func formatEventLine(e ScheduleEvent) string {
@@ -107,31 +143,28 @@ func formatEventLine(e ScheduleEvent) string {
 
 	switch e.State {
 	case "completed":
-		var w1, w2 int
-		if t1.Result != nil {
-			w1 = t1.Result.GameWins
-		}
-		if t2.Result != nil {
-			w2 = t2.Result.GameWins
+		// Upstream says the series is over but has published no outcome, so we
+		// have no score to report. Show the matchup and say so rather than let
+		// the absent gameWins render as a 0–0 that nobody played.
+		if !scoreIsPublished(t1, t2) {
+			return fmt.Sprintf("☑️ %s vs %s%s%s · score pending", t1Label, t2Label, bo, block)
 		}
 		left := t1Label
-		if t1.Result != nil && t1.Result.Outcome == "win" {
+		if declaredOutcome(t1) == "win" {
 			left = "<b>" + t1Label + "</b>"
 		}
 		right := t2Label
-		if t2.Result != nil && t2.Result.Outcome == "win" {
+		if declaredOutcome(t2) == "win" {
 			right = "<b>" + t2Label + "</b>"
 		}
-		return fmt.Sprintf("✅ %s %d–%d %s%s%s", left, w1, w2, right, bo, block)
+		return fmt.Sprintf("✅ %s %d–%d %s%s%s",
+			left, seriesWins(t1), seriesWins(t2), right, bo, block)
 	case "inProgress":
-		var w1, w2 int
-		if t1.Result != nil {
-			w1 = t1.Result.GameWins
-		}
-		if t2.Result != nil {
-			w2 = t2.Result.GameWins
-		}
-		return fmt.Sprintf("🔴 LIVE %s %d–%d %s%s%s", t1Label, w1, w2, t2Label, bo, block)
+		// No published-score guard here: a live series legitimately sits at 0–0
+		// until its first game resolves, and upstream declares no outcome until
+		// the series ends.
+		return fmt.Sprintf("🔴 LIVE %s %d–%d %s%s%s",
+			t1Label, seriesWins(t1), seriesWins(t2), t2Label, bo, block)
 	default:
 		t, err := time.Parse(time.RFC3339, e.StartTime)
 		if err != nil {
