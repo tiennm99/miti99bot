@@ -66,6 +66,74 @@ func TestFormatEventLine_Completed_BoldsWinner(t *testing.T) {
 	}
 }
 
+// Upstream flips state to "completed" when the broadcast window closes, but
+// fills gameWins/outcome from a separate per-game ingestion path. In the gap it
+// sends {"outcome": null, "gameWins": 0} for both teams — a shape that must not
+// be reported as a real 0–0 draw.
+func TestFormatEventLine_CompletedWithoutResults_OmitsScore(t *testing.T) {
+	pending := &TeamResult{} // json `{"outcome": null, "gameWins": 0}`
+	e := ScheduleEvent{
+		StartTime: "2026-07-25T17:30:00Z",
+		State:     "completed",
+		BlockName: "Week 1",
+		League:    League{Slug: "lec", Name: "LEC"},
+		Match: Match{
+			Teams: []Team{
+				{Code: "MKOI", Result: pending},
+				{Code: "KC", Result: pending},
+			},
+			Strategy: Strategy{Type: "bestOf", Count: 3},
+		},
+	}
+	got := formatEventLine(e)
+	if strings.Contains(got, "0–0") {
+		t.Errorf("fabricated 0–0 score for unscored match: %q", got)
+	}
+	if strings.Contains(got, "✅") {
+		t.Errorf("unscored match should not use the scored-result glyph: %q", got)
+	}
+	if !strings.Contains(got, "MKOI vs KC") {
+		t.Errorf("missing matchup: %q", got)
+	}
+	if !strings.Contains(got, "Bo3") || !strings.Contains(got, "Week 1") {
+		t.Errorf("lost static metadata: %q", got)
+	}
+}
+
+// A missing result object entirely (no `result` key) is the same class of
+// unknown as a null outcome.
+func TestFormatEventLine_CompletedNilResult_OmitsScore(t *testing.T) {
+	e := mkEvent("completed", "lck", "LCK", "T1", "GEN", "2026-05-09T05:00:00Z")
+	got := formatEventLine(e)
+	if strings.Contains(got, "0–0") {
+		t.Errorf("fabricated 0–0 score for nil-result match: %q", got)
+	}
+}
+
+// One side declaring an outcome is enough to trust the score, even if the
+// other side's result is absent.
+func TestFormatEventLine_CompletedPartialResult_KeepsScore(t *testing.T) {
+	e := ScheduleEvent{
+		StartTime: "2026-05-09T05:00:00Z",
+		State:     "completed",
+		League:    League{Slug: "lck", Name: "LCK"},
+		Match: Match{
+			Teams: []Team{
+				{Code: "T1", Result: &TeamResult{Outcome: "win", GameWins: 2}},
+				{Code: "GEN"},
+			},
+			Strategy: Strategy{Count: 3},
+		},
+	}
+	got := formatEventLine(e)
+	if !strings.Contains(got, "2–0") {
+		t.Errorf("score dropped despite a declared outcome: %q", got)
+	}
+	if !strings.Contains(got, "<b>T1</b>") {
+		t.Errorf("winner not bolded: %q", got)
+	}
+}
+
 func TestFormatEventLine_InProgress(t *testing.T) {
 	w := &TeamResult{GameWins: 1}
 	e := ScheduleEvent{
