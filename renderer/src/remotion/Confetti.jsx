@@ -43,7 +43,10 @@ export const Confetti = ({startFrame, colors, seed, count = 70}) => {
   });
 
   return (
-    <AbsoluteFill style={{opacity, pointerEvents: 'none', zIndex: 10}}>
+    // Above the winner pill: the pill covers the hub the burst arcs across, and
+    // behind it the celebration lost most of its particles at exactly the moment
+    // it fires.
+    <AbsoluteFill style={{opacity, pointerEvents: 'none', zIndex: 20}}>
       {particles.map((particle, index) => {
         // Staggered launch: an unlaunched particle would otherwise stack on its
         // muzzle and the pile reads as a clump of paper sitting in the corner.

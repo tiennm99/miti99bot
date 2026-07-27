@@ -17,12 +17,9 @@ export const themes = {
     pointer: '#ef4444',
     pointerStroke: '#991b1b',
     text: '#111827',
+    textInverse: '#ffffff',
     textHalo: 'rgba(255, 255, 255, 0.88)',
     sliceStroke: '#ffffff',
-    winnerStroke: '#111827',
-    winnerPillBg: '#111827',
-    winnerPillText: '#ffffff',
-    winnerPillRing: '#facc15',
     slices: ['#f97316', '#14b8a6', '#f472b6', '#60a5fa', '#facc15', '#a78bfa', '#fb7185', '#34d399'],
     confetti: ['#f97316', '#14b8a6', '#f59e0b', '#3b82f6', '#ec4899', '#8b5cf6', '#10b981', '#f43f5e'],
   },
@@ -34,12 +31,9 @@ export const themes = {
     pointer: '#dc2626',
     pointerStroke: '#7f1d1d',
     text: '#1f2937',
+    textInverse: '#fffbeb',
     textHalo: 'rgba(255, 251, 235, 0.92)',
     sliceStroke: '#ffffff',
-    winnerStroke: '#7f1d1d',
-    winnerPillBg: '#7f1d1d',
-    winnerPillText: '#fffbeb',
-    winnerPillRing: '#f59e0b',
     slices: ['#fb7185', '#06b6d4', '#84cc16', '#a78bfa', '#f59e0b', '#f472b6', '#fb923c', '#22c55e'],
     confetti: ['#f43f5e', '#ea580c', '#65a30d', '#0891b2', '#7c3aed', '#db2777', '#16a34a', '#d97706'],
   },
@@ -51,14 +45,11 @@ export const themes = {
     pointer: '#27272a',
     pointerStroke: '#09090b',
     text: '#18181b',
+    textInverse: '#fafafa',
     textHalo: 'rgba(250, 250, 250, 0.9)',
     // Grey dividers instead of white: the lightest slices sit within 1.1:1 of
     // the background, so a white stroke leaves the wheel with no silhouette.
     sliceStroke: '#71717a',
-    winnerStroke: '#18181b',
-    winnerPillBg: '#18181b',
-    winnerPillText: '#fafafa',
-    winnerPillRing: '#a1a1aa',
     slices: ['#87878f', '#cacad0', '#9d9da5', '#e1e1e5', '#b3b3ba', '#f9f9fa'],
     // Inverted to darks: every slice color in this theme is within 2.4:1 of the
     // background and disappears at particle size.
@@ -96,3 +87,101 @@ export const getSliceColorIndex = (index, optionCount, paletteLength) => {
 
   return index % paletteLength;
 };
+
+/**
+ * Resolves the color a slice is painted with.
+ *
+ * @param {{slices: string[]}} theme
+ * @param {number} index slice index
+ * @param {number} optionCount total slices
+ * @returns {string}
+ */
+export const getSliceColor = (theme, index, optionCount) =>
+  theme.slices[getSliceColorIndex(index, optionCount, theme.slices.length)] ??
+  theme.slices[0] ??
+  '#cccccc';
+
+/**
+ * @param {string} hex `#rrggbb`
+ * @returns {number[]} channel values in [0, 255]
+ */
+const parseHex = (hex) =>
+  (hex.replace('#', '').match(/.{2}/gu) ?? []).map((channel) => Number.parseInt(channel, 16));
+
+/**
+ * @param {number[]} channels
+ * @returns {string}
+ */
+const toHex = (channels) =>
+  `#${channels
+    .map((channel) => Math.round(Math.min(255, Math.max(0, channel))).toString(16).padStart(2, '0'))
+    .join('')}`;
+
+/**
+ * @param {string} from
+ * @param {string} to
+ * @param {number} amount 0 keeps `from`, 1 returns `to`
+ * @returns {string}
+ */
+const mixColors = (from, to, amount) => {
+  const source = parseHex(from);
+  const target = parseHex(to);
+
+  return toHex(source.map((channel, index) => channel + ((target[index] ?? channel) - channel) * amount));
+};
+
+/**
+ * @param {string} hex
+ * @returns {number}
+ */
+const getRelativeLuminance = (hex) => {
+  const [red = 0, green = 0, blue = 0] = parseHex(hex)
+    .map((channel) => channel / 255)
+    .map((channel) => (channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4));
+
+  return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
+};
+
+/**
+ * @param {string} foreground
+ * @param {string} background
+ * @returns {number} WCAG contrast ratio
+ */
+const getContrastRatio = (foreground, background) => {
+  const first = getRelativeLuminance(foreground);
+  const second = getRelativeLuminance(background);
+
+  return (Math.max(first, second) + 0.05) / (Math.min(first, second) + 0.05);
+};
+
+/**
+ * How far the winner outline is pulled from the slice color toward the theme
+ * ink. Enough to clear 3:1 against every slice in every theme, while keeping
+ * the hue so the outline reads as belonging to the slice it frames.
+ */
+const winnerOutlineInkMix = 0.72;
+
+/**
+ * Winner colors derived from the winning slice.
+ *
+ * The celebration is tied to the slice that actually won: the announcement
+ * carries that slice's color and both it and the wheel outline are framed in a
+ * deepened version of the same hue. A fixed dark chip read as an unrelated
+ * element pasted over the wheel.
+ *
+ * Ink is chosen by contrast rather than fixed, because a palette entry light
+ * enough to carry dark label text is not guaranteed to carry it at pill size in
+ * every future theme.
+ *
+ * @param {{slices: string[], text: string, textInverse: string}} theme
+ * @param {string} sliceColor color of the winning slice
+ * @returns {{background: string, outline: string, text: string}}
+ */
+export const getWinnerPalette = (theme, sliceColor) => ({
+  background: sliceColor,
+  outline: mixColors(sliceColor, theme.text, winnerOutlineInkMix),
+  text:
+    getContrastRatio(theme.text, sliceColor) >= getContrastRatio(theme.textInverse, sliceColor)
+      ? theme.text
+      : theme.textInverse,
+});

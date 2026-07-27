@@ -17,6 +17,21 @@ const makeRandom = () => {
   };
 };
 
+// Hash source for distribution checks: the cyclic stub above only spans ten
+// values, which is too coarse to say anything about where a field of 70
+// particles ends up.
+const makeHashRandom = (/** @type {number} */ seed) => (/** @type {string} */ key) => {
+  let hash = 2166136261;
+  const input = `${seed}-${key}`;
+
+  for (let index = 0; index < input.length; index += 1) {
+    hash ^= input.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+
+  return ((hash >>> 0) % 100000) / 100000;
+};
+
 describe('confetti layout', () => {
   test('creates the requested particle count', () => {
     const particles = createConfettiParticles({
@@ -112,6 +127,56 @@ describe('confetti layout', () => {
       // Inward launch: left cannon throws right, right cannon throws left.
       expect(particle.originX < size / 2 ? particle.vx > 0 : particle.vx < 0).toBe(true);
     }
+  });
+
+  test('spreads the field around the winner announcement, not onto it', () => {
+    const size = CONFETTI_REFERENCE_SIZE;
+    const fps = 15;
+    const holdFrames = 18;
+    // The pill sits over the hub, measured as a fraction of the canvas at the
+    // longest name that still fits two lines.
+    const pill = {x0: 0.34 * size, x1: 0.66 * size, y0: 0.43 * size, y1: 0.57 * size};
+    const discRadius = 0.41 * size;
+    let onPill = 0;
+    let onDisc = 0;
+    let samples = 0;
+
+    for (let seed = 0; seed < 12; seed += 1) {
+      const particles = createConfettiParticles({
+        colors: ['#000'],
+        count: 70,
+        random: makeHashRandom(seed),
+        size,
+        windowSeconds: holdFrames / fps,
+      });
+
+      for (let frame = 0; frame <= holdFrames; frame += 1) {
+        const seconds = frame / fps;
+
+        for (const particle of particles) {
+          if (seconds < particle.delay) {
+            continue;
+          }
+
+          const state = getConfettiParticleState(particle, seconds);
+          samples += 1;
+
+          if (state.x >= pill.x0 && state.x <= pill.x1 && state.y >= pill.y0 && state.y <= pill.y1) {
+            onPill += 1;
+          }
+
+          if (Math.hypot(state.x - size / 2, state.y - size / 2) <= discRadius) {
+            onDisc += 1;
+          }
+        }
+      }
+    }
+
+    // Confetti draws in front of the pill, so a flat launch fan that parks the
+    // whole field at mid-canvas buries the winner's name.
+    expect(onPill / samples).toBeLessThan(0.12);
+    // ...without pushing the burst off the wheel it is celebrating.
+    expect(onDisc / samples).toBeGreaterThan(0.6);
   });
 
   test('drag gives a terminal fall speed instead of unbounded acceleration', () => {

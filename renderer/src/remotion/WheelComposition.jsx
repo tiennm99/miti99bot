@@ -17,7 +17,7 @@ import {
   getRadialLabelLayout,
   labelLineHeightRatio,
 } from './wheel-label-layout.js';
-import {getSliceColorIndex, getTheme} from './themes.js';
+import {getSliceColor, getTheme, getWinnerPalette} from './themes.js';
 import {Confetti} from './Confetti.jsx';
 
 const baseFont =
@@ -74,7 +74,11 @@ export const WheelComposition = (props) => {
     }) + getSpinRecoilDegrees(frame, spinFrames, sliceDegrees);
   const pointerDeflection = getPointerDeflectionDegrees(rotation, sliceDegrees);
 
-  const paletteLength = theme.slices.length;
+  const winnerPalette = getWinnerPalette(
+    theme,
+    getSliceColor(theme, props.winnerIndex, props.options.length),
+  );
+  const winnerOutlineWidth = 4 + Math.round(winnerPulse * 3);
   // The width estimator is calibrated against the 700-weight slice labels, so
   // the 800-weight pill runs wider than it predicts. Budgeting for that keeps
   // the browser from re-wrapping past the two lines chosen here.
@@ -148,9 +152,7 @@ export const WheelComposition = (props) => {
           {props.options.map((option, index) => {
             const start = index * sliceDegrees;
             const centerDegrees = getSliceCenterDegrees(props.options.length, index);
-            const isWinner = index === props.winnerIndex;
-            const colorIndex = getSliceColorIndex(index, props.options.length, paletteLength);
-            const color = theme.slices[colorIndex] ?? theme.slices[0] ?? '#cccccc';
+            const color = getSliceColor(theme, index, props.options.length);
             const label = getRadialLabelLayout({
               center,
               radius,
@@ -168,12 +170,8 @@ export const WheelComposition = (props) => {
                   progress={1 / props.options.length}
                   radius={radius}
                   rotation={cssDegreesToPieRadians(start)}
-                  // An opaque stroke instead of a blurred drop-shadow: a filter
-                  // on a Pie paints outside the shape, so later siblings
-                  // overpaint it and only one neighbour shows the halo. A stroke
-                  // also stays legible after GIF quantisation.
-                  stroke={isWinner && isRevealed ? theme.winnerStroke : theme.sliceStroke}
-                  strokeWidth={isWinner && isRevealed ? 4 + Math.round(winnerPulse * 3) : 2}
+                  stroke={theme.sliceStroke}
+                  strokeWidth={2}
                   style={{
                     left: center - radius,
                     position: 'absolute',
@@ -214,6 +212,28 @@ export const WheelComposition = (props) => {
               </React.Fragment>
             );
           })}
+
+          {/* Drawn after every slice rather than as a stroke on the winning one:
+              slices paint in index order, so the next slice's fill and divider
+              cover the shared radial edge and the outline stops short of
+              wrapping the wedge. An unfilled pie on top traces all three edges.
+              An opaque stroke, not a blurred filter — a filter on a Pie paints
+              outside the shape and a stroke survives GIF quantisation. */}
+          {isRevealed && (
+            <Pie
+              fill="none"
+              progress={1 / props.options.length}
+              radius={radius}
+              rotation={cssDegreesToPieRadians(props.winnerIndex * sliceDegrees)}
+              stroke={winnerPalette.outline}
+              strokeWidth={winnerOutlineWidth}
+              style={{
+                left: center - radius,
+                position: 'absolute',
+                top: center - radius,
+              }}
+            />
+          )}
         </div>
 
         <Circle
@@ -254,16 +274,17 @@ export const WheelComposition = (props) => {
           <div
             style={{
               alignItems: 'center',
-              background: theme.winnerPillBg,
+              // Winner's own slice color, framed in a deepened version of it.
+              background: winnerPalette.background,
               borderRadius: size * 0.03,
-              color: theme.winnerPillText,
+              color: winnerPalette.text,
               display: 'flex',
               fontSize: winnerFontSize,
               fontWeight: 800,
               justifyContent: 'center',
               left: '50%',
               lineHeight: 1.2,
-              outline: `${Math.round(size * 0.008)}px solid ${theme.winnerPillRing}`,
+              outline: `${Math.round(size * 0.008)}px solid ${winnerPalette.outline}`,
               padding: `${size * 0.022}px ${size * 0.042}px`,
               position: 'absolute',
               textAlign: 'center',
@@ -273,7 +294,10 @@ export const WheelComposition = (props) => {
               // fit, and letting the browser re-wrap them turned a long name
               // into a four-line block that covered the wheel.
               whiteSpace: 'pre',
-              // Above the confetti layer so the announcement is never occluded.
+              // Above the wheel, below the confetti: chips passing in front sell
+              // the burst as happening around the announcement instead of being
+              // swallowed by it, and a chip covers any given glyph for a frame
+              // or two at most.
               zIndex: 12,
             }}
           >

@@ -1,5 +1,5 @@
 import {describe, expect, test} from 'vitest';
-import {getSliceColorIndex, themes} from '../src/remotion/themes.js';
+import {getSliceColor, getSliceColorIndex, getWinnerPalette, themes} from '../src/remotion/themes.js';
 
 /**
  * @param {string} color
@@ -51,8 +51,38 @@ describe('wheel themes', () => {
     }
   });
 
-  test.each(Object.entries(themes))('%s reads the winner pill over its own background', (_name, theme) => {
-    expect(getContrastRatio(theme.winnerPillText, theme.winnerPillBg)).toBeGreaterThanOrEqual(4.5);
+  test.each(Object.entries(themes))('%s reads the winner name over any winning slice', (_name, theme) => {
+    for (const slice of theme.slices) {
+      const palette = getWinnerPalette(theme, slice);
+
+      expect(getContrastRatio(palette.text, palette.background)).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  test.each(Object.entries(themes))('%s frames the winner in its own hue', (_name, theme) => {
+    for (const slice of theme.slices) {
+      const palette = getWinnerPalette(theme, slice);
+
+      // The outline separates the pill from the wheel behind it and the winning
+      // wedge from its neighbours, so it has to clear both the slice it frames
+      // and the page.
+      expect(getContrastRatio(palette.outline, slice)).toBeGreaterThanOrEqual(3);
+      expect(getContrastRatio(palette.outline, theme.background)).toBeGreaterThanOrEqual(3);
+      // Derived from the slice, not a fixed chip: two different winners must not
+      // produce the same frame.
+      expect(palette.outline).not.toBe(theme.text);
+    }
+  });
+
+  test.each(Object.entries(themes))('%s paints the winner pill in the winning slice color', (_name, theme) => {
+    for (let optionCount = 2; optionCount <= 12; optionCount += 1) {
+      for (let winnerIndex = 0; winnerIndex < optionCount; winnerIndex += 1) {
+        const slice = getSliceColor(theme, winnerIndex, optionCount);
+
+        expect(theme.slices).toContain(slice);
+        expect(getWinnerPalette(theme, slice).background).toBe(slice);
+      }
+    }
   });
 
   test.each(Object.entries(themes))('%s never puts one color on adjacent slices', (_name, theme) => {

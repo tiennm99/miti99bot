@@ -73,6 +73,19 @@ const stretchReferenceSpeed = 1200;
 const cannonInset = 0.08;
 const cannonHeight = 0.8;
 
+/**
+ * Launch fan for the left cannon, in degrees; 0 points right and negative
+ * points up. The right cannon mirrors it.
+ *
+ * Steep rather than flat: horizontal reach is `vx / drag`, so a flat fan parks
+ * the whole field around mid-canvas, which is exactly where the winner
+ * announcement sits. Angling the charge up trades that reach for height, and
+ * the chips rain down across the disc on either side of the pill instead of
+ * settling on top of it.
+ */
+const minLaunchDegrees = -86;
+const maxLaunchDegrees = -54;
+
 /** Body size range in px at the reference size. */
 const minWidth = 6;
 const maxWidth = 18;
@@ -134,7 +147,8 @@ const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
  * Alternating particles launch from the lower-left and lower-right corners and
  * arc inward across the disc. Launching from the corners rather than the hub
  * keeps the dense opening frames over plain background, where the pop is
- * legible, and clear of the winner pill that covers the hub during the hold.
+ * legible, and spreads the field over the whole canvas rather than piling it on
+ * the winner announcement.
  *
  * @param {object} params
  * @param {number} params.count number of particles
@@ -158,7 +172,9 @@ export const createConfettiParticles = ({count, size, colors, random, windowSeco
     const width = lerp(sizeNorm, minWidth, maxWidth) * scale;
     // Mirror the left cannon's fan: 0deg points right, negative points up.
     const spread = rand('angle');
-    const angleDegrees = fromLeft ? lerp(spread, -78, -40) : lerp(spread, -140, -102);
+    const angleDegrees = fromLeft
+      ? lerp(spread, minLaunchDegrees, maxLaunchDegrees)
+      : lerp(spread, -180 - minLaunchDegrees, -180 - maxLaunchDegrees);
     const angleRadians = (angleDegrees * Math.PI) / 180;
     const speed = lerp(rand('speed'), minSpeed, maxSpeed) * scale;
     const delayRoll = rand('delay');
