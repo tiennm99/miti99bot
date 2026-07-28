@@ -1,5 +1,5 @@
+import {randomInt} from 'node:crypto';
 import {parseArgs} from 'node:util';
-import {pickWinnerIndex} from '../src/lib/winner.js';
 import {parseWheelRequest} from '../src/schemas/wheel-request.js';
 
 const limits = {
@@ -87,7 +87,7 @@ export const parseRenderLocalArgs = (args) => {
   return {
     help: false,
     output: values.output,
-    request: parseWheelRequest(input, limits, pickWinnerIndex),
+    request: parseWheelRequest(input, limits, randomInt),
     timeoutInMilliseconds,
   };
 };

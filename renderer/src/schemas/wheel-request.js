@@ -1,5 +1,8 @@
 import {z} from 'zod';
 
+export const themes = ['classic', 'festival', 'mono'];
+export const allowedSizes = [384, 480, 512];
+export const allowedFps = [12, 15, 20];
 const themeSchema = z.union([z.literal('classic'), z.literal('festival'), z.literal('mono')]);
 
 /**

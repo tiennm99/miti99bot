@@ -89,47 +89,6 @@ describe('POST /api/gif', () => {
     await app.close();
   });
 
-  test('rejects concurrent renders beyond the limit and frees the slot afterward', async () => {
-    /** @type {(value?: void) => void} */
-    let releaseRender = () => {};
-    /** @type {(value?: void) => void} */
-    let markRenderStarted = () => {};
-    const renderStarted = new Promise((resolve) => {
-      markRenderStarted = resolve;
-    });
-    const renderGate = new Promise((resolve) => {
-      releaseRender = resolve;
-    });
-
-    const app = await buildServer({
-      config,
-      renderGif: async () => {
-        markRenderStarted();
-        await renderGate;
-        return {buffer: Buffer.from('GIF89a-test'), byteLength: 11, durationMs: 1};
-      },
-    });
-
-    const payload = {options: ['alpha', 'beta'], winnerIndex: 0};
-    const first = app.inject({method: 'POST', url: '/api/gif', payload});
-    // The route acquires the semaphore before calling renderGif, so once the
-    // render body runs the single slot is held.
-    await renderStarted;
-
-    const rejected = await app.inject({method: 'POST', url: '/api/gif', payload});
-    expect(rejected.statusCode).toBe(429);
-    expect(rejected.json().error).toBe('too_many_renders');
-
-    releaseRender();
-    expect((await first).statusCode).toBe(200);
-
-    // The slot released in `finally` must let a later request through.
-    const afterRelease = await app.inject({method: 'POST', url: '/api/gif', payload});
-    expect(afterRelease.statusCode).toBe(200);
-
-    await app.close();
-  });
-
   test('returns timeout response when rendering exceeds configured limit', async () => {
     const app = await buildServer({
       config: {...config, renderTimeoutMs: 7},

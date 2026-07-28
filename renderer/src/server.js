@@ -45,7 +45,7 @@ export const buildServer = async (options = {}) => {
   return app;
 };
 
-if (import.meta.filename === process.argv[1]) {
+if (import.meta.url === `file://${process.argv[1]}`) {
   const config = loadConfig();
   const app = await buildServer({config});
   await app.listen({host: config.host, port: config.port});
