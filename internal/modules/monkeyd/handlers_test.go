@@ -3,6 +3,7 @@ package monkeyd
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -131,6 +132,71 @@ func TestCrawl_SendsPDFOnSuccess(t *testing.T) {
 	}
 	if caption := last.Form["caption"]; !strings.Contains(caption, "Example Novel") {
 		t.Errorf("caption = %q, want it to name the novel", caption)
+	}
+}
+
+func TestCrawl_PassesRequestedFontSizeToExporter(t *testing.T) {
+	rb, r := install(t, 999)
+	dir := t.TempDir()
+
+	var gotRequest export.Request
+	r.exporter = func(_ context.Context, req export.Request) (*export.Result, error) {
+		gotRequest = req
+		return stubPDF(t, dir, "Example-Novel.pdf", 2048), nil
+	}
+
+	rb.Bot.ProcessUpdate(context.Background(),
+		testutil.NewPrivateMessage(999, "/monkeyd_crawl "+testNovelURL+" 14"))
+
+	if gotRequest.FontSize != 14 {
+		t.Errorf("exporter got FontSize %v, want 14", gotRequest.FontSize)
+	}
+	if caption := rb.LastSent().Form["caption"]; !strings.Contains(caption, "14pt") {
+		t.Errorf("caption = %q, want it to report 14pt", caption)
+	}
+}
+
+// Omitting the argument must leave Export to apply its own default rather than
+// the bot inventing one, so the two cannot disagree.
+func TestCrawl_OmittedFontSizeLeavesRequestZero(t *testing.T) {
+	rb, r := install(t, 999)
+	dir := t.TempDir()
+
+	var gotRequest export.Request
+	r.exporter = func(_ context.Context, req export.Request) (*export.Result, error) {
+		gotRequest = req
+		return stubPDF(t, dir, "Example-Novel.pdf", 2048), nil
+	}
+
+	rb.Bot.ProcessUpdate(context.Background(),
+		testutil.NewPrivateMessage(999, "/monkeyd_crawl "+testNovelURL))
+
+	if gotRequest.FontSize != 0 {
+		t.Errorf("exporter got FontSize %v, want 0 (defer to Export)", gotRequest.FontSize)
+	}
+	// The caption still has to name a real size, not "0pt".
+	want := fmt.Sprintf("%gpt", export.DefaultFontSize)
+	if caption := rb.LastSent().Form["caption"]; !strings.Contains(caption, want) {
+		t.Errorf("caption = %q, want it to report %s", caption, want)
+	}
+}
+
+func TestCrawl_RejectsBadFontSize(t *testing.T) {
+	rb, r := install(t, 999)
+	called := false
+	r.exporter = func(context.Context, export.Request) (*export.Result, error) {
+		called = true
+		return nil, nil
+	}
+
+	rb.Bot.ProcessUpdate(context.Background(),
+		testutil.NewPrivateMessage(999, "/monkeyd_crawl "+testNovelURL+" 100"))
+
+	if called {
+		t.Error("exporter ran despite an out-of-range font size")
+	}
+	if got := rb.LastSent().Text(); !strings.Contains(got, "between 6 and 24") {
+		t.Errorf("reply = %q, want it to state the font size bounds", got)
 	}
 }
 
@@ -279,8 +345,8 @@ func TestRegistration(t *testing.T) {
 	if cmd.Visibility != modules.VisibilityPublic {
 		t.Errorf("Visibility = %v, want Public", cmd.Visibility)
 	}
-	if cmd.Parameters != "<url>" {
-		t.Errorf("Parameters = %q, want %q", cmd.Parameters, "<url>")
+	if cmd.Parameters != "<url> [font_size]" {
+		t.Errorf("Parameters = %q, want %q", cmd.Parameters, "<url> [font_size]")
 	}
 	if cmd.Description == "" {
 		t.Error("Description is empty; command discovery requires one")
