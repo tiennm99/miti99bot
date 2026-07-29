@@ -246,15 +246,24 @@ func TestCrawl_RepliesBusyWhileAnotherExportRuns(t *testing.T) {
 	}
 }
 
-// A Protected command must not respond at all to an unauthorized sender, or its
-// existence leaks.
-func TestCrawl_SilentForUnauthorizedSender(t *testing.T) {
-	rb, _ := install(t, 999)
-	rb.Bot.ProcessUpdate(context.Background(),
-		testutil.NewPrivateMessage(12345, "/monkeyd_crawl "+testNovelURL))
+// The command is public: a sender who is neither owner nor admin must still get
+// a reply, including in a group.
+func TestCrawl_AvailableToAnySender(t *testing.T) {
+	rb, r := install(t, 999)
+	dir := t.TempDir()
+	r.exporter = func(context.Context, export.Request) (*export.Result, error) {
+		return stubPDF(t, dir, "Example-Novel.pdf", 2048), nil
+	}
 
-	if calls := rb.Sent(); len(calls) != 0 {
-		t.Errorf("expected no reply to an unauthorized sender, got %+v", calls)
+	rb.Bot.ProcessUpdate(context.Background(),
+		testutil.NewGroupMessage(-100, 12345, "/monkeyd_crawl "+testNovelURL))
+
+	calls := rb.Sent()
+	if len(calls) == 0 {
+		t.Fatal("a non-admin sender got no reply from a public command")
+	}
+	if last := calls[len(calls)-1]; last.Method != "sendDocument" {
+		t.Errorf("last call = %q, want sendDocument", last.Method)
 	}
 }
 
@@ -267,8 +276,8 @@ func TestRegistration(t *testing.T) {
 	if cmd.Name != commandName {
 		t.Errorf("Name = %q, want %q", cmd.Name, commandName)
 	}
-	if cmd.Visibility != modules.VisibilityProtected {
-		t.Errorf("Visibility = %v, want Protected", cmd.Visibility)
+	if cmd.Visibility != modules.VisibilityPublic {
+		t.Errorf("Visibility = %v, want Public", cmd.Visibility)
 	}
 	if cmd.Parameters != "<url>" {
 		t.Errorf("Parameters = %q, want %q", cmd.Parameters, "<url>")
