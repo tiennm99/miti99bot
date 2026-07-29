@@ -39,9 +39,11 @@ func newModule(r *runner) modules.Module {
 		Commands: []modules.Command{
 			{
 				Name:       commandName,
-				Visibility: modules.VisibilityProtected,
-				// One invocation makes hundreds of outbound requests over
-				// several minutes, so it stays off the public surface.
+				Visibility: modules.VisibilityPublic,
+				// Public despite being expensive: one invocation makes
+				// hundreds of outbound requests over several minutes. The
+				// host allowlist and the single in-flight export are what
+				// bound the cost, so both are load-bearing here.
 				Description: "Export a " + AllowedHostsHint + " novel as a PDF",
 				Parameters:  "<url>",
 				Handler:     r.handle,

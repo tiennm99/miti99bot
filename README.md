@@ -16,7 +16,7 @@ Atlas via long polling and an in-process cron scheduler.
 | `gold` | Gold paper trading (opt-in; VNAppMob SJC buy/sell VND/luong) |
 | `coin` | Crypto paper trading in USD (Binance -> Coinbase -> CoinGecko price fallback) |
 | `stats` | `/stats` (top commands), `/stats users`, `/stats user <username>`, `/stats cmd <command_name>` |
-| `monkeyd` | `/monkeyd_crawl <url>` — export a monkeydd.com novel as a PDF (admin-only) |
+| `monkeyd` | `/monkeyd_crawl <url>` — export a monkeydd.com novel as a PDF |
 
 Disable modules with the `MODULES` environment variable.
 
@@ -138,24 +138,29 @@ crawling and rendering come from the
 [monkeyd-crawler](https://github.com/tiennm99/monkeyd-crawler) submodule; the
 module is the Telegram surface around it.
 
-The command is admin-only, because one invocation makes hundreds of outbound
-requests spread over several minutes. Only `monkeydd.com` URLs are accepted —
-the extractor is written against that site's markup, and the allowlist also
-keeps the bot from being used to fetch arbitrary URLs. A missing scheme is
-filled in, so a pasted bare hostname works.
+The command is public, so any member of a chat can run it. One invocation makes
+hundreds of outbound requests spread over several minutes, so two things bound
+the cost and are deliberate: only `monkeydd.com` URLs are accepted, and exactly
+one export runs at a time across the whole bot. A missing scheme is filled in,
+so a pasted bare hostname works.
 
-Exports run one at a time. The bot replies immediately that the export started,
-then sends the PDF when it is ready; a second request while one is in flight is
-told which novel is currently running. Requests are spaced out by the crawler,
-so the run is deliberately slow rather than aggressive.
+The host allowlist is not only about the parser — the extractor is written
+against that site's markup and would find nothing elsewhere — it also stops the
+command being used to make the bot fetch arbitrary URLs.
+
+The bot replies immediately that the export started, then sends the PDF when it
+is ready; a second request while one is in flight is told which novel is
+currently running. Requests are spaced out by the crawler, so a run is
+deliberately slow rather than aggressive.
 
 Raw pages are cached under the system temp directory, so re-exporting the same
 novel costs no requests. The cache is not pruned and a container restart clears
 it. Finished PDFs are deleted after upload. Telegram caps bot uploads at 50 MB;
 a larger book is reported instead of being sent.
 
-The runtime image installs DejaVuSans, since the PDF embeds a font that covers
-Vietnamese diacritics and the distroless base ships none.
+The PDF embeds a font covering Vietnamese diacritics. The crawler prefers a
+system font and falls back to one compiled into the binary, so the runtime
+image needs no fonts installed.
 
 ## Layout
 
