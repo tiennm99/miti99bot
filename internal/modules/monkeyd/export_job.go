@@ -43,7 +43,8 @@ const cacheDirName = "miti99bot-monkeyd-cache"
 
 // export runs one crawl to completion and delivers the PDF. It is called on its
 // own goroutine, detached from the Telegram handler context.
-func (r *runner) export(b *bot.Bot, msg *models.Message, novelURL string) {
+func (r *runner) export(b *bot.Bot, msg *models.Message, args crawlArgs) {
+	novelURL := args.NovelURL
 	defer r.end()
 	// A panic here would reach no handler recover and would take the whole
 	// process down with it, so contain it.
@@ -74,6 +75,9 @@ func (r *runner) export(b *bot.Bot, msg *models.Message, novelURL string) {
 	result, err := r.exporter(ctx, export.Request{
 		NovelURL: novelURL,
 		OutDir:   outDir,
+		// Zero means the caller gave no font size, which Export reads as
+		// "use the default" — exactly the intent.
+		FontSize: args.FontSize,
 		CacheDir: filepath.Join(os.TempDir(), cacheDirName),
 		// Per-chapter progress is one line per chapter — useful when
 		// diagnosing a stuck export, too noisy for the default level.
@@ -90,14 +94,23 @@ func (r *runner) export(b *bot.Bot, msg *models.Message, novelURL string) {
 	log.Info("monkeyd export done", "command", commandName, "url", novelURL,
 		"title", result.Title, "chapters", result.Chapters, "words", result.Words)
 
-	if err := sendPDF(b, msg, result); err != nil {
+	if err := sendPDF(b, msg, result, effectiveFontSize(args.FontSize)); err != nil {
 		log.Error("monkeyd delivery failed", "command", commandName, "url", novelURL, "err", err)
 		r.reportFailure(b, msg, "The novel was exported but the PDF could not be sent: "+err.Error())
 	}
 }
 
+// effectiveFontSize resolves what the renderer actually used, so the caption
+// can report a real number rather than "default".
+func effectiveFontSize(requested float64) float64 {
+	if requested == 0 {
+		return export.DefaultFontSize
+	}
+	return requested
+}
+
 // sendPDF uploads the finished book as a Telegram document.
-func sendPDF(b *bot.Bot, msg *models.Message, result *export.Result) error {
+func sendPDF(b *bot.Bot, msg *models.Message, result *export.Result, fontSize float64) error {
 	info, err := os.Stat(result.Path)
 	if err != nil {
 		return fmt.Errorf("stat pdf: %w", err)
@@ -125,7 +138,7 @@ func sendPDF(b *bot.Bot, msg *models.Message, result *export.Result) error {
 			Filename: filepath.Base(result.Path),
 			Data:     file,
 		},
-		Caption: caption(result),
+		Caption: caption(result, fontSize),
 	})
 	return err
 }
@@ -135,9 +148,9 @@ const captionLimit = 1024
 
 // caption describes the book under the document. Plain text, so a title
 // containing markup characters needs no escaping.
-func caption(result *export.Result) string {
-	text := fmt.Sprintf("%s\n%s page (%.0f x %.0f mm)\n%s",
-		result.Summary(), result.Page.Name, result.Page.W, result.Page.H, result.SourceURL)
+func caption(result *export.Result, fontSize float64) string {
+	text := fmt.Sprintf("%s\n%s page (%.0f x %.0f mm), %gpt\n%s",
+		result.Summary(), result.Page.Name, result.Page.W, result.Page.H, fontSize, result.SourceURL)
 	if runes := []rune(text); len(runes) > captionLimit {
 		text = string(runes[:captionLimit])
 	}

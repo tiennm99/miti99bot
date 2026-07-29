@@ -16,7 +16,7 @@ Atlas via long polling and an in-process cron scheduler.
 | `gold` | Gold paper trading (opt-in; VNAppMob SJC buy/sell VND/luong) |
 | `coin` | Crypto paper trading in USD (Binance -> Coinbase -> CoinGecko price fallback) |
 | `stats` | `/stats` (top commands), `/stats users`, `/stats user <username>`, `/stats cmd <command_name>` |
-| `monkeyd` | `/monkeyd_crawl <url>` — export a monkeydd.com novel as a PDF |
+| `monkeyd` | `/monkeyd_crawl <url> [font_size]` — export a monkeydd.com novel as a PDF |
 
 Disable modules with the `MODULES` environment variable.
 
@@ -132,11 +132,19 @@ prevents a position opened after Record date from applying an older event.
 
 ### Novel PDF export
 
-`/monkeyd_crawl <url>` downloads every chapter of a monkeydd.com novel and
-sends it back as a single PDF document, sized for reading on a phone. The
-crawling and rendering come from the
+`/monkeyd_crawl <url> [font_size]` downloads every chapter of a monkeydd.com
+novel and sends it back as a single PDF document, sized for reading on a phone.
+The crawling and rendering come from the
 [monkeyd-crawler](https://github.com/tiennm99/monkeyd-crawler) submodule; the
 module is the Telegram surface around it.
+
+`font_size` is the body text size in points and accepts half points. It ranges
+from 6 to 24 and defaults to the crawler's own default of 10, which fits roughly
+43 characters per line across 26 lines on the 90×160 mm page. Larger values
+trade characters per line for legibility: 12 gives about 36. Headings and the
+title page scale with it. Omitting the argument passes no size at all, so the
+crawler's default applies rather than a second one defined here. The document
+caption reports the size that was used.
 
 The command is public, so any member of a chat can run it. One invocation makes
 hundreds of outbound requests spread over several minutes, so two things bound
