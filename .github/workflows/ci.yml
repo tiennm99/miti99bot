@@ -16,7 +16,12 @@ jobs:
       matrix:
         go: ['1.26.5']
     steps:
+      # The monkeyd module builds against third_party/monkeyd-crawler, which is
+      # a submodule wired in through a go.mod replace directive. Without it
+      # checked out, every Go step fails to resolve the package.
       - uses: actions/checkout@v6
+        with:
+          submodules: true
 
       - uses: actions/setup-go@v6
         with:

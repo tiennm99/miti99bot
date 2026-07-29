@@ -16,6 +16,7 @@ Atlas via long polling and an in-process cron scheduler.
 | `gold` | Gold paper trading (opt-in; VNAppMob SJC buy/sell VND/luong) |
 | `coin` | Crypto paper trading in USD (Binance -> Coinbase -> CoinGecko price fallback) |
 | `stats` | `/stats` (top commands), `/stats users`, `/stats user <username>`, `/stats cmd <command_name>` |
+| `monkeyd` | `/monkeyd_crawl <url>` — export a monkeydd.com novel as a PDF (admin-only) |
 
 Disable modules with the `MODULES` environment variable.
 
@@ -129,6 +130,33 @@ The stock-only `assets.<ticker>.openedAt` marker identifies the current position
 lifecycle, invalidates buttons after a full sale and later repurchase, and
 prevents a position opened after Record date from applying an older event.
 
+### Novel PDF export
+
+`/monkeyd_crawl <url>` downloads every chapter of a monkeydd.com novel and
+sends it back as a single PDF document, sized for reading on a phone. The
+crawling and rendering come from the
+[monkeyd-crawler](https://github.com/tiennm99/monkeyd-crawler) submodule; the
+module is the Telegram surface around it.
+
+The command is admin-only, because one invocation makes hundreds of outbound
+requests spread over several minutes. Only `monkeydd.com` URLs are accepted —
+the extractor is written against that site's markup, and the allowlist also
+keeps the bot from being used to fetch arbitrary URLs. A missing scheme is
+filled in, so a pasted bare hostname works.
+
+Exports run one at a time. The bot replies immediately that the export started,
+then sends the PDF when it is ready; a second request while one is in flight is
+told which novel is currently running. Requests are spaced out by the crawler,
+so the run is deliberately slow rather than aggressive.
+
+Raw pages are cached under the system temp directory, so re-exporting the same
+novel costs no requests. The cache is not pruned and a container restart clears
+it. Finished PDFs are deleted after upload. Telegram caps bot uploads at 50 MB;
+a larger book is reported instead of being sent.
+
+The runtime image installs DejaVuSans, since the PDF embeds a font that covers
+Vietnamese diacritics and the distroless base ships none.
+
 ## Layout
 
 ```
@@ -139,11 +167,26 @@ internal/cron/               in-process cron scheduler
 internal/modules/            Module framework, registry, dispatchers, modules
 internal/storage/            typed DocStore[T] (Provider + Typed); mongodb runtime + memory (tests). Values persist as flattened native BSON root documents
 internal/systemstate/        shared `system` collection helper for startup migration records
+third_party/monkeyd-crawler/ git submodule; resolved by a go.mod replace directive
 compose.yml                  Coolify self-host stack (single bot service)
 docs/deploy-coolify-selfhosted.md    Self-host deploy and operations guide
 ```
 
 ## Run locally
+
+Clone with submodules — the `monkeyd` module builds against
+`third_party/monkeyd-crawler`, and Go resolves it through a `replace` directive
+pointing at that directory:
+
+```sh
+git clone --recurse-submodules https://github.com/tiennm99/miti99bot.git
+
+# already cloned without them:
+git submodule update --init --recursive
+```
+
+Without the submodule checked out, every Go command fails to resolve
+`github.com/tiennm99/monkeyd-crawler`.
 
 In-memory storage requires no database. Set the environment variables for your
 shell, then run the server with Go:
