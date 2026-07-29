@@ -23,6 +23,7 @@ import (
 	"github.com/tiennm99/miti99bot/internal/modules/lol"
 	"github.com/tiennm99/miti99bot/internal/modules/loldle"
 	"github.com/tiennm99/miti99bot/internal/modules/misc"
+	"github.com/tiennm99/miti99bot/internal/modules/monkeyd"
 	"github.com/tiennm99/miti99bot/internal/modules/stats"
 	"github.com/tiennm99/miti99bot/internal/modules/stock"
 	"github.com/tiennm99/miti99bot/internal/modules/util"
@@ -80,6 +81,7 @@ func factories() map[string]modules.Factory {
 	return map[string]modules.Factory{
 		"util":               util.New,
 		"misc":               misc.New,
+		"monkeyd":            monkeyd.New,
 		"wordle":             wordle.New,
 		"loldle":             loldle.New,
 		lol.CollectionName:   lol.New,

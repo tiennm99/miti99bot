@@ -6,6 +6,12 @@
 `internal/modules`. Runtime storage is MongoDB when `MONGO_URL` is set and
 in-memory storage in tests. Read `README.md` before implementation work.
 
+`third_party/monkeyd-crawler` is a git submodule resolved through a `go.mod`
+`replace` directive, not a versioned dependency. Go commands fail until it is
+checked out (`git submodule update --init --recursive`). Changes to the crawler
+belong in its own repository and must be pushed before the submodule pointer is
+advanced here, or fresh clones cannot resolve the pinned commit.
+
 ## Development Rules
 
 - Keep changes scoped to the requested module or shared contract.
