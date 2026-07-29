@@ -36,12 +36,13 @@ var usage = fmt.Sprintf(
 // New is the module Factory. The module keeps no persistent state — an export
 // is a one-shot job — so deps.Store is unused.
 func New(_ modules.Deps) modules.Module {
-	return newModule(newRunner())
+	return newModule(newRunner(), fetchTags)
 }
 
-// newModule builds the module around a given runner, which is how tests supply
-// one with a stubbed exporter and a synchronous launch.
-func newModule(r *runner) modules.Module {
+// newModule builds the module around a given runner and tag fetcher, which is
+// how tests supply a stubbed exporter, a synchronous launch, and tags without
+// network access.
+func newModule(r *runner, fetch tagsFetcher) modules.Module {
 	return modules.Module{
 		Commands: []modules.Command{
 			{
@@ -55,6 +56,7 @@ func newModule(r *runner) modules.Module {
 				Parameters:  parameters,
 				Handler:     r.handle,
 			},
+			tagsCommand(fetch),
 		},
 	}
 }

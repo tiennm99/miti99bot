@@ -16,7 +16,7 @@ Atlas via long polling and an in-process cron scheduler.
 | `gold` | Gold paper trading (opt-in; VNAppMob SJC buy/sell VND/luong) |
 | `coin` | Crypto paper trading in USD (Binance -> Coinbase -> CoinGecko price fallback) |
 | `stats` | `/stats` (top commands), `/stats users`, `/stats user <username>`, `/stats cmd <command_name>` |
-| `monkeyd` | `/monkeyd_crawl <url> [font_size]` — export a monkeydd.com novel as a PDF |
+| `monkeyd` | `/monkeyd_crawl <url> [font_size]` export a monkeydd.com novel as a PDF, `/monkeyd_tags <url>` list its tags as hashtags |
 
 Disable modules with the `MODULES` environment variable.
 
@@ -169,6 +169,33 @@ a larger book is reported instead of being sent.
 The PDF embeds a font covering Vietnamese diacritics. The crawler prefers a
 system font and falls back to one compiled into the binary, so the runtime
 image needs no fonts installed.
+
+### Novel tags
+
+`/monkeyd_tags <url>` reports a novel's tags as a hashtag line, sent as a code
+block so it can be copied in one tap:
+
+```text
+#MonkeyD #CổĐại #GiaĐình
+
+https://monkeydd.com/truong-an-gwem.html
+```
+
+Each label becomes one hashtag with spaces and punctuation removed and every
+word capitalised, because Telegram ends a hashtag at the first character that is
+not a letter, digit, or underscore. Diacritics are kept. A label with no letters
+is dropped rather than emitted as a bare `#`.
+
+The tags are the novel's own genres, identified by their `itemprop="genre"`
+microdata. The same page also links every genre on the site as navigation — 69
+of them against one novel's 6 in a sampled page — so matching the category URL
+shape instead would return the whole menu.
+
+This command costs a single request and runs inline rather than in the
+background, bounded by a short timeout: handlers are dispatched one at a time, so
+a stalled fetch would hold up every other command. It shares the export page
+cache, so a lookup for a novel that was already exported costs no request at
+all.
 
 ## Layout
 
