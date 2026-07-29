@@ -68,6 +68,7 @@ func TestCommandDiscovery_AllPublicCommandsHaveSafeMetadata(t *testing.T) {
 		"lol":                  "[date]",
 		"loldle":               "[champion]",
 		"monkeyd_crawl":        "<url> [font_size]",
+		"monkeyd_tags":         "<url>",
 		"random":               "<option,...>",
 		"stats":                "[users | user <username> | cmd <command_name>]",
 		"stock_events":         "<ticker> [days]",

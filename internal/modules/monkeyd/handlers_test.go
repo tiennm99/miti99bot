@@ -27,11 +27,21 @@ const testNovelURL = "https://monkeydd.com/tro-lai-nam-thang-cu.html"
 // Protected, and the dispatcher drops unauthorized calls silently.
 func install(t *testing.T, ownerID int64) (*testutil.RecordingBot, *runner) {
 	t.Helper()
+	return installWith(t, ownerID, func(context.Context, string) ([]string, error) {
+		t.Helper()
+		t.Error("tags fetcher called by an export test")
+		return nil, nil
+	})
+}
+
+// installWith is install with an explicit tag fetcher, for the tags command.
+func installWith(t *testing.T, ownerID int64, fetch tagsFetcher) (*testutil.RecordingBot, *runner) {
+	t.Helper()
 	rb := testutil.NewRecordingBot(t)
 	r := newRunner()
 	// Run the export inline so assertions do not race a detached goroutine.
 	r.launch = func(job func()) { job() }
-	mod := newModule(r)
+	mod := newModule(r, fetch)
 
 	reg := &modules.Registry{
 		Modules:     []modules.Module{{Name: "monkeyd", Commands: mod.Commands}},
@@ -335,25 +345,40 @@ func TestCrawl_AvailableToAnySender(t *testing.T) {
 
 func TestRegistration(t *testing.T) {
 	mod := New(modules.Deps{Store: storage.NewMemoryProvider().Collection("monkeyd")})
-	if len(mod.Commands) != 1 {
-		t.Fatalf("expected 1 command, got %d", len(mod.Commands))
+
+	wantParameters := map[string]string{
+		commandName:     "<url> [font_size]",
+		tagsCommandName: "<url>",
 	}
-	cmd := mod.Commands[0]
-	if cmd.Name != commandName {
-		t.Errorf("Name = %q, want %q", cmd.Name, commandName)
+	if len(mod.Commands) != len(wantParameters) {
+		t.Fatalf("expected %d commands, got %d", len(wantParameters), len(mod.Commands))
 	}
-	if cmd.Visibility != modules.VisibilityPublic {
-		t.Errorf("Visibility = %v, want Public", cmd.Visibility)
+
+	for _, cmd := range mod.Commands {
+		want, known := wantParameters[cmd.Name]
+		if !known {
+			t.Errorf("unexpected command %q", cmd.Name)
+			continue
+		}
+		delete(wantParameters, cmd.Name)
+
+		if cmd.Parameters != want {
+			t.Errorf("/%s parameters = %q, want %q", cmd.Name, cmd.Parameters, want)
+		}
+		if cmd.Visibility != modules.VisibilityPublic {
+			t.Errorf("/%s visibility = %v, want Public", cmd.Name, cmd.Visibility)
+		}
+		if cmd.Description == "" {
+			t.Errorf("/%s description is empty; command discovery requires one", cmd.Name)
+		}
+		if cmd.Handler == nil {
+			t.Errorf("/%s handler is nil", cmd.Name)
+		}
 	}
-	if cmd.Parameters != "<url> [font_size]" {
-		t.Errorf("Parameters = %q, want %q", cmd.Parameters, "<url> [font_size]")
+	for name := range wantParameters {
+		t.Errorf("command %q was not registered", name)
 	}
-	if cmd.Description == "" {
-		t.Error("Description is empty; command discovery requires one")
-	}
-	if cmd.Handler == nil {
-		t.Error("Handler is nil")
-	}
+
 	if len(mod.Crons) != 0 || len(mod.Callbacks) != 0 {
 		t.Errorf("expected no crons or callbacks, got %d crons and %d callbacks",
 			len(mod.Crons), len(mod.Callbacks))
