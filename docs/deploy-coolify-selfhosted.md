@@ -120,15 +120,23 @@ Successful GIF replies include the result behind Telegram spoiler formatting.
 1. New resource → from this Git repo (Docker Compose), or a prebuilt image.
    The committed [`compose.yml`](../compose.yml) defines the single
    `bot` service.
-2. Set the env vars above in Coolify.
-3. **No public domain / port** is needed — polling is outbound-only. Do not
+2. **Enable submodule checkout.** The `monkeyd` module builds against
+   `third_party/monkeyd-crawler`, a git submodule wired in through a `go.mod`
+   `replace` directive. Coolify must clone submodules, or the Docker build
+   fails at `go mod download` with an unresolved
+   `github.com/tiennm99/monkeyd-crawler`. Turn on Coolify's recursive-clone /
+   submodule option for the resource. If submodules cannot be enabled, drop the
+   module instead by setting `MODULES` to the list without `monkeyd` — the build
+   still needs the submodule, so this is only a runtime opt-out.
+3. Set the env vars above in Coolify.
+4. **No public domain / port** is needed — polling is outbound-only. Do not
    publish a port or attach a domain. `expose: 8080` keeps the health endpoint
    reachable only inside Coolify's network.
-4. **Exactly one replica.** Telegram permits only one `getUpdates` consumer per
+5. **Exactly one replica.** Telegram permits only one `getUpdates` consumer per
    bot token; a second poller gets HTTP 409, and a second in-process scheduler
    double-fires crons. Prefer **stop-first redeploys** so two containers never
    overlap near a cron time.
-5. **deploynotify commit SHA:** `SOURCE_COMMIT` is a Coolify predefined
+6. **deploynotify commit SHA:** `SOURCE_COMMIT` is a Coolify predefined
    variable. The bot reads it at startup and DMs the owner on every boot;
    outside Coolify (local `docker compose up`) it is unset and the DM shows
    `unknown`. Keep "Include Source Commit in Build" disabled: that setting
@@ -136,7 +144,7 @@ Successful GIF replies include the result behind Telegram spoiler formatting.
    invalidate Docker cache on every commit. Do not add `SOURCE_COMMIT` to
    `compose.yml`; an interpolated empty value can override Coolify's runtime
    env-file value.
-6. **Health check:** use Coolify's HTTP monitor against `GET /` (returns
+7. **Health check:** use Coolify's HTTP monitor against `GET /` (returns
    `text/plain` `miti99bot ok`). Do **not** use a compose `healthcheck` — the
    distroless image has no shell/curl and `cmd/server` has no `-healthcheck`
    flag. Note: `/` reports healthy even if Mongo is unreachable (the driver
