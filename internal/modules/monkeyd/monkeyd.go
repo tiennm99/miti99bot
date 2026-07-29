@@ -22,9 +22,16 @@ import (
 // commandName is the single command this module exposes.
 const commandName = "monkeyd_crawl"
 
-// usage is shown when the command arrives without a usable URL. It repeats the
-// Parameters syntax so the error and the command menu agree.
-const usage = "Usage: /" + commandName + " <url>"
+// parameters is the display syntax shared by the command menu, /help, and the
+// usage text below, so the three cannot drift apart.
+const parameters = "<url> [font_size]"
+
+// usage is shown when the command arrives without usable arguments. The bounds
+// and default are read from their definitions rather than restated, so the
+// message stays true if either changes.
+var usage = fmt.Sprintf(
+	"Usage: /%s %s\nfont_size is in points, %g to %g (default %g).",
+	commandName, parameters, minFontSize, maxFontSize, export.DefaultFontSize)
 
 // New is the module Factory. The module keeps no persistent state — an export
 // is a one-shot job — so deps.Store is unused.
@@ -45,7 +52,7 @@ func newModule(r *runner) modules.Module {
 				// host allowlist and the single in-flight export are what
 				// bound the cost, so both are load-bearing here.
 				Description: "Export a " + AllowedHostsHint + " novel as a PDF",
-				Parameters:  "<url>",
+				Parameters:  parameters,
 				Handler:     r.handle,
 			},
 		},
@@ -113,16 +120,12 @@ func (r *runner) handle(ctx context.Context, b *bot.Bot, update *models.Update) 
 	if arg == "" {
 		return chathelper.Reply(ctx, b, msg, usage)
 	}
-	// Telegram may hand the URL over with trailing punctuation or a stray
-	// second word; only the first token can be the URL.
-	if fields := strings.Fields(arg); len(fields) > 0 {
-		arg = fields[0]
-	}
 
-	novelURL, err := normalizeNovelURL(arg)
+	args, err := parseCrawlArgs(arg)
 	if err != nil {
 		return chathelper.Reply(ctx, b, msg, fmt.Sprintf("%s.\n%s", capitalize(err.Error()), usage))
 	}
+	novelURL := args.NovelURL
 
 	ok, inFlight := r.begin(novelURL)
 	if !ok {
@@ -139,7 +142,7 @@ func (r *runner) handle(ctx context.Context, b *bot.Bot, update *models.Update) 
 		return err
 	}
 
-	r.launch(func() { r.export(b, msg, novelURL) })
+	r.launch(func() { r.export(b, msg, args) })
 	return nil
 }
 
