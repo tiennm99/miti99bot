@@ -21,14 +21,13 @@ import (
 // prefixes/partitions). PriceClient is reused across calls; nowFn allows
 // tests to inject a deterministic clock for portfolio CreatedAt.
 type state struct {
-	store            Store
-	pending          PendingDividendStore
-	prices           *PriceClient
-	dividends        DividendEventProvider
-	events           SSIStockEventProvider
-	locks            keylock.Map
-	nowFn            func() time.Time
-	newDividendToken func() (string, error)
+	store     Store
+	pending   PendingDividendStore
+	prices    *PriceClient
+	dividends DividendEventProvider
+	events    SSIStockEventProvider
+	locks     keylock.Map
+	nowFn     func() time.Time
 }
 
 func (s *state) now() time.Time {

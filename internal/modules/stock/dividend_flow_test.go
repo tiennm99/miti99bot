@@ -55,16 +55,10 @@ func newDividendFlowState(t *testing.T, events []DividendEvent) (*state, Store, 
 	store := storage.Typed[Portfolio](collection)
 	pending := storage.Typed[PendingDividendAction](collection)
 	fake := &fakeDividendProvider{events: events}
-	tokenIndex := 0
 	s := &state{
 		store: store, pending: pending,
 		prices:    &PriceClient{HTTP: priceServer.Client(), URL: priceServer.URL},
 		dividends: fake, nowFn: func() time.Time { return now },
-		newDividendToken: func() (string, error) {
-			token := "abcdefghijklmnopqrstu" + string(rune('v'+tokenIndex))
-			tokenIndex++
-			return token, nil
-		},
 	}
 	return s, store, pending, testutil.NewRecordingBot(t), now, fake
 }
@@ -233,12 +227,20 @@ func TestRecordDateCreatesSeparateActionableMessages(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	calls := rb.Sent()
-	if len(calls) != 6 || !strings.Contains(calls[1].Text(), "Dividend ready to apply") || !strings.Contains(calls[2].Text(), "Dividend ready to apply") || !strings.Contains(calls[4].Text(), "Dividend ready to apply") || !strings.Contains(calls[5].Text(), "Dividend ready to apply") {
-		t.Fatalf("messages = %#v", calls)
+	suggestions, buttonRemovals := 0, 0
+	for _, call := range rb.Sent() {
+		if call.Method == "sendMessage" && strings.Contains(call.Text(), "Dividend ready to apply") {
+			suggestions++
+		}
+		if call.Method == "editMessageReplyMarkup" {
+			buttonRemovals++
+		}
+	}
+	if suggestions != 4 || buttonRemovals != 2 {
+		t.Fatalf("suggestions=%d buttonRemovals=%d calls=%#v", suggestions, buttonRemovals, rb.Sent())
 	}
 	keys, err := pending.List(context.Background(), pendingDividendPrefix)
-	if err != nil || len(keys) != 4 {
+	if err != nil || len(keys) != 2 {
 		t.Fatalf("pending = %v, err=%v", keys, err)
 	}
 }
@@ -268,41 +270,50 @@ func TestDividendCallbackUsesStoredEventAndCurrentHoldingOnce(t *testing.T) {
 		}
 	}
 
+	// Re-suggesting the same event replaces the pending action instead of
+	// stacking a second one.
 	keys, err := pending.List(context.Background(), pendingDividendPrefix)
-	if err != nil || len(keys) != 2 {
+	if err != nil || len(keys) != 1 || keys[0] != pendingDividendKey(7, event.ProviderID) {
 		t.Fatalf("pending keys = %v, err=%v", keys, err)
 	}
-	key := keys[0]
-	token := strings.TrimPrefix(key, pendingDividendPrefix)
-	action, _, _ := pending.Get(context.Background(), key)
+	data := "7:" + event.ProviderID
+	action, _, _ := pending.Get(context.Background(), keys[0])
 	if action.ProviderEventID != event.ProviderID || action.Symbol != "TCB" {
 		t.Fatalf("pending action = %+v", action)
 	}
-	if err := s.handleDividendCallback(context.Background(), rb.Bot, dividendCallbackUpdate(8, 7, action.MessageID, token)); err != nil {
+	if err := s.handleDividendCallback(context.Background(), rb.Bot, dividendCallbackUpdate(8, 7, action.MessageID, data)); err != nil {
 		t.Fatal(err)
 	}
 	p, _ := LoadPortfolio(context.Background(), store, 7, now.UnixMilli())
 	if p.VND != 100_000 {
 		t.Fatalf("unauthorized click changed balance: %v", p.VND)
 	}
-	if err := s.handleDividendCallback(context.Background(), rb.Bot, dividendCallbackUpdate(7, 7, action.MessageID, token)); err != nil {
+	// The superseded first suggestion message no longer applies anything.
+	if err := s.handleDividendCallback(context.Background(), rb.Bot, dividendCallbackUpdate(7, 7, action.MessageID-2, data)); err != nil {
+		t.Fatal(err)
+	}
+	p, _ = LoadPortfolio(context.Background(), store, 7, now.UnixMilli())
+	if p.VND != 100_000 {
+		t.Fatalf("superseded button changed balance: %v", p.VND)
+	}
+	if err := s.handleDividendCallback(context.Background(), rb.Bot, dividendCallbackUpdate(7, 7, action.MessageID, data)); err != nil {
 		t.Fatal(err)
 	}
 	p, _ = LoadPortfolio(context.Background(), store, 7, now.UnixMilli())
 	if p.VND != 250_000 || p.Assets["TCB"].Base != 2_850_000 || !p.Dividends["TCB"][event.ProviderID].Processed {
 		t.Fatalf("processed portfolio = %+v", p)
 	}
-	if err := s.handleDividendCallback(context.Background(), rb.Bot, dividendCallbackUpdate(7, 7, action.MessageID, token)); err != nil {
-		t.Fatal(err)
+	// Applying the dividend removes its only pending key.
+	keys, err = pending.List(context.Background(), pendingDividendPrefix)
+	if err != nil || len(keys) != 0 {
+		t.Fatalf("pending keys after apply = %v, err=%v", keys, err)
 	}
-	secondAction, _, _ := pending.Get(context.Background(), keys[1])
-	secondToken := strings.TrimPrefix(keys[1], pendingDividendPrefix)
-	if err := s.handleDividendCallback(context.Background(), rb.Bot, dividendCallbackUpdate(7, 7, secondAction.MessageID, secondToken)); err != nil {
+	if err := s.handleDividendCallback(context.Background(), rb.Bot, dividendCallbackUpdate(7, 7, action.MessageID, data)); err != nil {
 		t.Fatal(err)
 	}
 	p, _ = LoadPortfolio(context.Background(), store, 7, now.UnixMilli())
 	if p.VND != 250_000 {
-		t.Fatalf("second valid button credited twice: %v", p.VND)
+		t.Fatalf("repeated press credited twice: %v", p.VND)
 	}
 }
 
@@ -378,10 +389,10 @@ func TestDividendCallbackAppliesShareEventFromStoredHistory(t *testing.T) {
 		OwnerUserID: 7, ChatID: 7, MessageID: 1, ProviderEventID: "2612975", Symbol: "TCB",
 		PositionOpenedAt: p.Assets["TCB"].OpenedAt, CreatedAt: now.UnixMilli(), ExpiresAt: now.Add(time.Hour).UnixMilli(),
 	}
-	if err := pending.Put(context.Background(), pendingDividendKey("abcdefghijklmnopqrstuv"), action); err != nil {
+	if err := pending.Put(context.Background(), pendingDividendKey(7, "2612975"), action); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.handleDividendCallback(context.Background(), rb.Bot, dividendCallbackUpdate(7, 7, 1, "abcdefghijklmnopqrstuv")); err != nil {
+	if err := s.handleDividendCallback(context.Background(), rb.Bot, dividendCallbackUpdate(7, 7, 1, "7:2612975")); err != nil {
 		t.Fatal(err)
 	}
 	p, _ = LoadPortfolio(context.Background(), store, 7, now.UnixMilli())
@@ -405,11 +416,11 @@ func TestExpiredDividendActionDoesNotApply(t *testing.T) {
 		OwnerUserID: 7, ChatID: 7, MessageID: 1, ProviderEventID: "2612974", Symbol: "TCB",
 		PositionOpenedAt: p.Assets["TCB"].OpenedAt, CreatedAt: now.Add(-2 * time.Hour).UnixMilli(), ExpiresAt: now.Add(-time.Hour).UnixMilli(),
 	}
-	key := pendingDividendKey("abcdefghijklmnopqrstuv")
+	key := pendingDividendKey(7, "2612974")
 	if err := pending.Put(context.Background(), key, action); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.handleDividendCallback(context.Background(), rb.Bot, dividendCallbackUpdate(7, 7, 1, "abcdefghijklmnopqrstuv")); err != nil {
+	if err := s.handleDividendCallback(context.Background(), rb.Bot, dividendCallbackUpdate(7, 7, 1, "7:2612974")); err != nil {
 		t.Fatal(err)
 	}
 	p, _ = LoadPortfolio(context.Background(), store, 7, now.UnixMilli())
@@ -421,7 +432,7 @@ func TestExpiredDividendActionDoesNotApply(t *testing.T) {
 	}
 }
 
-func TestConcurrentPortfolioRequestsCreateSeparatePendingActions(t *testing.T) {
+func TestConcurrentPortfolioRequestsKeepSinglePendingAction(t *testing.T) {
 	now := time.Date(2026, 6, 25, 12, 0, 0, 0, saigonLocation)
 	s, store, pending, rb, _, _ := newDividendFlowState(t, nil)
 	seedDividendFlowPortfolio(t, store, now, 100)
@@ -451,8 +462,24 @@ func TestConcurrentPortfolioRequestsCreateSeparatePendingActions(t *testing.T) {
 		}
 	}
 	keys, err := pending.List(context.Background(), pendingDividendPrefix)
-	if err != nil || len(keys) != 2 || len(rb.Sent()) != 2 {
-		t.Fatalf("pending=%v messages=%d err=%v", keys, len(rb.Sent()), err)
+	if err != nil || len(keys) != 1 || keys[0] != pendingDividendKey(7, "2612974") {
+		t.Fatalf("pending=%v err=%v", keys, err)
+	}
+	suggestions, buttonRemovals := 0, 0
+	for _, call := range rb.Sent() {
+		switch call.Method {
+		case "sendMessage":
+			suggestions++
+		case "editMessageReplyMarkup":
+			buttonRemovals++
+		}
+	}
+	if suggestions != 2 || buttonRemovals != 1 {
+		t.Fatalf("suggestions=%d buttonRemovals=%d calls=%#v", suggestions, buttonRemovals, rb.Sent())
+	}
+	action, _, _ := pending.Get(context.Background(), keys[0])
+	if action.MessageID != 2 {
+		t.Fatalf("surviving action should bind the newest message: %+v", action)
 	}
 }
 
@@ -475,11 +502,11 @@ func TestDividendCallbackRejectsPositionOpenedAfterRecordDate(t *testing.T) {
 		OwnerUserID: 7, ChatID: 7, MessageID: 1, ProviderEventID: "2612974", Symbol: "TCB",
 		PositionOpenedAt: position.OpenedAt, CreatedAt: now.UnixMilli(), ExpiresAt: now.Add(time.Hour).UnixMilli(),
 	}
-	key := pendingDividendKey("abcdefghijklmnopqrstuv")
+	key := pendingDividendKey(7, "2612974")
 	if err := pending.Put(context.Background(), key, action); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.handleDividendCallback(context.Background(), rb.Bot, dividendCallbackUpdate(7, 7, 1, "abcdefghijklmnopqrstuv")); err != nil {
+	if err := s.handleDividendCallback(context.Background(), rb.Bot, dividendCallbackUpdate(7, 7, 1, "7:2612974")); err != nil {
 		t.Fatal(err)
 	}
 	p, _ = LoadPortfolio(context.Background(), store, 7, now.UnixMilli())
@@ -501,9 +528,11 @@ func TestProviderFailureKeepsPortfolioAvailable(t *testing.T) {
 	}
 }
 
-func dividendCallbackUpdate(userID, chatID int64, messageID int, token string) *models.Update {
+// dividendCallbackUpdate simulates a button press. data is the callback-data
+// suffix after the "stock_div:" prefix, i.e. "<ownerUserID>:<eventID>".
+func dividendCallbackUpdate(userID, chatID int64, messageID int, data string) *models.Update {
 	return &models.Update{CallbackQuery: &models.CallbackQuery{
-		ID: "query", From: models.User{ID: userID}, Data: dividendCallbackPrefix + token,
+		ID: "query", From: models.User{ID: userID}, Data: dividendCallbackPrefix + data,
 		Message: models.MaybeInaccessibleMessage{Type: models.MaybeInaccessibleMessageTypeMessage, Message: &models.Message{
 			ID: messageID, Chat: models.Chat{ID: chatID, Type: models.ChatTypePrivate},
 		}},
