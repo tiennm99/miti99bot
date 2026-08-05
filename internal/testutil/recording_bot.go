@@ -36,9 +36,10 @@ type RecordingBot struct {
 	Bot    *bot.Bot
 	Server *httptest.Server
 
-	mu       sync.Mutex
-	calls    []SentCall
-	failures map[string]failureResponse
+	mu            sync.Mutex
+	calls         []SentCall
+	failures      map[string]failureResponse
+	nextMessageID int
 }
 
 type failureResponse struct {
@@ -133,6 +134,11 @@ func (rb *RecordingBot) handle(w http.ResponseWriter, r *http.Request) {
 	rb.mu.Lock()
 	rb.calls = append(rb.calls, SentCall{Method: method, Form: form})
 	failure, shouldFail := rb.failures[method]
+	messageID := rb.nextMessageID
+	if !shouldFail && isMessageProducingMethod(method) {
+		rb.nextMessageID++
+		messageID = rb.nextMessageID
+	}
 	rb.mu.Unlock()
 
 	w.Header().Set("Content-Type", "application/json")
@@ -141,7 +147,18 @@ func (rb *RecordingBot) handle(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(failure.body))
 		return
 	}
-	_, _ = w.Write([]byte(okResponseFor(method)))
+	_, _ = w.Write([]byte(okResponseFor(method, messageID)))
+}
+
+// isMessageProducingMethod reports whether the API method returns a Message,
+// so each successful call gets a distinct incrementing message_id — mirroring
+// real Telegram chats, where handlers key follow-up edits on the returned ID.
+func isMessageProducingMethod(method string) bool {
+	switch method {
+	case "sendMessage", "sendSticker", "sendPhoto", "sendDocument", "sendVideo", "sendAnimation":
+		return true
+	}
+	return false
 }
 
 // apiMethodFromPath extracts the API method from "/bot<token>/<method>".
@@ -158,13 +175,12 @@ func apiMethodFromPath(p string) string {
 // okResponseFor returns a minimal `{ok:true, result:...}` payload that the
 // bot library will accept for the named API method. SendMessage / SendSticker
 // expect a Message; most others accept a bool.
-func okResponseFor(method string) string {
-	switch method {
-	case "sendMessage", "sendSticker", "sendPhoto", "sendDocument", "sendVideo", "sendAnimation":
+func okResponseFor(method string, messageID int) string {
+	if isMessageProducingMethod(method) {
 		// Minimal shape: id, date, chat. Bot library decodes via json so
 		// extra fields are ignored.
 		msg := map[string]any{
-			"message_id": 1,
+			"message_id": messageID,
 			"date":       0,
 			"chat": map[string]any{
 				"id":   1,
@@ -174,9 +190,8 @@ func okResponseFor(method string) string {
 		body := map[string]any{"ok": true, "result": msg}
 		out, _ := json.Marshal(body)
 		return string(out)
-	default:
-		return `{"ok":true,"result":true}`
 	}
+	return `{"ok":true,"result":true}`
 }
 
 // AssertSentText fails the test if no recorded sendMessage contains the

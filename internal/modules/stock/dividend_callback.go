@@ -59,12 +59,12 @@ func (s *state) handleDividendCallback(ctx context.Context, b *bot.Bot, update *
 }
 
 func (s *state) resolveDividendCallback(ctx context.Context, b *bot.Bot, query *models.CallbackQuery) (PendingDividendAction, *models.Message, string, bool, error) {
-	token, ok := callbackToken(query.Data)
+	ownerID, eventID, ok := parseDividendCallback(query.Data)
 	if !ok || s.pending == nil {
 		err := answerDividendCallback(ctx, b, query.ID, "This dividend suggestion is invalid.", true)
 		return PendingDividendAction{}, nil, "", true, err
 	}
-	actionKey := pendingDividendKey(token)
+	actionKey := pendingDividendKey(ownerID, eventID)
 	action, _, err := s.pending.Get(ctx, actionKey)
 	if errors.Is(err, storage.ErrNotFound) {
 		err = answerDividendCallback(ctx, b, query.ID, "This dividend suggestion expired or was already used.", true)

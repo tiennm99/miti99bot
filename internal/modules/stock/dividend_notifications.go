@@ -2,6 +2,7 @@ package stock
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"html"
 	"sort"
@@ -289,33 +290,40 @@ func (s *state) sendDividendSuggestion(ctx context.Context, b *bot.Bot, msg *mod
 	if !held || position.Quantity <= 0 || position.OpenedAt != expectedOpenedAt || !positionOpenedByRecordDate(position, record) {
 		return nil
 	}
+	if s.pending == nil {
+		return errors.New("stock: pending dividend store unavailable")
+	}
+	data, ok := dividendCallbackData(userID, ref.eventID)
+	if !ok {
+		return fmt.Errorf("stock: dividend event %q cannot be encoded as callback data", ref.eventID)
+	}
+	key := pendingDividendKey(userID, ref.eventID)
+	previous, _, previousErr := s.pending.Get(ctx, key)
 	action := PendingDividendAction{
 		OwnerUserID: userID, ChatID: msg.Chat.ID, ProviderEventID: ref.eventID, Symbol: ref.symbol,
 		PositionOpenedAt: position.OpenedAt, CreatedAt: now.UnixMilli(), ExpiresAt: now.Add(pendingDividendTTL).UnixMilli(),
 	}
-	token, err := s.createPendingDividend(ctx, action)
-	if err != nil {
-		return err
-	}
-	key := pendingDividendKey(token)
 	sent, err := b.SendMessage(ctx, &bot.SendMessageParams{
 		ChatID:          msg.Chat.ID,
 		MessageThreadID: msg.MessageThreadID,
 		Text:            dividendEventText(record.event(ref.symbol, ref.eventID), position.Quantity, true),
 		ParseMode:       models.ParseModeHTML,
 		ReplyMarkup: &models.InlineKeyboardMarkup{InlineKeyboard: [][]models.InlineKeyboardButton{{{
-			Text: "Apply dividend", CallbackData: dividendCallbackPrefix + token,
+			Text: "Apply dividend", CallbackData: data,
 		}}}},
 	})
 	if err != nil {
-		_ = s.pending.Delete(ctx, key)
 		return err
 	}
 	action.MessageID = sent.ID
 	if err := s.pending.Put(ctx, key, action); err != nil {
-		_ = removeDividendButton(ctx, b, action.ChatID, action.MessageID)
-		_ = s.pending.Delete(ctx, key)
+		_ = removeDividendButton(ctx, b, msg.Chat.ID, sent.ID)
 		return fmt.Errorf("bind dividend action message: %w", err)
+	}
+	// The Put above superseded any earlier suggestion for this event; retire
+	// the old message's button so only the newest suggestion is pressable.
+	if previousErr == nil && previous.MessageID != 0 && (previous.ChatID != msg.Chat.ID || previous.MessageID != sent.ID) {
+		_ = removeDividendButton(ctx, b, previous.ChatID, previous.MessageID)
 	}
 	return nil
 }
