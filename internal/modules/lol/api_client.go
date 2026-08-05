@@ -1,23 +1,32 @@
 // Package lol serves LoL esports match schedules via lolesports.com's
-// persisted API plus a daily push to subscribers.
+// GraphQL gateway plus a daily push to subscribers.
 //
-// Endpoint: https://esports-api.lolesports.com/persisted/gw/getSchedule
-// Auth: x-api-key header — the public key embedded in lolesports.com's web
-// client (no registration). If Riot ever rotates it, lift the new value
-// from their public JS bundle.
+// Endpoint: https://lolesports.com/api/gql — the same-origin proxy the
+// lolesports.com web client uses. It accepts only persisted operations:
+// the request carries no query text, just the operation name plus a
+// pre-registered ID in the persistedQuery extension. The legacy
+// esports-api.lolesports.com REST API and its public x-api-key were
+// retired by Riot in 2026 (403 for everyone), so there is no key to ship.
 //
-// Cache strategy: live-first fetches with a KV-backed 60-minute stale fallback
-// for current schedule windows.
+// If Riot redeploys the frontend with a changed homeEvents operation, the
+// registered ID rotates and the gateway answers PERSISTED_QUERY_NOT_IN_LIST.
+// To refresh: load lolesports.com, find the webpack runtime's chunk-hash map
+// for chunk 29 (the persisted-operations manifest, `loadManifest` in the
+// bundle), download /_next/static/chunks/29.<hash>.js, and copy the `id`
+// next to `"name":"homeEvents"`.
+//
+// Cache strategy: live-first fetches with a KV-backed 60-minute stale
+// fallback for current schedule windows.
 package lol
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"time"
 	"unicode/utf8"
 
@@ -26,13 +35,21 @@ import (
 )
 
 const (
-	apiURL = "https://esports-api.lolesports.com/persisted/gw/getSchedule"
-	// apiKey is the public lolesports.com web client key (not a secret).
-	// gosec flags it as a hardcoded credential; the value is shipped in
-	// Riot's own public web bundle and serves the live site too.
-	// #nosec G101
-	apiKey    = "0TvQnueqKa5mxJntVWt0w4LpLfEkrV1Ta8rQBb9Z"
-	userAgent = "miti99bot/0.1 (https://t.me/miti99bot)"
+	apiURL = "https://lolesports.com/api/gql"
+	// homeEventsID is the gateway-registered persisted-query ID for the web
+	// client's homeEvents operation (schedule events by date window). Not a
+	// hash we compute — the value comes from the frontend's operations
+	// manifest and must be re-extracted if Riot rotates it (see package doc).
+	homeEventsID = "7246add6f577cf30b304e651bf9e25fc6a41fe49aeafb0754c16b5778060fc0a"
+	// The gateway rejects requests without Apollo client-awareness headers
+	// ("No client headers set"), so we mirror the web client's name and send
+	// our own version string.
+	clientName    = "Esports Web"
+	clientVersion = "miti99bot/0.1"
+	userAgent     = "miti99bot/0.1 (https://t.me/miti99bot)"
+	// pageSize is the events-per-page the gateway accepts; 100 covers a full
+	// day in one page and a dense week in a handful.
+	pageSize = 100
 	// staleMaxAge: how long to fall back to a cached payload when the
 	// upstream call fails outright.
 	staleMaxAge = 60 * 60 * time.Second
@@ -88,7 +105,9 @@ type Match struct {
 
 // ScheduleEvent is one upcoming or past match. State is "unstarted",
 // "inProgress", or "completed". Type is set to "show" for pre/post-show
-// segments which we filter out.
+// segments which we filter out. This struct is the module's stable shape:
+// formatters and the bson cache read it, so the GraphQL response is mapped
+// into it rather than leaking the transport shape.
 type ScheduleEvent struct {
 	StartTime string `json:"startTime" bson:"startTime"`
 	State     string `json:"state,omitempty" bson:"state,omitempty"`
@@ -98,17 +117,49 @@ type ScheduleEvent struct {
 	Match     Match  `json:"match,omitempty" bson:"match,omitempty"`
 }
 
-// schedulePage is the inner shape of an upstream response.
-type schedulePage struct {
+// gqlEvent is one event as the gateway returns it. Teams live in matchTeams
+// (not match.teams), so it converts into the stable ScheduleEvent shape.
+type gqlEvent struct {
+	StartTime  string `json:"startTime"`
+	State      string `json:"state"`
+	Type       string `json:"type"`
+	BlockName  string `json:"blockName"`
+	League     League `json:"league"`
+	Match      Match  `json:"match"`
+	MatchTeams []Team `json:"matchTeams"`
+}
+
+func (e gqlEvent) toScheduleEvent() ScheduleEvent {
+	m := e.Match
+	m.Teams = e.MatchTeams
+	return ScheduleEvent{
+		StartTime: e.StartTime,
+		State:     e.State,
+		Type:      e.Type,
+		BlockName: e.BlockName,
+		League:    e.League,
+		Match:     m,
+	}
+}
+
+// gqlResponse is the outer shape of a gateway response. GraphQL transports
+// errors in-band on HTTP 200, so both branches must be checked.
+type gqlResponse struct {
 	Data struct {
-		Schedule struct {
-			Events []ScheduleEvent `json:"events"`
+		Esports struct {
+			Events []gqlEvent `json:"events"`
 			Pages  struct {
-				Newer string `json:"newer,omitempty"`
 				Older string `json:"older,omitempty"`
-			} `json:"pages,omitempty"`
-		} `json:"schedule"`
+				Newer string `json:"newer,omitempty"`
+			} `json:"pages"`
+		} `json:"esports"`
 	} `json:"data"`
+	Errors []struct {
+		Message    string `json:"message"`
+		Extensions struct {
+			Code string `json:"code"`
+		} `json:"extensions"`
+	} `json:"errors"`
 }
 
 // cacheRecord is the store value: fetch timestamp + events. The Mongo store
@@ -144,125 +195,113 @@ func (c *Client) baseURL() string {
 	return apiURL
 }
 
-// fetchSchedulePage retrieves one page of events. pageToken can be either a
-// forward (`pages.newer`) or backward (`pages.older`) cursor — the upstream
-// uses the same query param for both directions. Returns the page's events
-// (sorted ascending by startTime) plus both cursor tokens for further
-// navigation in either direction.
-func (c *Client) fetchSchedulePage(ctx context.Context, pageToken string) ([]ScheduleEvent, string, string, error) {
-	u, err := url.Parse(c.baseURL())
-	if err != nil {
-		return nil, "", "", fmt.Errorf("lol parse url: %w", err)
-	}
-	q := u.Query()
-	q.Set("hl", "en-US")
-	if pageToken != "" {
-		q.Set("pageToken", pageToken)
-	}
-	u.RawQuery = q.Encode()
+// gqlRequest is the persisted-operation request body: no query text, just
+// the operation name, variables, and the registered ID.
+type gqlRequest struct {
+	OperationName string         `json:"operationName"`
+	Variables     map[string]any `json:"variables"`
+	Extensions    struct {
+		PersistedQuery struct {
+			Version    int    `json:"version"`
+			Sha256Hash string `json:"sha256Hash"`
+		} `json:"persistedQuery"`
+	} `json:"extensions"`
+}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
-	if err != nil {
-		return nil, "", "", fmt.Errorf("lol build request: %w", err)
+// fetchEventsPage retrieves one page of events for a date window. The
+// gateway's eventDateStart/eventDateEnd are calendar dates with unspecified
+// timezone semantics, so the window is padded a day on each side and callers
+// filter to the exact [from, to) instants afterwards. pageToken continues a
+// prior page's `pages.newer` cursor. Events come back ascending by startTime.
+func (c *Client) fetchEventsPage(ctx context.Context, from, to time.Time, pageToken string) ([]ScheduleEvent, string, error) {
+	vars := map[string]any{
+		"hl":             "en-US",
+		"sport":          []string{"lol"},
+		"eventDateStart": from.UTC().AddDate(0, 0, -1).Format("2006-01-02"),
+		"eventDateEnd":   to.UTC().AddDate(0, 0, 1).Format("2006-01-02"),
+		"eventType":      "match",
+		"pageSize":       pageSize,
 	}
-	req.Header.Set("x-api-key", apiKey)
-	req.Header.Set("User-Agent", userAgent)
+	if pageToken != "" {
+		vars["pageToken"] = pageToken
+	}
+	reqBody := gqlRequest{OperationName: "homeEvents", Variables: vars}
+	reqBody.Extensions.PersistedQuery.Version = 1
+	reqBody.Extensions.PersistedQuery.Sha256Hash = homeEventsID
+	payload, err := json.Marshal(reqBody)
+	if err != nil {
+		return nil, "", fmt.Errorf("lol encode request: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL(), bytes.NewReader(payload))
+	if err != nil {
+		return nil, "", fmt.Errorf("lol build request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
+	req.Header.Set("apollographql-client-name", clientName)
+	req.Header.Set("apollographql-client-version", clientVersion)
+	req.Header.Set("User-Agent", userAgent)
 
 	resp, err := c.httpClient().Do(req)
 	if err != nil {
-		return nil, "", "", fmt.Errorf("lol do: %w", err)
+		return nil, "", fmt.Errorf("lol do: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, "", "", fmt.Errorf("lol read: %w", err)
+		return nil, "", fmt.Errorf("lol read: %w", err)
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		log.Warn("lol_fetch", "status", resp.StatusCode, "body", truncate(string(body), 500))
-		return nil, "", "", fmt.Errorf("lol API HTTP %d", resp.StatusCode)
+		return nil, "", fmt.Errorf("lol API HTTP %d", resp.StatusCode)
 	}
-	var page schedulePage
+	var page gqlResponse
 	if err := json.Unmarshal(body, &page); err != nil {
-		return nil, "", "", fmt.Errorf("lol decode: %w", err)
+		return nil, "", fmt.Errorf("lol decode: %w", err)
+	}
+	if len(page.Errors) > 0 {
+		first := page.Errors[0]
+		// A rotated persisted-query ID is an operational event, not a blip:
+		// every call fails until the constant is refreshed, so make the log
+		// unmistakable (see package doc for the refresh procedure).
+		if first.Extensions.Code == "PERSISTED_QUERY_NOT_IN_LIST" {
+			log.Error("lol_persisted_query_rotated", "msg", first.Message)
+		} else {
+			log.Warn("lol_fetch", "gql_code", first.Extensions.Code, "gql_err", truncate(first.Message, 500))
+		}
+		return nil, "", fmt.Errorf("lol API gql error %s: %s", first.Extensions.Code, first.Message)
 	}
 	// Drop pre/post-show segments; they aren't matches.
-	out := make([]ScheduleEvent, 0, len(page.Data.Schedule.Events))
-	for _, e := range page.Data.Schedule.Events {
+	out := make([]ScheduleEvent, 0, len(page.Data.Esports.Events))
+	for _, e := range page.Data.Esports.Events {
 		if e.Type == "show" {
 			continue
 		}
-		out = append(out, e)
+		out = append(out, e.toScheduleEvent())
 	}
-	return out, page.Data.Schedule.Pages.Newer, page.Data.Schedule.Pages.Older, nil
+	return out, page.Data.Esports.Pages.Newer, nil
 }
 
-// earliestStart returns the first parseable startTime in a page that is sorted
-// ascending. ok=false when no event has a valid timestamp.
-func earliestStart(events []ScheduleEvent) (time.Time, bool) {
-	for _, e := range events {
-		if t, err := time.Parse(time.RFC3339, e.StartTime); err == nil {
-			return t, true
-		}
-	}
-	return time.Time{}, false
-}
-
-// latestStart returns the last parseable startTime in a page that is sorted
-// ascending. ok=false when no event has a valid timestamp.
-func latestStart(events []ScheduleEvent) (time.Time, bool) {
-	for i := len(events) - 1; i >= 0; i-- {
-		if t, err := time.Parse(time.RFC3339, events[i].StartTime); err == nil {
-			return t, true
-		}
-	}
-	return time.Time{}, false
-}
-
-// fetchEventsInRange covers [from, to) by walking both pagination directions
-// from the default page (anchored at "now"). Walks older pages until the
-// earliest collected event is ≤ from, then walks newer pages until the
-// latest is ≥ to. Page budget caps both directions combined to bound
-// upstream calls during dense weeks.
+// fetchEventsInRange covers [from, to) with a date-bounded query, following
+// `pages.newer` cursors when a window holds more than one page. Page budget
+// bounds upstream calls during dense weeks.
 func (c *Client) fetchEventsInRange(ctx context.Context, from, to time.Time, maxPages int) ([]ScheduleEvent, error) {
 	if maxPages <= 0 {
 		maxPages = 8
 	}
-	events, newer, older, err := c.fetchSchedulePage(ctx, "")
-	if err != nil {
-		return nil, err
-	}
-	collected := events
-	pages := 1
-
-	// Walk older while the window extends before what we've collected.
-	for pages < maxPages && older != "" {
-		if t, ok := earliestStart(collected); ok && !t.After(from) {
-			break
-		}
-		olderEvents, _, prevOlder, err := c.fetchSchedulePage(ctx, older)
+	var collected []ScheduleEvent
+	pageToken := ""
+	for page := 0; page < maxPages; page++ {
+		events, newer, err := c.fetchEventsPage(ctx, from, to, pageToken)
 		if err != nil {
 			return nil, err
 		}
-		// Each page is ascending and disjoint from the next, so prepending
-		// preserves overall ascending order.
-		collected = append(olderEvents, collected...)
-		older = prevOlder
-		pages++
-	}
-
-	// Walk newer while the window extends past what we've collected.
-	for pages < maxPages && newer != "" {
-		if t, ok := latestStart(collected); ok && !t.Before(to) {
+		collected = append(collected, events...)
+		if newer == "" {
 			break
 		}
-		newerEvents, nextNewer, _, err := c.fetchSchedulePage(ctx, newer)
-		if err != nil {
-			return nil, err
-		}
-		collected = append(collected, newerEvents...)
-		newer = nextNewer
-		pages++
+		pageToken = newer
 	}
 
 	out := make([]ScheduleEvent, 0, len(collected))
