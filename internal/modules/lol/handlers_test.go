@@ -63,13 +63,15 @@ const fakeNowMs int64 = 1778328000000 // 2026-05-09T12:00:00Z
 
 const todayBody = `{
   "data": {
-    "schedule": {
+    "esports": {
       "events": [
         {
           "startTime": "2026-05-09T05:00:00Z",
           "state": "unstarted",
+          "type": "match",
           "league": {"slug": "lck", "name": "LCK"},
-          "match": {"teams": [{"code":"T1"},{"code":"GEN"}], "strategy":{"count":3}}
+          "match": {"strategy":{"count":3}},
+          "matchTeams": [{"code":"T1"},{"code":"GEN"}]
         }
       ],
       "pages": {"newer": null}
@@ -79,19 +81,23 @@ const todayBody = `{
 
 const futureBody = `{
   "data": {
-    "schedule": {
+    "esports": {
       "events": [
         {
           "startTime": "2026-05-10T05:00:00Z",
           "state": "unstarted",
+          "type": "match",
           "league": {"slug": "lck", "name": "LCK"},
-          "match": {"teams": [{"code":"DK"},{"code":"KT"}], "strategy":{"count":3}}
+          "match": {"strategy":{"count":3}},
+          "matchTeams": [{"code":"DK"},{"code":"KT"}]
         },
         {
           "startTime": "2026-05-12T08:00:00Z",
           "state": "unstarted",
+          "type": "match",
           "league": {"slug": "lpl", "name": "LPL"},
-          "match": {"teams": [{"code":"JDG"},{"code":"BLG"}], "strategy":{"count":5}}
+          "match": {"strategy":{"count":5}},
+          "matchTeams": [{"code":"JDG"},{"code":"BLG"}]
         }
       ],
       "pages": {"newer": null}
