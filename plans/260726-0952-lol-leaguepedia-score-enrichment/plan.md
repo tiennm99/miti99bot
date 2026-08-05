@@ -1,11 +1,11 @@
 ---
 title: "LoL Leaguepedia score enrichment"
 description: "Fill missing series scores from Leaguepedia when lolesports marks a match completed but publishes no result"
-status: pending
+status: cancelled
 priority: P2
 branch: "main"
 tags: [lol, external-api, enrichment]
-blockedBy: []
+blockedBy: [260805-1708-lol-pandascore-replacement]
 blocks: []
 created: "2026-07-26T02:54:48.516Z"
 createdBy: "ck:plan"
@@ -13,6 +13,13 @@ source: skill
 ---
 
 # LoL Leaguepedia score enrichment
+
+> **Cancelled 2026-08-05.** Superseded by
+> [260805-1708-lol-pandascore-replacement](../260805-1708-lol-pandascore-replacement/plan.md):
+> the lol module's upstream moved to PandaScore, whose match `results` carry
+> final series scores directly, absorbing this plan's enrichment job. The
+> lolesports "completed without score" ingestion gap this plan targeted no
+> longer applies to the new source.
 
 ## Overview
 
