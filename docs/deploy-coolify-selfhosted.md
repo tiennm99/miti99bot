@@ -35,6 +35,7 @@ Copy [`.env.example`](../.env.example) → `.env` (gitignored) and fill in.
 | `ADMIN_IDS` | optional | CSV of admin ids (renamed from `ADMIN_USER_IDS`) |
 | `WHEELOFNAMES_API_URL` | optional | full `/api/gif` endpoint for remote `/wheelofnames` GIF rendering |
 | `WHEELOFNAMES_API_TOKEN` | optional | bearer token matching the wheelofnames service `API_TOKEN` |
+| `LOL_PANDASCORE_TOKEN` | ✅ for lol module | PandaScore API token (free tier) — secret, never logged; without it every `/lol*` fetch fails (stale cache may still serve briefly) |
 
 **Leave UNSET on self-host:** `KV_PROVIDER`, `PORT`,
 `TELEGRAM_WEBHOOK_SECRET`, and `GOLD_VNAPP_API_KEY`. Stock, coin, and gold URL

@@ -24,7 +24,7 @@ var leagueOrder = []string{
 	"emea_masters",
 }
 
-// majorLeagueSlugs filters the lolesports response down to the headline
+// majorLeagueSlugs filters the upstream schedule down to the headline
 // tournaments most viewers care about. Without this filter the API
 // returns 135+ events/week and replies blow past Telegram's 4096-char limit.
 var majorLeagueSlugs = map[string]bool{
@@ -107,15 +107,15 @@ func seriesWins(t Team) int {
 
 // scoreIsPublished reports whether a finished series has a score we can quote.
 //
-// lolesports drives `event.state` off the broadcast timeline and fills
-// `result.outcome`/`result.gameWins` from a separate per-game ingestion path,
-// so a match reads as "completed" for hours before (or without ever) gaining a
-// score. In that window every team carries `{"outcome": null, "gameWins": 0}`,
-// which a nil-check cannot catch because the object itself is present — and
-// Go's zero value for the absent gameWins then renders as a literal 0.
+// Upstream can mark a match completed before committing a result (PandaScore:
+// `status: finished` with `winner_id` still null; the client maps that to
+// teams whose Result carries no Outcome). In that window a nil-check cannot
+// catch the gap because the Result object itself is present — and Go's zero
+// value for gameWins would render as a 0–0 that nobody played.
 //
-// An outcome on either side is enough: it proves the ingestion ran, so the
-// gameWins alongside it are real even if the other side's result is sparse.
+// An outcome on either side is enough: the client only declares outcomes once
+// upstream has committed a winner, so the gameWins alongside it are real even
+// if the other side's result is sparse.
 func scoreIsPublished(t1, t2 Team) bool {
 	return declaredOutcome(t1) != "" || declaredOutcome(t2) != ""
 }

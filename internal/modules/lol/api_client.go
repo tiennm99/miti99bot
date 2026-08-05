@@ -1,32 +1,41 @@
-// Package lol serves LoL esports match schedules via lolesports.com's
-// GraphQL gateway plus a daily push to subscribers.
+// Package lol serves LoL esports match schedules via the PandaScore REST
+// API plus a daily push to subscribers.
 //
-// Endpoint: https://lolesports.com/api/gql — the same-origin proxy the
-// lolesports.com web client uses. It accepts only persisted operations:
-// the request carries no query text, just the operation name plus a
-// pre-registered ID in the persistedQuery extension. The legacy
-// esports-api.lolesports.com REST API and its public x-api-key were
-// retired by Riot in 2026 (403 for everyone), so there is no key to ship.
+// Endpoint: https://api.pandascore.co/lol/matches
+// Auth: Bearer token from the LOL_PANDASCORE_TOKEN env var (free tier,
+// 1000 requests/hour — orders of magnitude above this module's needs).
+// PandaScore replaced the lolesports.com gql persisted-query transport,
+// which broke whenever Riot redeployed their frontend; before that, Riot
+// retired the original public esports-api.lolesports.com key outright.
 //
-// If Riot redeploys the frontend with a changed homeEvents operation, the
-// registered ID rotates and the gateway answers PERSISTED_QUERY_NOT_IN_LIST.
-// To refresh: load lolesports.com, find the webpack runtime's chunk-hash map
-// for chunk 29 (the persisted-operations manifest, `loadManifest` in the
-// bundle), download /_next/static/chunks/29.<hash>.js, and copy the `id`
-// next to `"name":"homeEvents"`.
+// One request shape covers past, running, and upcoming matches:
+//
+//	GET /lol/matches?range[begin_at]=<from>,<to>&sort=begin_at&per_page=100&page=N
+//
+// The response is a top-level JSON array. The range's upper bound is
+// inclusive upstream, so callers rely on the client-side [from, to) filter
+// in fetchEventsInRange for exact window semantics.
+//
+// PandaScore league slugs (league-of-legends-lck-champions-korea, …) are
+// canonicalized to the slugs format.go's allowlist and ordering were built
+// on (lck, lpl, …) via leagueSlugMap; unmapped leagues pass through and the
+// major-league filter drops them naturally.
 //
 // Cache strategy: live-first fetches with a KV-backed 60-minute stale
 // fallback for current schedule windows.
 package lol
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"os"
+	"strconv"
+	"strings"
 	"time"
 	"unicode/utf8"
 
@@ -35,33 +44,55 @@ import (
 )
 
 const (
-	apiURL = "https://lolesports.com/api/gql"
-	// homeEventsID is the gateway-registered persisted-query ID for the web
-	// client's homeEvents operation (schedule events by date window). Not a
-	// hash we compute — the value comes from the frontend's operations
-	// manifest and must be re-extracted if Riot rotates it (see package doc).
-	homeEventsID = "7246add6f577cf30b304e651bf9e25fc6a41fe49aeafb0754c16b5778060fc0a"
-	// The gateway rejects requests without Apollo client-awareness headers
-	// ("No client headers set"), so we mirror the web client's name and send
-	// our own version string.
-	clientName    = "Esports Web"
-	clientVersion = "miti99bot/0.1"
-	userAgent     = "miti99bot/0.1 (https://t.me/miti99bot)"
-	// pageSize is the events-per-page the gateway accepts; 100 covers a full
-	// day in one page and a dense week in a handful.
+	apiURL = "https://api.pandascore.co/lol/matches"
+	// tokenEnv is the name of the env var holding the token, not a
+	// credential itself.
+	tokenEnv = "LOL_PANDASCORE_TOKEN" // #nosec G101
+
+	userAgent = "miti99bot/0.1 (https://t.me/miti99bot)"
+	// pageSize is PandaScore's per_page maximum; 100 covers a dense day in
+	// one request and a full week in a couple.
 	pageSize = 100
 	// staleMaxAge: how long to fall back to a cached payload when the
 	// upstream call fails outright.
 	staleMaxAge = 60 * 60 * time.Second
-	// httpTimeout: keep upstream calls bounded so a hung lolesports edge
+	// httpTimeout: keep upstream calls bounded so a hung upstream edge
 	// can't hold a worker goroutine indefinitely.
 	httpTimeout = 8 * time.Second
 )
 
-// Team is one side of a match. JSON shape matches the lolesports response.
-// bson tags mirror the json names exactly: this tree is persisted inside
-// cacheRecord, so the store must read those keys back verbatim — not the
-// driver's lowercased default.
+// leagueSlugMap canonicalizes PandaScore league slugs to the slugs the
+// formatters were built on (format.go's majorLeagueSlugs / leagueOrder).
+// Discovered live from /lol/leagues — see the plan's phase-01 findings.
+// lta-north also maps to lcs: it is the LTA-era NA top flight; only the
+// slug is canonicalized, the display name still passes through.
+var leagueSlugMap = map[string]string{
+	"league-of-legends-lck-champions-korea": "lck",
+	"league-of-legends-lpl-china":           "lpl",
+	"league-of-legends-lec":                 "lec",
+	"league-of-legends-lcs":                 "lcs",
+	"league-of-legends-lta-north":           "lcs",
+	"league-of-legends-world-championship":  "worlds",
+	"league-of-legends-mid-invitational":    "msi",
+	"league-of-legends-first-stand":         "first_stand",
+	"league-of-legends-esports-world-cup":   "ewc_lol",
+	"league-of-legends-lcp":                 "lcp",
+	"league-of-legends-cblol-brazil":        "cblol-brazil",
+	"league-of-legends-emea-masters":        "emea_masters",
+}
+
+// canonicalLeagueSlug maps a PandaScore slug to the module's canonical slug,
+// passing unknown slugs through unchanged (FilterMajor drops them).
+func canonicalLeagueSlug(psSlug string) string {
+	if s, ok := leagueSlugMap[psSlug]; ok {
+		return s
+	}
+	return psSlug
+}
+
+// Team is one side of a match. bson tags mirror the json names exactly:
+// this tree is persisted inside cacheRecord, so the store must read those
+// keys back verbatim — not the driver's lowercased default.
 type Team struct {
 	Name   string      `json:"name,omitempty" bson:"name,omitempty"`
 	Code   string      `json:"code,omitempty" bson:"code,omitempty"`
@@ -104,9 +135,8 @@ type Match struct {
 }
 
 // ScheduleEvent is one upcoming or past match. State is "unstarted",
-// "inProgress", or "completed". Type is set to "show" for pre/post-show
-// segments which we filter out. This struct is the module's stable shape:
-// formatters and the bson cache read it, so the GraphQL response is mapped
+// "inProgress", or "completed". This struct is the module's stable shape:
+// formatters and the bson cache read it, so the upstream response is mapped
 // into it rather than leaking the transport shape.
 type ScheduleEvent struct {
 	StartTime string `json:"startTime" bson:"startTime"`
@@ -117,49 +147,92 @@ type ScheduleEvent struct {
 	Match     Match  `json:"match,omitempty" bson:"match,omitempty"`
 }
 
-// gqlEvent is one event as the gateway returns it. Teams live in matchTeams
-// (not match.teams), so it converts into the stable ScheduleEvent shape.
-type gqlEvent struct {
-	StartTime  string `json:"startTime"`
-	State      string `json:"state"`
-	Type       string `json:"type"`
-	BlockName  string `json:"blockName"`
-	League     League `json:"league"`
-	Match      Match  `json:"match"`
-	MatchTeams []Team `json:"matchTeams"`
+// psMatch is one match as PandaScore returns it (top-level array element).
+type psMatch struct {
+	ID            int64  `json:"id"`
+	BeginAt       string `json:"begin_at"`
+	Status        string `json:"status"`
+	NumberOfGames int    `json:"number_of_games"`
+	WinnerID      *int64 `json:"winner_id"`
+	League        struct {
+		Name     string `json:"name"`
+		Slug     string `json:"slug"`
+		ImageURL string `json:"image_url"`
+	} `json:"league"`
+	Tournament struct {
+		Name string `json:"name"`
+	} `json:"tournament"`
+	Opponents []struct {
+		Opponent struct {
+			ID       int64  `json:"id"`
+			Acronym  string `json:"acronym"`
+			Name     string `json:"name"`
+			ImageURL string `json:"image_url"`
+		} `json:"opponent"`
+	} `json:"opponents"`
+	Results []struct {
+		TeamID int64 `json:"team_id"`
+		Score  int   `json:"score"`
+	} `json:"results"`
 }
 
-func (e gqlEvent) toScheduleEvent() ScheduleEvent {
-	m := e.Match
-	m.Teams = e.MatchTeams
-	return ScheduleEvent{
-		StartTime: e.StartTime,
-		State:     e.State,
-		Type:      e.Type,
-		BlockName: e.BlockName,
-		League:    e.League,
-		Match:     m,
+// psStateMap translates PandaScore match statuses to the module's states.
+// Anything absent (canceled, postponed) is dropped by toScheduleEvent.
+var psStateMap = map[string]string{
+	"not_started": "unstarted",
+	"running":     "inProgress",
+	"finished":    "completed",
+}
+
+// toScheduleEvent maps a PandaScore match into the stable ScheduleEvent
+// shape. ok=false drops the match (unknown status). Results are joined to
+// opponents strictly by team_id — upstream order of the two arrays is not
+// guaranteed to agree. Outcome is only declared once the match is finished
+// and upstream has committed a winner; that keeps scoreIsPublished's
+// "score pending" semantics intact for finished-but-unresolved series.
+func (m psMatch) toScheduleEvent() (ScheduleEvent, bool) {
+	state, ok := psStateMap[m.Status]
+	if !ok {
+		return ScheduleEvent{}, false
 	}
-}
-
-// gqlResponse is the outer shape of a gateway response. GraphQL transports
-// errors in-band on HTTP 200, so both branches must be checked.
-type gqlResponse struct {
-	Data struct {
-		Esports struct {
-			Events []gqlEvent `json:"events"`
-			Pages  struct {
-				Older string `json:"older,omitempty"`
-				Newer string `json:"newer,omitempty"`
-			} `json:"pages"`
-		} `json:"esports"`
-	} `json:"data"`
-	Errors []struct {
-		Message    string `json:"message"`
-		Extensions struct {
-			Code string `json:"code"`
-		} `json:"extensions"`
-	} `json:"errors"`
+	scoreByTeam := make(map[int64]int, len(m.Results))
+	for _, r := range m.Results {
+		scoreByTeam[r.TeamID] = r.Score
+	}
+	teams := make([]Team, 0, len(m.Opponents))
+	for _, o := range m.Opponents {
+		t := Team{
+			Name:  o.Opponent.Name,
+			Code:  o.Opponent.Acronym,
+			Image: o.Opponent.ImageURL,
+		}
+		res := &TeamResult{GameWins: scoreByTeam[o.Opponent.ID]}
+		if m.Status == "finished" && m.WinnerID != nil {
+			if o.Opponent.ID == *m.WinnerID {
+				res.Outcome = "win"
+			} else {
+				res.Outcome = "loss"
+			}
+		}
+		t.Result = res
+		teams = append(teams, t)
+	}
+	return ScheduleEvent{
+		StartTime: m.BeginAt,
+		State:     state,
+		Type:      "match",
+		BlockName: m.Tournament.Name,
+		League: League{
+			Name:  m.League.Name,
+			Slug:  canonicalLeagueSlug(m.League.Slug),
+			Image: m.League.ImageURL,
+		},
+		Match: Match{
+			ID:       strconv.FormatInt(m.ID, 10),
+			Teams:    teams,
+			Strategy: Strategy{Type: "bestOf", Count: m.NumberOfGames},
+		},
+	}, true
 }
 
 // cacheRecord is the store value: fetch timestamp + events. The Mongo store
@@ -172,9 +245,9 @@ type cacheRecord struct {
 // CacheStore is the typed store for schedule cache records.
 type CacheStore = storage.DocStore[cacheRecord]
 
-// Client is the lolesports API client. Default zero-value uses
-// http.DefaultClient + http.DefaultTransport; tests inject a custom HTTP
-// client (typically pointing at httptest.Server).
+// Client is the PandaScore API client. Default zero-value uses a bounded
+// default HTTP client; tests inject a custom HTTP client (typically pointing
+// at httptest.Server).
 type Client struct {
 	HTTP *http.Client
 	URL  string // override for tests; empty falls back to apiURL
@@ -195,113 +268,88 @@ func (c *Client) baseURL() string {
 	return apiURL
 }
 
-// gqlRequest is the persisted-operation request body: no query text, just
-// the operation name, variables, and the registered ID.
-type gqlRequest struct {
-	OperationName string         `json:"operationName"`
-	Variables     map[string]any `json:"variables"`
-	Extensions    struct {
-		PersistedQuery struct {
-			Version    int    `json:"version"`
-			Sha256Hash string `json:"sha256Hash"`
-		} `json:"persistedQuery"`
-	} `json:"extensions"`
-}
-
-// fetchEventsPage retrieves one page of events for a date window. The
-// gateway's eventDateStart/eventDateEnd are calendar dates with unspecified
-// timezone semantics, so the window is padded a day on each side and callers
-// filter to the exact [from, to) instants afterwards. pageToken continues a
-// prior page's `pages.newer` cursor. Events come back ascending by startTime.
-func (c *Client) fetchEventsPage(ctx context.Context, from, to time.Time, pageToken string) ([]ScheduleEvent, string, error) {
-	vars := map[string]any{
-		"hl":             "en-US",
-		"sport":          []string{"lol"},
-		"eventDateStart": from.UTC().AddDate(0, 0, -1).Format("2006-01-02"),
-		"eventDateEnd":   to.UTC().AddDate(0, 0, 1).Format("2006-01-02"),
-		"eventType":      "match",
-		"pageSize":       pageSize,
-	}
-	if pageToken != "" {
-		vars["pageToken"] = pageToken
-	}
-	reqBody := gqlRequest{OperationName: "homeEvents", Variables: vars}
-	reqBody.Extensions.PersistedQuery.Version = 1
-	reqBody.Extensions.PersistedQuery.Sha256Hash = homeEventsID
-	payload, err := json.Marshal(reqBody)
-	if err != nil {
-		return nil, "", fmt.Errorf("lol encode request: %w", err)
+// fetchEventsPage retrieves one page of matches overlapping [from, to].
+// Returns the mapped events plus the raw upstream item count — pagination
+// must be driven by the raw count, since status-dropped matches shrink the
+// mapped slice below per_page on otherwise-full pages.
+func (c *Client) fetchEventsPage(ctx context.Context, from, to time.Time, page int) ([]ScheduleEvent, int, error) {
+	token := strings.TrimSpace(os.Getenv(tokenEnv))
+	if token == "" {
+		log.Error("lol_token_missing", "env", tokenEnv)
+		return nil, 0, fmt.Errorf("lol %s not set", tokenEnv)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL(), bytes.NewReader(payload))
+	u, err := url.Parse(c.baseURL())
 	if err != nil {
-		return nil, "", fmt.Errorf("lol build request: %w", err)
+		return nil, 0, fmt.Errorf("lol parse url: %w", err)
 	}
-	req.Header.Set("Content-Type", "application/json")
+	q := u.Query()
+	q.Set("range[begin_at]", from.UTC().Format(time.RFC3339)+","+to.UTC().Format(time.RFC3339))
+	q.Set("sort", "begin_at")
+	q.Set("per_page", strconv.Itoa(pageSize))
+	q.Set("page", strconv.Itoa(page))
+	u.RawQuery = q.Encode()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+	if err != nil {
+		return nil, 0, fmt.Errorf("lol build request: %w", err)
+	}
+	// Bearer header only — never the token-in-URL variant, so request URLs
+	// stay safe to log.
+	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Accept", "application/json")
-	req.Header.Set("apollographql-client-name", clientName)
-	req.Header.Set("apollographql-client-version", clientVersion)
 	req.Header.Set("User-Agent", userAgent)
 
 	resp, err := c.httpClient().Do(req)
 	if err != nil {
-		return nil, "", fmt.Errorf("lol do: %w", err)
+		return nil, 0, fmt.Errorf("lol do: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, "", fmt.Errorf("lol read: %w", err)
+		return nil, 0, fmt.Errorf("lol read: %w", err)
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		log.Warn("lol_fetch", "status", resp.StatusCode, "body", truncate(string(body), 500))
-		return nil, "", fmt.Errorf("lol API HTTP %d", resp.StatusCode)
+		return nil, 0, fmt.Errorf("lol API HTTP %d", resp.StatusCode)
 	}
-	var page gqlResponse
-	if err := json.Unmarshal(body, &page); err != nil {
-		return nil, "", fmt.Errorf("lol decode: %w", err)
+	var matches []psMatch
+	if err := json.Unmarshal(body, &matches); err != nil {
+		return nil, 0, fmt.Errorf("lol decode: %w", err)
 	}
-	if len(page.Errors) > 0 {
-		first := page.Errors[0]
-		// A rotated persisted-query ID is an operational event, not a blip:
-		// every call fails until the constant is refreshed, so make the log
-		// unmistakable (see package doc for the refresh procedure).
-		if first.Extensions.Code == "PERSISTED_QUERY_NOT_IN_LIST" {
-			log.Error("lol_persisted_query_rotated", "msg", first.Message)
-		} else {
-			log.Warn("lol_fetch", "gql_code", first.Extensions.Code, "gql_err", truncate(first.Message, 500))
+	out := make([]ScheduleEvent, 0, len(matches))
+	for _, m := range matches {
+		if e, ok := m.toScheduleEvent(); ok {
+			out = append(out, e)
 		}
-		return nil, "", fmt.Errorf("lol API gql error %s: %s", first.Extensions.Code, first.Message)
 	}
-	// Drop pre/post-show segments; they aren't matches.
-	out := make([]ScheduleEvent, 0, len(page.Data.Esports.Events))
-	for _, e := range page.Data.Esports.Events {
-		if e.Type == "show" {
-			continue
-		}
-		out = append(out, e.toScheduleEvent())
-	}
-	return out, page.Data.Esports.Pages.Newer, nil
+	return out, len(matches), nil
 }
 
-// fetchEventsInRange covers [from, to) with a date-bounded query, following
-// `pages.newer` cursors when a window holds more than one page. Page budget
-// bounds upstream calls during dense weeks.
+// fetchEventsInRange covers [from, to) with a range-bounded query, walking
+// pages while upstream keeps returning full ones. Page budget bounds
+// upstream calls during dense weeks. The exact [from, to) filter is applied
+// here because PandaScore's range upper bound is inclusive.
 func (c *Client) fetchEventsInRange(ctx context.Context, from, to time.Time, maxPages int) ([]ScheduleEvent, error) {
 	if maxPages <= 0 {
 		maxPages = 8
 	}
 	var collected []ScheduleEvent
-	pageToken := ""
-	for page := 0; page < maxPages; page++ {
-		events, newer, err := c.fetchEventsPage(ctx, from, to, pageToken)
+	for page := 1; page <= maxPages; page++ {
+		events, rawCount, err := c.fetchEventsPage(ctx, from, to, page)
 		if err != nil {
 			return nil, err
 		}
 		collected = append(collected, events...)
-		if newer == "" {
+		if rawCount < pageSize {
 			break
 		}
-		pageToken = newer
+		// A still-full final page means the window holds more matches than
+		// the page budget covers; with ascending sort the tail of the window
+		// would silently vanish from replies, so leave a diagnostic trail.
+		if page == maxPages {
+			log.Warn("lol_page_budget_exhausted", "maxPages", maxPages, "from", from, "to", to)
+		}
 	}
 
 	out := make([]ScheduleEvent, 0, len(collected))
@@ -323,9 +371,12 @@ func cacheKey(from, to time.Time) string {
 }
 
 // GetEventsLive fetches the requested range directly from upstream without
-// consulting or writing the fallback cache.
+// consulting or writing the fallback cache. Five pages = 500 raw matches;
+// PandaScore returns ~270/week across all its leagues, so a dense in-season
+// week still fits with room to spare, and quota cost is negligible at
+// 1000 req/h.
 func (c *Client) GetEventsLive(ctx context.Context, from, to time.Time) ([]ScheduleEvent, error) {
-	return c.fetchEventsInRange(ctx, from, to, 3)
+	return c.fetchEventsInRange(ctx, from, to, 5)
 }
 
 // GetEventsWithFallback is live-first. It always tries upstream, writes a
@@ -356,10 +407,10 @@ func (c *Client) GetEventsWithFallback(ctx context.Context, cache CacheStore, fr
 }
 
 // truncate clips a string to a rune-boundary prefix whose byte length is
-// <= maxLen, appending "..." if cut. Keeps log output bounded — lolesports
-// occasionally returns multi-MB error pages, and team/player names mix in
-// Korean/Chinese characters that a raw byte slice would split mid-codepoint
-// (producing replacement glyphs in CloudWatch).
+// <= maxLen, appending "..." if cut. Keeps log output bounded — upstream
+// error pages can be large, and team names mix in Korean/Chinese characters
+// that a raw byte slice would split mid-codepoint (producing replacement
+// glyphs in CloudWatch).
 func truncate(s string, maxLen int) string {
 	if len(s) <= maxLen {
 		return s

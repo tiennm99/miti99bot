@@ -19,6 +19,7 @@ import (
 // Returns the recording bot and the subscriber store for inspection in tests.
 func installSchedule(t *testing.T, bodyJSON string, nowMs int64) (*testutil.RecordingBot, SubscriberStore) {
 	t.Helper()
+	setTestToken(t)
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(bodyJSON))
@@ -61,49 +62,41 @@ func installSchedule(t *testing.T, bodyJSON string, nowMs int64) (*testutil.Reco
 // "now" in handler tests.
 const fakeNowMs int64 = 1778328000000 // 2026-05-09T12:00:00Z
 
-const todayBody = `{
-  "data": {
-    "esports": {
-      "events": [
-        {
-          "startTime": "2026-05-09T05:00:00Z",
-          "state": "unstarted",
-          "type": "match",
-          "league": {"slug": "lck", "name": "LCK"},
-          "match": {"strategy":{"count":3}},
-          "matchTeams": [{"code":"T1"},{"code":"GEN"}]
-        }
-      ],
-      "pages": {"newer": null}
-    }
+const todayBody = `[
+  {
+    "id": 1, "begin_at": "2026-05-09T05:00:00Z", "status": "not_started", "number_of_games": 3,
+    "league": {"name": "LCK", "slug": "league-of-legends-lck-champions-korea"},
+    "tournament": {"name": "Regular Season"},
+    "opponents": [
+      {"opponent": {"id": 1, "acronym": "T1", "name": "T1"}},
+      {"opponent": {"id": 2, "acronym": "GEN", "name": "Gen.G"}}
+    ],
+    "results": []
   }
-}`
+]`
 
-const futureBody = `{
-  "data": {
-    "esports": {
-      "events": [
-        {
-          "startTime": "2026-05-10T05:00:00Z",
-          "state": "unstarted",
-          "type": "match",
-          "league": {"slug": "lck", "name": "LCK"},
-          "match": {"strategy":{"count":3}},
-          "matchTeams": [{"code":"DK"},{"code":"KT"}]
-        },
-        {
-          "startTime": "2026-05-12T08:00:00Z",
-          "state": "unstarted",
-          "type": "match",
-          "league": {"slug": "lpl", "name": "LPL"},
-          "match": {"strategy":{"count":5}},
-          "matchTeams": [{"code":"JDG"},{"code":"BLG"}]
-        }
-      ],
-      "pages": {"newer": null}
-    }
+const futureBody = `[
+  {
+    "id": 2, "begin_at": "2026-05-10T05:00:00Z", "status": "not_started", "number_of_games": 3,
+    "league": {"name": "LCK", "slug": "league-of-legends-lck-champions-korea"},
+    "tournament": {"name": "Regular Season"},
+    "opponents": [
+      {"opponent": {"id": 3, "acronym": "DK", "name": "Dplus KIA"}},
+      {"opponent": {"id": 4, "acronym": "KT", "name": "KT Rolster"}}
+    ],
+    "results": []
+  },
+  {
+    "id": 3, "begin_at": "2026-05-12T08:00:00Z", "status": "not_started", "number_of_games": 5,
+    "league": {"name": "LPL", "slug": "league-of-legends-lpl-china"},
+    "tournament": {"name": "Playoffs"},
+    "opponents": [
+      {"opponent": {"id": 5, "acronym": "JDG", "name": "JD Gaming"}},
+      {"opponent": {"id": 6, "acronym": "BLG", "name": "Bilibili Gaming"}}
+    ],
+    "results": []
   }
-}`
+]`
 
 func TestHandleSchedule_DefaultsToToday(t *testing.T) {
 	rb, _ := installSchedule(t, todayBody, fakeNowMs)
