@@ -2,6 +2,7 @@ package lol
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -36,20 +37,23 @@ func mkServer(t *testing.T, body string) (*httptest.Server, *int32) {
 
 const sampleBody = `{
   "data": {
-    "schedule": {
+    "esports": {
       "events": [
         {
           "startTime": "2026-05-09T05:00:00Z",
           "state": "unstarted",
+          "type": "match",
           "league": {"slug": "lck", "name": "LCK"},
-          "match": {"teams": [{"code":"T1"},{"code":"GEN"}], "strategy":{"count":3}}
+          "match": {"strategy":{"count":3}},
+          "matchTeams": [{"code":"T1"},{"code":"GEN"}]
         },
         {
           "startTime": "2026-05-09T08:00:00Z",
           "state": "unstarted",
           "type": "show",
           "league": {"slug": "lck", "name": "LCK"},
-          "match": {"teams": [], "strategy":{}}
+          "match": {"strategy":{}},
+          "matchTeams": []
         }
       ],
       "pages": {"newer": null}
@@ -73,6 +77,9 @@ func TestGetEventsWithFallback_FirstHitFetchesUpstreamAndCaches(t *testing.T) {
 	}
 	if events[0].League.Slug != "lck" {
 		t.Errorf("event slug = %q, want lck", events[0].League.Slug)
+	}
+	if got := events[0].Match.Teams; len(got) != 2 || got[0].Code != "T1" {
+		t.Errorf("teams not mapped from matchTeams: %+v", got)
 	}
 	if atomic.LoadInt32(count) != 1 {
 		t.Errorf("upstream calls = %d, want 1", *count)
@@ -167,11 +174,12 @@ func TestGetEventsLive_DoesNotWriteCache(t *testing.T) {
 	}
 }
 
-func TestFetchSchedulePage_DropsShowEvents(t *testing.T) {
+func TestFetchEventsPage_DropsShowEvents(t *testing.T) {
 	srv, _ := mkServer(t, sampleBody)
 	c := &Client{HTTP: srv.Client(), URL: srv.URL}
 
-	events, _, _, err := c.fetchSchedulePage(context.Background(), "")
+	from := time.Date(2026, 5, 9, 0, 0, 0, 0, time.UTC)
+	events, _, err := c.fetchEventsPage(context.Background(), from, from.Add(24*time.Hour), "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -182,51 +190,74 @@ func TestFetchSchedulePage_DropsShowEvents(t *testing.T) {
 	}
 }
 
-func TestFetchSchedulePage_NonJSONErrors(t *testing.T) {
+func TestFetchEventsPage_NonJSONErrors(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte("<html>not json</html>"))
 	}))
 	defer srv.Close()
 	c := &Client{HTTP: srv.Client(), URL: srv.URL}
-	_, _, _, err := c.fetchSchedulePage(context.Background(), "")
+	from := time.Date(2026, 5, 9, 0, 0, 0, 0, time.UTC)
+	_, _, err := c.fetchEventsPage(context.Background(), from, from.Add(24*time.Hour), "")
 	if err == nil || !strings.Contains(err.Error(), "decode") {
 		t.Errorf("non-JSON should produce decode error; got %v", err)
 	}
 }
 
-// TestFetchEventsInRange_WalksOlderForPastWindow guards the calendar-week
-// regression: when `from` precedes the default page's earliest event, the
-// fetcher must follow `pages.older` to pick up events earlier in the week.
+// TestFetchEventsPage_GraphQLErrorIsFetchError guards the in-band error path:
+// the gateway answers HTTP 200 with an `errors` array (e.g. when Riot rotates
+// the persisted-query ID), and that must surface as a fetch failure — not be
+// cached as an empty schedule.
+func TestFetchEventsPage_GraphQLErrorIsFetchError(t *testing.T) {
+	body := `{"errors":[{"message":"Persisted query 'x' not found in the persisted query list","extensions":{"code":"PERSISTED_QUERY_NOT_IN_LIST"}}]}`
+	srv, _ := mkServer(t, body)
+	c := &Client{HTTP: srv.Client(), URL: srv.URL}
+	from := time.Date(2026, 5, 9, 0, 0, 0, 0, time.UTC)
+	_, _, err := c.fetchEventsPage(context.Background(), from, from.Add(24*time.Hour), "")
+	if err == nil || !strings.Contains(err.Error(), "PERSISTED_QUERY_NOT_IN_LIST") {
+		t.Errorf("gql error should surface as fetch error with code; got %v", err)
+	}
+}
+
+// requestVars decodes the persisted-operation POST body a test server
+// received and returns its variables map.
+func requestVars(t *testing.T, r *http.Request) map[string]any {
+	t.Helper()
+	var req struct {
+		Variables map[string]any `json:"variables"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		t.Errorf("decode request body: %v", err)
+	}
+	return req.Variables
+}
+
+// TestFetchEventsInRange_WalksNewerPages guards multi-page windows: when a
+// date window holds more events than one page, the fetcher must follow
+// `pages.newer` cursors until the gateway reports no further page.
 //
-// Server simulates 3 pages:
-//   - default (no pageToken)            → Thu May 21
-//   - pageToken=older1                  → Wed May 20 (returns older=older2)
-//   - pageToken=older2                  → Mon May 18 + Tue May 19 (no older)
-//
-// Asking for Mon May 18 → next Mon must return all 4 events.
-func TestFetchEventsInRange_WalksOlderForPastWindow(t *testing.T) {
-	defaultBody := `{"data":{"schedule":{"events":[
-		{"startTime":"2026-05-21T05:00:00Z","state":"completed","league":{"slug":"lck","name":"LCK"},"match":{"teams":[{"code":"BFX"},{"code":"HLE"}],"strategy":{"count":3}}}
-	],"pages":{"newer":null,"older":"older1"}}}}`
-	older1Body := `{"data":{"schedule":{"events":[
-		{"startTime":"2026-05-20T05:00:00Z","state":"completed","league":{"slug":"lck","name":"LCK"},"match":{"teams":[{"code":"GEN"},{"code":"T1"}],"strategy":{"count":3}}}
-	],"pages":{"newer":"newerX","older":"older2"}}}}`
-	older2Body := `{"data":{"schedule":{"events":[
-		{"startTime":"2026-05-18T05:00:00Z","state":"completed","league":{"slug":"lck","name":"LCK"},"match":{"teams":[{"code":"KT"},{"code":"DK"}],"strategy":{"count":3}}},
-		{"startTime":"2026-05-19T05:00:00Z","state":"completed","league":{"slug":"lck","name":"LCK"},"match":{"teams":[{"code":"NS"},{"code":"BRO"}],"strategy":{"count":3}}}
-	],"pages":{"newer":"newerY","older":null}}}}`
+// Server simulates 2 pages:
+//   - no pageToken       → Mon May 18 + Tue May 19 (returns newer=page2)
+//   - pageToken=page2    → Wed May 20 (no newer)
+func TestFetchEventsInRange_WalksNewerPages(t *testing.T) {
+	page1Body := `{"data":{"esports":{"events":[
+		{"startTime":"2026-05-18T05:00:00Z","state":"completed","type":"match","league":{"slug":"lck","name":"LCK"},"match":{"strategy":{"count":3}},"matchTeams":[{"code":"KT"},{"code":"DK"}]},
+		{"startTime":"2026-05-19T05:00:00Z","state":"completed","type":"match","league":{"slug":"lck","name":"LCK"},"match":{"strategy":{"count":3}},"matchTeams":[{"code":"NS"},{"code":"BRO"}]}
+	],"pages":{"newer":"page2","older":null}}}}`
+	page2Body := `{"data":{"esports":{"events":[
+		{"startTime":"2026-05-20T05:00:00Z","state":"completed","type":"match","league":{"slug":"lck","name":"LCK"},"match":{"strategy":{"count":3}},"matchTeams":[{"code":"GEN"},{"code":"T1"}]}
+	],"pages":{"newer":null,"older":"page1"}}}}`
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		switch r.URL.Query().Get("pageToken") {
+		vars := requestVars(t, r)
+		token, _ := vars["pageToken"].(string)
+		switch token {
 		case "":
-			_, _ = w.Write([]byte(defaultBody))
-		case "older1":
-			_, _ = w.Write([]byte(older1Body))
-		case "older2":
-			_, _ = w.Write([]byte(older2Body))
+			_, _ = w.Write([]byte(page1Body))
+		case "page2":
+			_, _ = w.Write([]byte(page2Body))
 		default:
-			t.Errorf("unexpected pageToken %q", r.URL.Query().Get("pageToken"))
+			t.Errorf("unexpected pageToken %q", token)
 			w.WriteHeader(http.StatusBadRequest)
 		}
 	}))
@@ -240,8 +271,32 @@ func TestFetchEventsInRange_WalksOlderForPastWindow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("fetch: %v", err)
 	}
-	if len(events) != 4 {
-		t.Errorf("events = %d, want 4 (Mon, Tue, Wed, Thu); got days=%v", len(events), eventDays(events))
+	if len(events) != 3 {
+		t.Errorf("events = %d, want 3 (Mon, Tue, Wed); got days=%v", len(events), eventDays(events))
+	}
+}
+
+// TestFetchEventsInRange_FiltersToExactWindow guards the client-side [from, to)
+// filter: the request pads the date window a day each side (the gateway's date
+// params have fuzzy timezone semantics), so events outside the exact instants
+// must be dropped locally.
+func TestFetchEventsInRange_FiltersToExactWindow(t *testing.T) {
+	body := `{"data":{"esports":{"events":[
+		{"startTime":"2026-05-17T23:00:00Z","state":"completed","type":"match","league":{"slug":"lck","name":"LCK"},"match":{"strategy":{"count":3}},"matchTeams":[{"code":"KT"},{"code":"DK"}]},
+		{"startTime":"2026-05-18T05:00:00Z","state":"unstarted","type":"match","league":{"slug":"lck","name":"LCK"},"match":{"strategy":{"count":3}},"matchTeams":[{"code":"GEN"},{"code":"T1"}]},
+		{"startTime":"2026-05-19T00:00:00Z","state":"unstarted","type":"match","league":{"slug":"lck","name":"LCK"},"match":{"strategy":{"count":3}},"matchTeams":[{"code":"NS"},{"code":"BRO"}]}
+	],"pages":{"newer":null}}}}`
+	srv, _ := mkServer(t, body)
+	c := &Client{HTTP: srv.Client(), URL: srv.URL}
+
+	from := time.Date(2026, 5, 18, 0, 0, 0, 0, time.UTC)
+	to := from.Add(24 * time.Hour)
+	events, err := c.fetchEventsInRange(context.Background(), from, to, 0)
+	if err != nil {
+		t.Fatalf("fetch: %v", err)
+	}
+	if len(events) != 1 || events[0].Match.Teams[0].Code != "GEN" {
+		t.Errorf("window filter wrong, got %v", eventDays(events))
 	}
 }
 
