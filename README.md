@@ -61,7 +61,7 @@ command and its provider fallbacks are unchanged.
 
 Stock dividends are manual portfolio adjustments:
 
-- `/stock_cash_dividend <vnd_per_share> <ticker>` credits a positive whole-VND amount for each pre-event share held. Eg: `/stock_cash_dividend 1500 TCB`.
+- `/stock_cash_dividend <vnd_per_share> <ticker>` credits a positive whole-VND amount for each pre-event share held and lowers the position's cost basis by the total payout. Eg: `/stock_cash_dividend 1500 TCB`.
 - `/stock_share_dividend <ratio(owned:new)> <ticker>` adds `floor(pre_event_shares × new / owned)` whole shares. Eg: `/stock_share_dividend 100:10 TCB`.
 
 The combined `/stock_dividend` shortcut was retired. Use the specialized cash
@@ -111,8 +111,10 @@ store an `openedAt` lifecycle marker. Stock cash is
 stored directly as `vnd`; coin cash remains `usd`. Buys add their actual spend.
 Partial sells remove basis using the weighted-average method and report realized
 P&L; full sells remove the position and its basis. Stock share dividends add
-shares without adding cost, which lowers the derived average price, while cash
-dividends do not change position basis.
+shares without adding cost, which lowers the derived average price. Cash
+dividends credit the balance and reduce the position basis by the payout
+(floored at zero, never negative) as a return of capital, so the ticker's
+unrealized P&L includes dividends already received.
 
 `/stock_portfolio` and `/coin_portfolio` show compact aligned monospace tables
 with separate unrealized P&L amount and percentage columns for each priced

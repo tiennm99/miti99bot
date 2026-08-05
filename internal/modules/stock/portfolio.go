@@ -15,7 +15,8 @@ type Store = storage.DocStore[Portfolio]
 const CollectionName = "stock"
 
 // AssetPosition keeps the complete persisted state for one open stock ticker.
-// Base is total remaining VND cost, not average price.
+// Base is total remaining VND cost, not average price. Cash dividends return
+// part of that cost, so Base can reach zero on a still-open position.
 type AssetPosition struct {
 	Quantity int64   `json:"quantity" bson:"quantity"`
 	Base     float64 `json:"base" bson:"base"`
@@ -108,7 +109,7 @@ func (p Portfolio) Validate() error {
 		if err != nil || canonical != symbol {
 			return fmt.Errorf("stock: invalid ticker %q", symbol)
 		}
-		if position.Quantity <= 0 || !isPositiveFiniteCost(position.Base) || position.OpenedAt < 0 {
+		if position.Quantity <= 0 || !isNonNegativeFiniteCost(position.Base) || position.OpenedAt < 0 {
 			return fmt.Errorf("stock: %s has invalid position", symbol)
 		}
 	}
@@ -178,27 +179,52 @@ func (p *Portfolio) SellTicker(symbol string, quantity int64) (remaining int64, 
 	soldBase = position.Base * (float64(quantity) / float64(position.Quantity))
 	position.Quantity -= quantity
 	position.Base -= soldBase
-	if !isPositiveFiniteCost(soldBase) || !isPositiveFiniteCost(position.Base) {
+	if !isNonNegativeFiniteCost(soldBase) || !isNonNegativeFiniteCost(position.Base) {
 		return 0, 0, false, fmt.Errorf("stock: invalid remaining cost basis")
 	}
 	p.Assets[symbol] = position
 	return position.Quantity, soldBase, true, nil
 }
 
-func (p *Portfolio) ApplyDividend(symbol string, quantity int64, vnd float64, now int64) error {
+// ApplyCashDividend credits the payout balance and treats the payout as a
+// return of capital: the position's remaining cost basis drops by the same
+// amount, floored at zero, so the ticker's unrealized P&L reflects dividends
+// already received. Any payout beyond the remaining basis still lands in the
+// balance; it just cannot push the basis negative.
+func (p *Portfolio) ApplyCashDividend(symbol string, total int64, balance float64, now int64) error {
 	position, ok := p.Assets[symbol]
 	if !ok || position.Quantity <= 0 {
 		return fmt.Errorf("stock: ticker position not found")
 	}
-	if quantity < position.Quantity || !isPositiveFiniteCost(position.Base) || now <= 0 {
+	if total <= 0 || !isNonNegativeFiniteCost(position.Base) || now <= 0 {
+		return fmt.Errorf("stock: invalid dividend position")
+	}
+	position.Base = math.Max(0, position.Base-float64(total))
+	p.Assets[symbol] = position
+	p.VND = balance
+	return nil
+}
+
+// ApplyShareDividend grows the holding to quantity. The cost basis is
+// unchanged: the same spent money now covers more shares, which lowers the
+// derived average price.
+func (p *Portfolio) ApplyShareDividend(symbol string, quantity int64, now int64) error {
+	position, ok := p.Assets[symbol]
+	if !ok || position.Quantity <= 0 {
+		return fmt.Errorf("stock: ticker position not found")
+	}
+	if quantity < position.Quantity || !isNonNegativeFiniteCost(position.Base) || now <= 0 {
 		return fmt.Errorf("stock: invalid dividend position")
 	}
 	position.Quantity = quantity
 	p.Assets[symbol] = position
-	p.VND = vnd
 	return nil
 }
 
 func isPositiveFiniteCost(value float64) bool {
 	return value > 0 && !math.IsNaN(value) && !math.IsInf(value, 0)
+}
+
+func isNonNegativeFiniteCost(value float64) bool {
+	return value >= 0 && !math.IsNaN(value) && !math.IsInf(value, 0)
 }

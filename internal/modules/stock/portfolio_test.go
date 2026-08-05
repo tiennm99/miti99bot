@@ -68,14 +68,44 @@ func TestBuyPreservesOpenedAtAndSellUsesWeightedBasis(t *testing.T) {
 	}
 }
 
-func TestDividendDoesNotChangeLifecycleOrBase(t *testing.T) {
+func TestCashDividendReducesBaseAndKeepsLifecycle(t *testing.T) {
 	p := NewPortfolio(1)
 	_ = p.BuyTicker("TCB", 100, 3_000_000, 10)
-	if err := p.ApplyDividend("TCB", 110, 500_000, 30); err != nil {
+	if err := p.ApplyCashDividend("TCB", 150_000, 650_000, 30); err != nil {
 		t.Fatal(err)
 	}
 	position := p.Assets["TCB"]
-	if position.Quantity != 110 || position.Base != 3_000_000 || position.OpenedAt != 10 || p.VND != 500_000 {
+	if position.Quantity != 100 || position.Base != 2_850_000 || position.OpenedAt != 10 || p.VND != 650_000 {
+		t.Fatalf("portfolio=%+v", p)
+	}
+}
+
+func TestCashDividendFloorsBaseAtZeroAndSellStillWorks(t *testing.T) {
+	p := NewPortfolio(1)
+	_ = p.BuyTicker("TCB", 100, 100_000, 10)
+	if err := p.ApplyCashDividend("TCB", 150_000, 150_000, 30); err != nil {
+		t.Fatal(err)
+	}
+	if position := p.Assets["TCB"]; position.Base != 0 || position.Quantity != 100 {
+		t.Fatalf("position=%+v", position)
+	}
+	if err := p.Validate(); err != nil {
+		t.Fatalf("zero-base position failed validation: %v", err)
+	}
+	remaining, soldBase, ok, err := p.SellTicker("TCB", 40)
+	if err != nil || !ok || remaining != 60 || soldBase != 0 {
+		t.Fatalf("remaining=%d soldBase=%v ok=%v err=%v", remaining, soldBase, ok, err)
+	}
+}
+
+func TestShareDividendDoesNotChangeLifecycleOrBase(t *testing.T) {
+	p := NewPortfolio(1)
+	_ = p.BuyTicker("TCB", 100, 3_000_000, 10)
+	if err := p.ApplyShareDividend("TCB", 110, 30); err != nil {
+		t.Fatal(err)
+	}
+	position := p.Assets["TCB"]
+	if position.Quantity != 110 || position.Base != 3_000_000 || position.OpenedAt != 10 || p.VND != 0 {
 		t.Fatalf("portfolio=%+v", p)
 	}
 }

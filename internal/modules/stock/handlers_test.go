@@ -255,9 +255,12 @@ func TestHandleCashDividendAllowsRepeatedManualAdjustments(t *testing.T) {
 	if got, want := p.VND, float64(418000); got != want {
 		t.Fatalf("balance = %v, want %v", got, want)
 	}
-	if p.Assets["TCB"].Base != 139*30_000 || p.Assets["TCB"].OpenedAt != 100 {
+	// Each payout (1.500 × 139 = 208.500) is a return of capital: the basis
+	// drops from 4.170.000 through 3.961.500 to 3.753.000.
+	if p.Assets["TCB"].Base != 3_753_000 || p.Assets["TCB"].OpenedAt != 100 {
 		t.Fatalf("cash dividend position: %+v", p.Assets["TCB"])
 	}
+	rb.AssertSentText(t, "Cost basis: 3.961.500 → 3.753.000 VND")
 }
 
 func TestHandleCashDividendRejectsInexactBalanceSum(t *testing.T) {
