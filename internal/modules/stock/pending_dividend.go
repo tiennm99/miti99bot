@@ -2,11 +2,7 @@ package stock
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/base64"
-	"errors"
-	"fmt"
-	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -17,17 +13,16 @@ const (
 	dividendCallbackPrefix = "stock_div:"
 	pendingDividendPrefix  = "pending-dividend:"
 	pendingDividendTTL     = 24 * time.Hour
-	dividendTokenBytes     = 16
-	dividendTokenLength    = 22
+	// Telegram rejects inline-button callback data longer than 64 bytes.
+	maxDividendCallbackBytes = 64
 )
-
-var dividendTokenPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{22}$`)
 
 type PendingDividendStore = storage.DocStore[PendingDividendAction]
 
 // PendingDividendAction is the server-side half of an inline button. Financial
-// values live in the user's dividend history; Telegram receives only an opaque
-// random token.
+// values live in the user's dividend history; the button's callback data
+// carries only the owner user ID and provider event ID, and every press is
+// validated against the stored owner, chat, and message binding.
 type PendingDividendAction struct {
 	OwnerUserID      int64  `json:"ownerUserId" bson:"ownerUserId"`
 	ChatID           int64  `json:"chatId" bson:"chatId"`
@@ -39,54 +34,47 @@ type PendingDividendAction struct {
 	ExpiresAt        int64  `json:"expiresAt" bson:"expiresAt"`
 }
 
-func pendingDividendKey(token string) string { return pendingDividendPrefix + token }
-
-func generateDividendToken() (string, error) {
-	raw := make([]byte, dividendTokenBytes)
-	if _, err := rand.Read(raw); err != nil {
-		return "", fmt.Errorf("generate dividend action token: %w", err)
-	}
-	return base64.RawURLEncoding.EncodeToString(raw), nil
+// pendingDividendKey is deterministic per (user, event): re-suggesting the
+// same dividend overwrites the previous action instead of accumulating keys,
+// and applying it leaves exactly one key to delete.
+func pendingDividendKey(userID int64, eventID string) string {
+	return pendingDividendPrefix + strconv.FormatInt(userID, 10) + ":" + eventID
 }
 
-func validDividendToken(token string) bool {
-	return len(token) == dividendTokenLength && dividendTokenPattern.MatchString(token)
-}
-
-func callbackToken(data string) (string, bool) {
-	token, ok := strings.CutPrefix(data, dividendCallbackPrefix)
-	if !ok || !validDividendToken(token) {
+// dividendCallbackData builds the inline-button payload. It fails only when
+// the provider event ID is malformed or would push the payload past
+// Telegram's byte limit.
+func dividendCallbackData(userID int64, eventID string) (string, bool) {
+	if userID <= 0 || !ssiProviderIDPattern.MatchString(eventID) {
 		return "", false
 	}
-	return token, true
+	data := dividendCallbackPrefix + strconv.FormatInt(userID, 10) + ":" + eventID
+	if len(data) > maxDividendCallbackBytes {
+		return "", false
+	}
+	return data, true
 }
 
-func (s *state) createPendingDividend(ctx context.Context, action PendingDividendAction) (string, error) {
-	if s.pending == nil {
-		return "", errors.New("stock: pending dividend store unavailable")
+// parseDividendCallback recovers the owner user ID and provider event ID from
+// button callback data. Callback data is client-controlled, so both parts are
+// validated here and the resolved action is re-checked against the presser.
+func parseDividendCallback(data string) (int64, string, bool) {
+	if len(data) > maxDividendCallbackBytes {
+		return 0, "", false
 	}
-	generator := s.newDividendToken
-	if generator == nil {
-		generator = generateDividendToken
+	rest, ok := strings.CutPrefix(data, dividendCallbackPrefix)
+	if !ok {
+		return 0, "", false
 	}
-	for attempt := 0; attempt < 3; attempt++ {
-		token, err := generator()
-		if err != nil {
-			return "", err
-		}
-		if !validDividendToken(token) {
-			return "", errors.New("stock: invalid generated dividend token")
-		}
-		err = s.pending.PutVersioned(ctx, pendingDividendKey(token), 0, action)
-		if errors.Is(err, storage.ErrConflict) {
-			continue
-		}
-		if err != nil {
-			return "", fmt.Errorf("save pending dividend action: %w", err)
-		}
-		return token, nil
+	ownerPart, eventID, ok := strings.Cut(rest, ":")
+	if !ok || !ssiProviderIDPattern.MatchString(eventID) {
+		return 0, "", false
 	}
-	return "", errors.New("stock: could not allocate unique dividend token")
+	ownerID, err := strconv.ParseInt(ownerPart, 10, 64)
+	if err != nil || ownerID <= 0 {
+		return 0, "", false
+	}
+	return ownerID, eventID, true
 }
 
 func (s *state) cleanupExpiredDividends(ctx context.Context, now int64) {
