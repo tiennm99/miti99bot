@@ -313,7 +313,8 @@ func (s *state) handleCashDividend(ctx context.Context, b *bot.Bot, update *mode
 	if err != nil {
 		return chathelper.Reply(ctx, b, update.Message, "Dividend amount is too large.")
 	}
-	if err := p.ApplyDividend(symbol, held, balance, s.now().UnixMilli()); err != nil {
+	baseBefore := p.Assets[symbol].Base
+	if err := p.ApplyCashDividend(symbol, total, balance, s.now().UnixMilli()); err != nil {
 		return chathelper.Reply(ctx, b, update.Message, "Could not apply this dividend. Try again later.")
 	}
 	if err := SavePortfolio(ctx, s.store, userID, p); err != nil {
@@ -323,7 +324,8 @@ func (s *state) handleCashDividend(ctx context.Context, b *bot.Bot, update *mode
 	return chathelper.Reply(ctx, b, update.Message,
 		"Cash dividend: "+FormatVND(float64(vndPerShare))+" × "+formatShareQuantity(held)+" "+symbol+
 			" = "+FormatVND(float64(total))+
-			"\nBalance: "+FormatVND(balance))
+			"\nBalance: "+FormatVND(balance)+
+			"\nCost basis: "+formatVNDNumber(baseBefore)+" → "+FormatVND(p.Assets[symbol].Base))
 }
 
 func (s *state) handleShareDividend(ctx context.Context, b *bot.Bot, update *models.Update) error {
@@ -376,7 +378,7 @@ func (s *state) handleShareDividend(ctx context.Context, b *bot.Bot, update *mod
 	if err != nil {
 		return chathelper.Reply(ctx, b, update.Message, "Share dividend is too large.")
 	}
-	if err := p.ApplyDividend(symbol, finalHolding, p.VND, s.now().UnixMilli()); err != nil {
+	if err := p.ApplyShareDividend(symbol, finalHolding, s.now().UnixMilli()); err != nil {
 		return chathelper.Reply(ctx, b, update.Message, "Could not apply this dividend. Try again later.")
 	}
 	if err := SavePortfolio(ctx, s.store, userID, p); err != nil {
@@ -445,7 +447,7 @@ func (s *state) handleStats(ctx context.Context, b *bot.Bot, update *models.Upda
 				continue
 			}
 			val := float64(h.qty) * price
-			if !isPositiveFiniteCost(val) || !isPositiveFiniteCost(average) {
+			if !isPositiveFiniteCost(val) || !isNonNegativeFiniteCost(average) {
 				missingPrice = true
 				positions = append(positions, []string{h.symbol, FormatStock(float64(h.qty)), "N/A", "N/A", "N/A", "N/A", "N/A"})
 				continue

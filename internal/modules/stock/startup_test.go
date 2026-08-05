@@ -150,7 +150,7 @@ func TestInitStoreDoesNotMarkFailedMigrationComplete(t *testing.T) {
 	// its retired fields are removed.
 	if err := storage.Typed[legacyDividendPortfolio](provider.Collection(CollectionName)).Put(ctx, "user:7", legacyDividendPortfolio{
 		Assets: map[string]legacyDividendAssetPosition{
-			"TCB": {Quantity: 10, Base: 0, DividendCheckedAt: legacyCursor(123), OpenedAt: 99},
+			"TCB": {Quantity: 10, Base: -1, DividendCheckedAt: legacyCursor(123), OpenedAt: 99},
 		},
 	}); err != nil {
 		t.Fatal(err)

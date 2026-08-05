@@ -289,7 +289,7 @@ func TestDividendCallbackUsesStoredEventAndCurrentHoldingOnce(t *testing.T) {
 		t.Fatal(err)
 	}
 	p, _ = LoadPortfolio(context.Background(), store, 7, now.UnixMilli())
-	if p.VND != 250_000 || !p.Dividends["TCB"][event.ProviderID].Processed {
+	if p.VND != 250_000 || p.Assets["TCB"].Base != 2_850_000 || !p.Dividends["TCB"][event.ProviderID].Processed {
 		t.Fatalf("processed portfolio = %+v", p)
 	}
 	if err := s.handleDividendCallback(context.Background(), rb.Bot, dividendCallbackUpdate(7, 7, action.MessageID, token)); err != nil {

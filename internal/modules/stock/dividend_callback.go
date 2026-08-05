@@ -167,12 +167,14 @@ func applySuggestedDividend(p *Portfolio, symbol string, record DividendRecord, 
 		if err != nil {
 			return "", err
 		}
-		if err := p.ApplyDividend(symbol, held, balance, now); err != nil {
+		baseBefore := p.Assets[symbol].Base
+		if err := p.ApplyCashDividend(symbol, total, balance, now); err != nil {
 			return "", err
 		}
 		return "Applied cash dividend for " + symbol + ": " + FormatVND(float64(record.VNDPerShare)) +
 			" × " + formatShareQuantity(held) + " = " + FormatVND(float64(total)) +
-			"\nBalance: " + FormatVND(balance), nil
+			"\nBalance: " + FormatVND(balance) +
+			"\nCost basis: " + formatVNDNumber(baseBefore) + " → " + FormatVND(p.Assets[symbol].Base), nil
 
 	case DividendKindShares:
 		ratio := shareRatio{owned: record.OwnedShares, new: record.NewShares,
@@ -188,7 +190,7 @@ func applySuggestedDividend(p *Portfolio, symbol string, record DividendRecord, 
 		if err != nil {
 			return "", err
 		}
-		if err := p.ApplyDividend(symbol, finalHolding, p.VND, now); err != nil {
+		if err := p.ApplyShareDividend(symbol, finalHolding, now); err != nil {
 			return "", err
 		}
 		return "Applied share dividend for " + symbol + " (" + ratio.raw + "): +" +
