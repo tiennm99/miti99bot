@@ -150,7 +150,7 @@ func TestWheelOfNames_UsageWhenMissingOptions(t *testing.T) {
 }
 
 func TestWheelOfNames_ResultCaptionEscapesHTML(t *testing.T) {
-	got := wheelResultCaption(`<Alice & Bob>`)
+	got := wheelResultCaption([]string{`<Alice & Bob>`}, 0)
 	want := `Result: <span class="tg-spoiler">&lt;Alice &amp; Bob&gt;</span>`
 	if got != want {
 		t.Fatalf("wheelResultCaption() = %q, want %q", got, want)
@@ -158,10 +158,22 @@ func TestWheelOfNames_ResultCaptionEscapesHTML(t *testing.T) {
 }
 
 func TestWheelOfNames_ResultCaptionTruncatesLongResult(t *testing.T) {
-	got := wheelResultCaption(strings.Repeat("a", wheelResultCaptionMaxRunes+1))
+	got := wheelResultCaption([]string{strings.Repeat("a", wheelResultCaptionMaxRunes+1)}, 0)
 	want := `Result: <span class="tg-spoiler">` + strings.Repeat("a", wheelResultCaptionMaxRunes) + `...</span>`
 	if got != want {
 		t.Fatalf("wheelResultCaption() length = %d, want truncated caption length %d", len(got), len(want))
+	}
+}
+
+func TestWheelOfNames_ResultCaptionPadsShortWinnerToLongestOption(t *testing.T) {
+	options := []string{"Bob", "Alexandria"}
+	got := wheelResultCaption(options, 0)
+	want := `Result: <span class="tg-spoiler">.......Bob</span>`
+	if got != want {
+		t.Fatalf("wheelResultCaption() = %q, want %q", got, want)
+	}
+	if longest := wheelResultCaption(options, 1); len([]rune(longest)) != len([]rune(got)) {
+		t.Fatalf("caption lengths differ: winner %q vs %q", got, longest)
 	}
 }
 
@@ -206,7 +218,7 @@ func TestWheelOfNames_UsesRemoteAPIWhenConfigured(t *testing.T) {
 	if call.Method != "sendAnimation" {
 		t.Fatalf("method = %q, want sendAnimation", call.Method)
 	}
-	wantCaption := wheelResultCaption(got.Options[got.WinnerIndex])
+	wantCaption := wheelResultCaption(got.Options, got.WinnerIndex)
 	if got := call.Form["caption"]; got != wantCaption {
 		t.Fatalf("caption = %q, want %q", got, wantCaption)
 	}
