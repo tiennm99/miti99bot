@@ -36,6 +36,16 @@ describe('parseWheelRequest', () => {
     ).toThrow();
   });
 
+  test('accepts a single option', () => {
+    const request = parseWheelRequest({options: ['solo']}, limits, () => 0);
+    expect(request.options).toEqual(['solo']);
+    expect(request.winnerIndex).toBe(0);
+  });
+
+  test('rejects empty options', () => {
+    expect(() => parseWheelRequest({options: []}, limits, () => 0)).toThrow();
+  });
+
   test('selects winner when omitted', () => {
     const request = parseWheelRequest({options: ['a', 'b']}, limits, () => 1);
     expect(request.winnerIndex).toBe(1);

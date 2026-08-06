@@ -62,7 +62,7 @@ describe('parseRenderLocalArgs', () => {
   });
 
   test('rejects missing options and invalid integer flags', () => {
-    expect(() => parseRenderLocalArgs(['--option', 'alpha'])).toThrow();
+    expect(() => parseRenderLocalArgs([])).toThrow();
     expect(() =>
       parseRenderLocalArgs(['--option', 'alpha', '--option', 'beta', '--winner', '1.5']),
     ).toThrow('--winner must be an integer');

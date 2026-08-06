@@ -34,7 +34,7 @@ export const createWheelRequestSchema = (limits) =>
         .pipe(
           z
             .array(z.string().min(1).max(limits.maxOptionChars))
-            .min(2)
+            .min(1)
             .max(limits.maxOptions),
         ),
       winnerIndex: z.number().int().nonnegative().optional(),

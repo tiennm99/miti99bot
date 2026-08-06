@@ -56,7 +56,7 @@ describe('POST /api/gif', () => {
       method: 'POST',
       url: '/api/gif',
       payload: {
-        options: ['only one'],
+        options: [],
       },
     });
 
