@@ -67,21 +67,27 @@ func wheelOfNamesCommand() modules.Command {
 const wheelUsage = "Usage: /wheelofnames <option,...>"
 
 func wheelResultCaption(options []string, winner int) string {
-	result := truncateWheelResultCaption(options[winner])
-	padding := wheelCaptionPadding(options, len([]rune(result)))
-	return `Result: <span class="tg-spoiler">` + html.EscapeString(padding+result) + `</span>`
+	result := padWheelResultCaption(options, truncateWheelResultCaption(options[winner]))
+	return `Result: <span class="tg-spoiler">` + html.EscapeString(result) + `</span>`
 }
 
-// wheelCaptionPadding returns leading dots so every option renders a
-// spoiler of equal length; otherwise the spoiler width reveals the winner.
-func wheelCaptionPadding(options []string, resultRunes int) string {
-	longest := resultRunes
+// Non-breaking space: regular spaces at the caption edges get trimmed by
+// Telegram, which would shrink the spoiler and reveal the winner's length.
+const wheelCaptionPad = "\u00a0"
+
+// padWheelResultCaption centers shorter winners with blank padding so every
+// option renders a spoiler of equal length; otherwise the spoiler width
+// reveals the winner. The longest option is returned unpadded.
+func padWheelResultCaption(options []string, result string) string {
+	longest := len([]rune(result))
 	for _, option := range options {
 		if n := len([]rune(truncateWheelResultCaption(option))); n > longest {
 			longest = n
 		}
 	}
-	return strings.Repeat(".", longest-resultRunes)
+	missing := longest - len([]rune(result))
+	left := missing / 2
+	return strings.Repeat(wheelCaptionPad, left) + result + strings.Repeat(wheelCaptionPad, missing-left)
 }
 
 func truncateWheelResultCaption(result string) string {
