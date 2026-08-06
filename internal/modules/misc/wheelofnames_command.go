@@ -71,13 +71,9 @@ func wheelResultCaption(options []string, winner int) string {
 	return `Result: <span class="tg-spoiler">` + html.EscapeString(result) + `</span>`
 }
 
-// Figure space: blank, non-breaking, and as wide as a digit, so in
-// Telegram's proportional font one pad char roughly matches one letter;
-// a regular space is far narrower and the spoiler width would still hint
-// at the winner's length.
-const wheelCaptionPad = "\u2007"
+const wheelCaptionPad = "_"
 
-// padWheelResultCaption prefixes shorter winners with blank padding so every
+// padWheelResultCaption centers shorter winners between underscores so every
 // option renders a spoiler of equal length; otherwise the spoiler width
 // reveals the winner. The longest option is returned unpadded.
 func padWheelResultCaption(options []string, result string) string {
@@ -87,7 +83,9 @@ func padWheelResultCaption(options []string, result string) string {
 			longest = n
 		}
 	}
-	return strings.Repeat(wheelCaptionPad, longest-len([]rune(result))) + result
+	missing := longest - len([]rune(result))
+	left := missing / 2
+	return strings.Repeat(wheelCaptionPad, left) + result + strings.Repeat(wheelCaptionPad, missing-left)
 }
 
 func truncateWheelResultCaption(result string) string {
