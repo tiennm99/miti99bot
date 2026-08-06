@@ -168,7 +168,7 @@ func TestWheelOfNames_ResultCaptionTruncatesLongResult(t *testing.T) {
 func TestWheelOfNames_ResultCaptionPadsShortWinnerToLongestOption(t *testing.T) {
 	options := []string{"Bob", "Alexandria"}
 	got := wheelResultCaption(options, 0)
-	want := `Result: <span class="tg-spoiler">` + strings.Repeat(wheelCaptionPad, 3) + "Bob" + strings.Repeat(wheelCaptionPad, 4) + `</span>`
+	want := `Result: <span class="tg-spoiler">` + strings.Repeat(wheelCaptionPad, 7) + "Bob" + `</span>`
 	if got != want {
 		t.Fatalf("wheelResultCaption() = %q, want %q", got, want)
 	}

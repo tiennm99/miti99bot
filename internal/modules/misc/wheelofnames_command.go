@@ -75,7 +75,7 @@ func wheelResultCaption(options []string, winner int) string {
 // Telegram, which would shrink the spoiler and reveal the winner's length.
 const wheelCaptionPad = "\u00a0"
 
-// padWheelResultCaption centers shorter winners with blank padding so every
+// padWheelResultCaption prefixes shorter winners with blank padding so every
 // option renders a spoiler of equal length; otherwise the spoiler width
 // reveals the winner. The longest option is returned unpadded.
 func padWheelResultCaption(options []string, result string) string {
@@ -85,9 +85,7 @@ func padWheelResultCaption(options []string, result string) string {
 			longest = n
 		}
 	}
-	missing := longest - len([]rune(result))
-	left := missing / 2
-	return strings.Repeat(wheelCaptionPad, left) + result + strings.Repeat(wheelCaptionPad, missing-left)
+	return strings.Repeat(wheelCaptionPad, longest-len([]rune(result))) + result
 }
 
 func truncateWheelResultCaption(result string) string {
