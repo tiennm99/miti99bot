@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"html"
+	"strings"
 
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
@@ -51,7 +52,7 @@ func wheelOfNamesCommand() modules.Command {
 				Duration:  animation.Duration,
 				Width:     animation.Width,
 				Height:    animation.Height,
-				Caption:   wheelResultCaption(options[winner]),
+				Caption:   wheelResultCaption(options, winner),
 				ParseMode: models.ParseModeHTML,
 			})
 			if err != nil {
@@ -65,9 +66,22 @@ func wheelOfNamesCommand() modules.Command {
 
 const wheelUsage = "Usage: /wheelofnames <option,...>"
 
-func wheelResultCaption(result string) string {
-	result = truncateWheelResultCaption(result)
-	return `Result: <span class="tg-spoiler">` + html.EscapeString(result) + `</span>`
+func wheelResultCaption(options []string, winner int) string {
+	result := truncateWheelResultCaption(options[winner])
+	padding := wheelCaptionPadding(options, len([]rune(result)))
+	return `Result: <span class="tg-spoiler">` + html.EscapeString(padding+result) + `</span>`
+}
+
+// wheelCaptionPadding returns leading dots so every option renders a
+// spoiler of equal length; otherwise the spoiler width reveals the winner.
+func wheelCaptionPadding(options []string, resultRunes int) string {
+	longest := resultRunes
+	for _, option := range options {
+		if n := len([]rune(truncateWheelResultCaption(option))); n > longest {
+			longest = n
+		}
+	}
+	return strings.Repeat(".", longest-resultRunes)
 }
 
 func truncateWheelResultCaption(result string) string {
