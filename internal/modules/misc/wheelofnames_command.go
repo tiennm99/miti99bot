@@ -71,9 +71,11 @@ func wheelResultCaption(options []string, winner int) string {
 	return `Result: <span class="tg-spoiler">` + html.EscapeString(result) + `</span>`
 }
 
-// Non-breaking space: regular spaces at the caption edges get trimmed by
-// Telegram, which would shrink the spoiler and reveal the winner's length.
-const wheelCaptionPad = "\u00a0"
+// Figure space: blank, non-breaking, and as wide as a digit, so in
+// Telegram's proportional font one pad char roughly matches one letter;
+// a regular space is far narrower and the spoiler width would still hint
+// at the winner's length.
+const wheelCaptionPad = "\u2007"
 
 // padWheelResultCaption prefixes shorter winners with blank padding so every
 // option renders a spoiler of equal length; otherwise the spoiler width
