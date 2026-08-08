@@ -169,9 +169,15 @@ func getLeapMonthOffset(a11 int) int {
 func solarToLunar(dd, mm, yy int) (day, month, year int, leap bool) {
 	dayNumber := jdFromDate(dd, mm, yy)
 	k := floorInt((float64(dayNumber) - jdNewMoonEpoch) / newMoonCycle)
+	// The mean-cycle estimate k can overshoot the true lunation by one when
+	// dayNumber falls just before a new moon. The reference implementation
+	// steps back only once and thus returns day 0 for a handful of days
+	// (e.g. 13/4/1877, 9/4/2062); loop until the month start is on or before
+	// the target day.
 	monthStart := getNewMoonDay(k + 1)
-	if monthStart > dayNumber {
-		monthStart = getNewMoonDay(k)
+	for monthStart > dayNumber {
+		k--
+		monthStart = getNewMoonDay(k + 1)
 	}
 	a11 := getLunarMonth11(yy)
 	b11 := a11
