@@ -76,7 +76,8 @@ func TestSolarLunarRoundTrip(t *testing.T) {
 		}
 		// Consecutive solar days are either consecutive lunar days or the
 		// first day after a month of 29 or 30 days.
-		if jd > start && lunarDay != prevDay+1 && !(lunarDay == 1 && (prevDay == 29 || prevDay == 30)) {
+		startsNewMonth := lunarDay == 1 && (prevDay == 29 || prevDay == 30)
+		if jd > start && lunarDay != prevDay+1 && !startsNewMonth {
 			t.Fatalf("discontinuity at %d/%d/%d: lunar day %d after %d",
 				solarDay, solarMonth, solarYear, lunarDay, prevDay)
 		}
