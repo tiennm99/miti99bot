@@ -19,6 +19,14 @@ var knownDates = []struct {
 	{"start of leap month 4, Canh Tý", 23, 5, 2020, 1, 4, 2020, true},
 	{"Quốc khánh 1945 — 26/7 Ất Dậu", 2, 9, 1945, 26, 7, 1945, false},
 	{"30/4/1975 — 20/3 Ất Mão", 30, 4, 1975, 20, 3, 1975, false},
+	// Razor-edge lunations: the new moon falls within ~2 minutes of UTC+7
+	// midnight, so ephemeris precision decides the day. Published Vietnamese
+	// calendars (and the pre-1968 Chinese-calendar convention then in force)
+	// start the next month a day later — the truncated series agrees; a
+	// higher-precision Meeus ch. 49 implementation flips these and is wrong
+	// against the published record.
+	{"NM 20/6/1944 ~17:00 UT — 30/4 nhuận", 20, 6, 1944, 30, 4, 1944, true},
+	{"NM 7/7/1967 ~17:00 UT — 30/5 Đinh Mùi", 7, 7, 1967, 30, 5, 1967, false},
 }
 
 func TestSolarToLunar_KnownDates(t *testing.T) {
@@ -51,12 +59,14 @@ func TestLunarToSolar_KnownDates(t *testing.T) {
 	}
 }
 
-// TestSolarLunarRoundTrip converts every day of 1950–2050 solar→lunar→solar.
-// Identity across a century (including ~37 leap months) rules out whole
-// classes of boundary bugs without needing external truth per day.
+// TestSolarLunarRoundTrip converts every day of the supported 1800–2199 range
+// solar→lunar→solar and checks day-to-day continuity. Identity across four
+// centuries (including ~147 leap months) rules out whole classes of boundary
+// bugs without needing external truth per day.
 func TestSolarLunarRoundTrip(t *testing.T) {
-	start := jdFromDate(1, 1, 1950)
-	end := jdFromDate(31, 12, 2050)
+	start := jdFromDate(1, 1, minLunarYear)
+	end := jdFromDate(31, 12, maxLunarYear)
+	prevDay := 0
 	for jd := start; jd <= end; jd++ {
 		solarDay, solarMonth, solarYear := jdToDate(jd)
 		lunarDay, lunarMonth, lunarYear, leap := solarToLunar(solarDay, solarMonth, solarYear)
@@ -64,6 +74,13 @@ func TestSolarLunarRoundTrip(t *testing.T) {
 			t.Fatalf("solarToLunar(%d/%d/%d) out of range: %d/%d/%d",
 				solarDay, solarMonth, solarYear, lunarDay, lunarMonth, lunarYear)
 		}
+		// Consecutive solar days are either consecutive lunar days or the
+		// first day after a month of 29 or 30 days.
+		if jd > start && lunarDay != prevDay+1 && !(lunarDay == 1 && (prevDay == 29 || prevDay == 30)) {
+			t.Fatalf("discontinuity at %d/%d/%d: lunar day %d after %d",
+				solarDay, solarMonth, solarYear, lunarDay, prevDay)
+		}
+		prevDay = lunarDay
 		gotDay, gotMonth, gotYear, err := lunarToSolar(lunarDay, lunarMonth, lunarYear, leap)
 		if err != nil {
 			t.Fatalf("round trip %d/%d/%d → %d/%d/%d leap=%v: %v",
@@ -73,6 +90,31 @@ func TestSolarLunarRoundTrip(t *testing.T) {
 			t.Fatalf("round trip %d/%d/%d → %d/%d/%d leap=%v → %d/%d/%d",
 				solarDay, solarMonth, solarYear, lunarDay, lunarMonth, lunarYear, leap,
 				gotDay, gotMonth, gotYear)
+		}
+	}
+}
+
+// TestSolarToLunar_LunationOvershoot pins the four days in the supported range
+// where the mean-cycle lunation estimate overshoots by one and the reference
+// implementation returns lunar day 0. All four are the 30th (last) day of
+// their lunar month; lunarToSolar, whose index is rounded rather than floored,
+// already agreed with these values.
+func TestSolarToLunar_LunationOvershoot(t *testing.T) {
+	cases := []struct {
+		solarDay, solarMonth, solarYear int
+		lunarDay, lunarMonth, lunarYear int
+	}{
+		{13, 4, 1877, 30, 2, 1877},
+		{16, 3, 1885, 30, 1, 1885},
+		{7, 5, 2054, 30, 3, 2054},
+		{9, 4, 2062, 30, 2, 2062},
+	}
+	for _, tc := range cases {
+		d, m, y, leap := solarToLunar(tc.solarDay, tc.solarMonth, tc.solarYear)
+		if d != tc.lunarDay || m != tc.lunarMonth || y != tc.lunarYear || leap {
+			t.Errorf("solarToLunar(%d/%d/%d) = %d/%d/%d leap=%v, want %d/%d/%d leap=false",
+				tc.solarDay, tc.solarMonth, tc.solarYear, d, m, y, leap,
+				tc.lunarDay, tc.lunarMonth, tc.lunarYear)
 		}
 	}
 }
@@ -129,6 +171,34 @@ func TestLunarToSolar_RejectsDay30OfShortMonth(t *testing.T) {
 	}
 	if !found {
 		t.Fatal("no 29-day month found in lunar year 2024 — month-length computation is broken")
+	}
+}
+
+// TestLeapMonthTable anchors leap-month placement — the trickiest part of the
+// algorithm — to published Vietnamese calendar tables: each listed year must
+// accept exactly its documented leap month and reject leap for all others.
+func TestLeapMonthTable(t *testing.T) {
+	leapMonths := map[int]int{
+		1995: 8, 1998: 5, 2001: 4, 2004: 2, 2006: 7, 2009: 5, 2012: 4,
+		2014: 9, 2017: 6, 2020: 4, 2023: 2, 2025: 6, 2028: 5, 2031: 3, 2033: 11,
+	}
+	for year, leapMonth := range leapMonths {
+		for m := 1; m <= 12; m++ {
+			_, _, _, err := lunarToSolar(1, m, year, true)
+			if m == leapMonth && err != nil {
+				t.Errorf("year %d rejected documented leap month %d: %v", year, m, err)
+			}
+			if m != leapMonth && err == nil {
+				t.Errorf("year %d accepted leap month %d; tables say %d", year, m, leapMonth)
+			}
+		}
+	}
+	for _, year := range []int{2021, 2022, 2024, 2026, 2027} {
+		for m := 1; m <= 12; m++ {
+			if _, _, _, err := lunarToSolar(1, m, year, true); err == nil {
+				t.Errorf("year %d accepted leap month %d; year has no leap month", year, m)
+			}
+		}
 	}
 }
 
