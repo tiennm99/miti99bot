@@ -58,6 +58,8 @@ func TestCommandDiscovery_AllPublicCommandsHaveSafeMetadata(t *testing.T) {
 	}
 
 	expectedParameters := map[string]string{
+		"amlich":               "[date]",
+		"duonglich":            "<date> [nhuan]",
 		"coin_price":           "<coin>",
 		"coin_topup":           "<usd_amount>",
 		"coin_buy":             "<coin> <usd_to_spend>",
