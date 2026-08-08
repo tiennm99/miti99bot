@@ -9,6 +9,7 @@ Atlas via long polling and an in-process cron scheduler.
 |---|---|
 | `util` | `/help`, `/info`, `/stickerid` |
 | `misc` | `/ping`, `/ping_stats`, `/random`, `/wheelofnames`, `/ff`, `/the_answer`, `/trongtruonghop` + `/tth`, `/trongtruonghopvng` + `/tthvng` disclaimers |
+| `amlich` | Vietnamese lunar calendar: `/amlich` (dương lịch → âm lịch, defaults to today), `/duonglich` (âm lịch → dương lịch, `nhuan` flag for leap months); dates accept `d`, `d/m`, or `d/m/yyyy` — missing parts fill from today in the input's calendar |
 | `wordle` | Daily Wordle game |
 | `loldle` | League-of-Legends "guess the champion" |
 | `lol` | Pro-match schedule (`/lol`, `/lol_tomorrow`, `/lol_this_week`, `/lol_next_week`) + daily push |
