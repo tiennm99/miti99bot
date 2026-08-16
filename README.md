@@ -9,12 +9,12 @@ Atlas via long polling and an in-process cron scheduler.
 |---|---|
 | `util` | `/help`, `/info`, `/stickerid` |
 | `misc` | `/ping`, `/ping_stats`, `/random`, `/wheelofnames`, `/ff`, `/the_answer`, `/trongtruonghop` + `/tth`, `/trongtruonghopvng` + `/tthvng` disclaimers |
-| `amlich` | Vietnamese lunar calendar: `/amlich` (dương lịch → âm lịch, defaults to today), `/duonglich` (âm lịch → dương lịch, `nhuan` flag for leap months); dates accept `d`, `d/m`, or `d/m/yyyy` — missing parts fill from today in the input's calendar |
+| `amlich` | Vietnamese lunar calendar: `/amlich` (dương lịch → âm lịch, defaults to today), `/duonglich` (âm lịch → dương lịch, `nhuan` flag for leap months); dates accept `d`, `d/m`, or `d/m/yyyy` — missing parts fill from today in the input's calendar. Years 1800–2199 only |
 | `wordle` | Daily Wordle game |
 | `loldle` | League-of-Legends "guess the champion" |
-| `lol` | Pro-match schedule (`/lol`, `/lol_tomorrow`, `/lol_this_week`, `/lol_next_week`) + daily push |
+| `lol` | Pro-match schedule (`/lol`, `/lol_tomorrow`, `/lol_this_week`, `/lol_next_week`), per-chat digest opt-in (`/lol_subscribe`, `/lol_unsubscribe`) + daily push at 08:00 ICT |
 | `stock` | VN-stocks paper trading |
-| `gold` | Gold paper trading (opt-in; VNAppMob SJC buy/sell VND/luong) |
+| `gold` | Gold paper trading (VNAppMob SJC buy/sell VND/luong) |
 | `coin` | Crypto paper trading in USD (Binance -> Coinbase -> CoinGecko price fallback) |
 | `stats` | `/stats` (top commands), `/stats users`, `/stats user <username>`, `/stats cmd <command_name>` |
 | `monkeyd` | `/monkeyd_crawl <url> [font_size]` export a monkeydd.com novel as a PDF, `/monkeyd_tags <url>` list its tags as hashtags |
@@ -38,6 +38,17 @@ discovery surface includes example invocations.
 Future commands must follow the
 [command parameter conventions](docs/command-parameter-conventions.md). Keep
 command metadata, handler usage text, tests, and documentation aligned.
+
+### Lunar calendar accuracy
+
+`/amlich` and `/duonglich` port Hồ Ngọc Đức's truncated-Meeus algorithm, the
+same one behind most Vietnamese calendar apps, over the years 1800–2199.
+Output matches published Vietnamese calendars on every verifiable date. It
+diverges from Chinese-calendar sources in some years by design (Vietnam uses
+UTC+7, China UTC+8), and month boundaries from 2072 on carry irreducible
+uncertainty. See
+[amlich known issues](docs/amlich-known-issues.md) for the decision record and
+the full edge-case list.
 
 ### Stock corporate events
 
@@ -213,6 +224,8 @@ internal/systemstate/        shared `system` collection helper for startup migra
 third_party/monkeyd-crawler/ git submodule; resolved by a go.mod replace directive
 compose.yml                  Coolify self-host stack (single bot service)
 docs/deploy-coolify-selfhosted.md    Self-host deploy and operations guide
+docs/command-parameter-conventions.md  Command parameter syntax rules
+docs/amlich-known-issues.md  Lunar algorithm decision and known edge cases
 ```
 
 ## Run locally
@@ -251,6 +264,11 @@ go run ./cmd/server
 The bot uses long polling, so a local run talks to Telegram directly — no
 `ngrok` or public URL. The server clears any existing webhook on startup. The
 dev bot is created manually; its token is injected through the environment.
+
+The `lol` module reads its schedule from the PandaScore REST API and needs
+`LOL_PANDASCORE_TOKEN` (free tier). Without it every `/lol*` fetch fails while
+the rest of the bot runs normally. See [`.env.example`](.env.example) for the
+full variable list.
 
 Persistent MongoDB locally (auto-selected when `MONGO_URL` is set):
 
