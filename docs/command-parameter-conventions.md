@@ -67,6 +67,3 @@ When adding or changing a command:
 - [Microsoft command-line syntax key](https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/command-line-syntax-key)
 - [Python argparse documentation](https://docs.python.org/3/library/argparse.html)
 - [docopt usage-pattern grammar](https://github.com/docopt/docopt/blob/master/README.rst)
-
-The supporting project-specific analysis is in
-[`plans/reports/260721-1418-command-parameter-schema-research.md`](../plans/reports/260721-1418-command-parameter-schema-research.md).
