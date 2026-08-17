@@ -41,7 +41,7 @@ the service is CPU-bound or concurrency-limited.
 
 Local non-Docker render smoke requires Chrome Headless Shell shared libraries,
 including `libnspr4` and `libnss3`. Prefer Docker for consistent verification.
-The Docker image runs `pnpm browser:ensure` during build so production requests
+The Docker image runs `npm run browser:ensure` during build so production requests
 do not need to download Chrome Headless Shell on first render.
 
 `RENDER_TIMEOUT_MS` is a total render timeout. Values below `7000` are raised to

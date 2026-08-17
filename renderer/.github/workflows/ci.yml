@@ -10,17 +10,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 11.9.0
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm lint
-      - run: pnpm typecheck
-      - run: pnpm test
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
       - name: Install Remotion browser runtime libraries
         run: |
           sudo apt-get update
@@ -32,6 +29,6 @@ jobs:
             libasound2t64 \
             libxshmfence1 \
             fonts-noto
-      - run: pnpm browser:ensure
-      - run: pnpm render:smoke
-      - run: pnpm api:smoke
+      - run: npm run browser:ensure
+      - run: npm run render:smoke
+      - run: npm run api:smoke

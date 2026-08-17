@@ -4,7 +4,7 @@ import {renderWheelGif} from '../src/render/render-gif.js';
 import {parseRenderLocalArgs} from './render-local-args.js';
 
 const usage = `Usage:
-  pnpm render:local -- --option <text> --option <text> [options]
+  npm run render:local -- --option <text> --option <text> [options]
 
 Options:
   -o, --output <path>   Output file (default: wheel.gif)

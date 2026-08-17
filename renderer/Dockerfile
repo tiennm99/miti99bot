@@ -35,14 +35,12 @@ RUN apt-get update \
     xdg-utils \
   && rm -rf /var/lib/apt/lists/*
 
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY package.json package-lock.json ./
 COPY scripts/ensure-browser.js ./scripts/ensure-browser.js
-RUN corepack enable \
-  && corepack prepare pnpm@11.9.0 --activate \
-  && pnpm install --prod --frozen-lockfile \
-  && pnpm browser:ensure
+RUN npm ci --omit=dev \
+  && npm run browser:ensure
 
 COPY . .
 
 EXPOSE 3000
-CMD ["pnpm", "start"]
+CMD ["npm", "start"]

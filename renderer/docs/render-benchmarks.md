@@ -3,7 +3,7 @@
 Fill this after running:
 
 ```sh
-pnpm render:fixtures
+npm run render:fixtures
 ```
 
 | Fixture | Size | FPS | Duration | Bytes | Render Time | Notes |

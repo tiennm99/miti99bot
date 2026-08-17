@@ -36,14 +36,14 @@ Response is `image/gif` with winner metadata headers:
 Install dependencies and Chromium once:
 
 ```sh
-pnpm install
-pnpm browser:ensure
+npm install
+npm run browser:ensure
 ```
 
 Start the local API:
 
 ```sh
-pnpm dev
+npm run dev
 ```
 
 ### Generate GIF files locally
@@ -52,20 +52,20 @@ Generate the quick smoke fixture at the git-ignored path
 `fixtures/smoke.gif`:
 
 ```sh
-pnpm render:smoke
+npm run render:smoke
 ```
 
 Generate the complete fixture set at `fixtures/smoke.gif`,
 `fixtures/vietnamese.gif`, and `fixtures/sixteen-options.gif`:
 
 ```sh
-pnpm render:fixtures
+npm run render:fixtures
 ```
 
 Render a custom GIF directly without starting the API server:
 
 ```powershell
-pnpm render:local -- `
+npm run render:local -- `
   --output wheel.gif `
   --option "Chiều nay uống CraneTea" `
   --option "Chiều nay uống CraneTea" `
@@ -76,7 +76,7 @@ pnpm render:local -- `
 macOS, Linux, or Git Bash:
 
 ```sh
-pnpm render:local -- \
+npm run render:local -- \
   --output wheel.gif \
   --option "Chiều nay uống CraneTea" \
   --option "Chiều nay uống CraneTea" \
@@ -85,7 +85,7 @@ pnpm render:local -- \
 ```
 
 `--winner` is a zero-based index and is random when omitted. Run
-`pnpm render:local -- --help` for duration, hold, FPS, size, theme, and timeout
+`npm run render:local -- --help` for duration, hold, FPS, size, theme, and timeout
 options. The documented root `wheel.gif` and `fixtures/*.gif` outputs are
 git-ignored and safe to delete; custom output paths may need their own ignore
 rule.
@@ -95,10 +95,10 @@ rule.
 Run the API smoke test and quality gates:
 
 ```sh
-pnpm api:smoke
-pnpm lint
-pnpm typecheck
-pnpm test
+npm run api:smoke
+npm run lint
+npm run typecheck
+npm test
 ```
 
 ## Deploy
