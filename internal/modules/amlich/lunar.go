@@ -251,6 +251,36 @@ func lunarToSolar(day, month, year int, leap bool) (dd, mm, yy int, err error) {
 	return dd, mm, yy, nil
 }
 
+// disputedMonthStarts holds the Julian day numbers of the lunar-month starts
+// whose defining new moon falls within ~2 minutes of UTC+7 midnight, where
+// ΔT uncertainty exceeds the margin — the true boundary may sit one day
+// earlier in future official tables (see docs/amlich-known-issues.md, which
+// lists the disputed new-moon days themselves; this engine begins each of
+// these months on the following day). Conversions touching these months carry
+// a caveat in the bot's reply.
+var disputedMonthStarts = map[int]bool{
+	jdFromDate(10, 12, 2072): true,
+	jdFromDate(16, 11, 2077): true,
+	jdFromDate(8, 5, 2130):   true,
+	jdFromDate(27, 5, 2150):  true,
+	jdFromDate(18, 5, 2159):  true,
+	jdFromDate(23, 1, 2175):  true,
+	jdFromDate(27, 1, 2199):  true,
+}
+
+// nearDisputedBoundary reports whether the lunar month containing the solar
+// day jdn starts or ends on a disputed boundary — i.e. whether the conversion
+// result for that day could shift by one day against future official tables.
+func nearDisputedBoundary(jdn int) bool {
+	k := floorInt((float64(jdn) - jdNewMoonEpoch) / newMoonCycle)
+	monthStart := getNewMoonDay(k + 1)
+	for monthStart > jdn {
+		k--
+		monthStart = getNewMoonDay(k + 1)
+	}
+	return disputedMonthStarts[monthStart] || disputedMonthStarts[getNewMoonDay(k+2)]
+}
+
 // canNames and chiNames are the sexagesimal-cycle stems and branches used to
 // name lunar years (Giáp Thìn, Ất Tỵ, …).
 var canNames = [...]string{"Giáp", "Ất", "Bính", "Đinh", "Mậu", "Kỷ", "Canh", "Tân", "Nhâm", "Quý"}

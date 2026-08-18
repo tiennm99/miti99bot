@@ -202,6 +202,56 @@ func TestDuonglich_RejectsWrongLeapMonth(t *testing.T) {
 	}
 }
 
+// A bare month that is also the year's leap month is ambiguous input; the
+// reply must carry the disambiguation hint — and only then.
+func TestDuonglich_LeapMonthHint(t *testing.T) {
+	solarDay, solarMonth, solarYear, err := lunarToSolar(5, 5, 2028, false)
+	if err != nil {
+		t.Fatalf("lunarToSolar(5/5/2028): %v", err)
+	}
+	want := fmt.Sprintf("Âm lịch ngày 5 tháng 5 năm Mậu Thân 2028 là %02d/%02d/%d dương lịch.\n", solarDay, solarMonth, solarYear) +
+		`Lưu ý: năm âm lịch 2028 có tháng 5 nhuận — thêm "nhuan" nếu ý bạn là tháng nhuận.`
+	if got := replyFor(t, "/duonglich 5/5/2028"); got != want {
+		t.Errorf("reply = %q, want %q", got, want)
+	}
+}
+
+func TestDuonglich_NoHintWhenNhuanExplicit(t *testing.T) {
+	if got := replyFor(t, "/duonglich 5/5/2028 nhuan"); strings.Contains(got, "Lưu ý") {
+		t.Errorf("explicit nhuan reply = %q, want no hint", got)
+	}
+}
+
+func TestDuonglich_NoHintWithoutLeapMonth(t *testing.T) {
+	if got := replyFor(t, "/duonglich 5/5/2027"); strings.Contains(got, "Lưu ý") {
+		t.Errorf("non-leap-year reply = %q, want no hint", got)
+	}
+}
+
+// Dates inside a lunar month touching a disputed boundary (see
+// disputedMonthStarts) must carry the caveat; nearby ordinary dates must not.
+// Absence on modern dates is also pinned by the exact-string assertions in
+// TestAmlich_ConvertsKnownDate and TestDuonglich_ConvertsKnownDate.
+func TestAmlich_DisputedBoundaryCaveat(t *testing.T) {
+	if got := replyFor(t, "/amlich 20/12/2072"); !strings.HasSuffix(got, "\n"+disputedCaveat) {
+		t.Errorf("reply = %q, want disputed-boundary caveat", got)
+	}
+	if got := replyFor(t, "/amlich 01/06/2072"); strings.Contains(got, "Lưu ý") {
+		t.Errorf("reply = %q, want no caveat", got)
+	}
+}
+
+func TestDuonglich_DisputedBoundaryCaveat(t *testing.T) {
+	lunarDay, lunarMonth, lunarYear, leap := solarToLunar(20, 12, 2072)
+	cmd := fmt.Sprintf("/duonglich %d/%d/%d", lunarDay, lunarMonth, lunarYear)
+	if leap {
+		cmd += " nhuan"
+	}
+	if got := replyFor(t, cmd); !strings.HasSuffix(got, "\n"+disputedCaveat) {
+		t.Errorf("reply for %q = %q, want disputed-boundary caveat", cmd, got)
+	}
+}
+
 func TestDuonglich_InvalidInputRepliesUsage(t *testing.T) {
 	for _, text := range []string{
 		"/duonglich",

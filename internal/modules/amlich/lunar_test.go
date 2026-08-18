@@ -203,6 +203,44 @@ func TestLeapMonthTable(t *testing.T) {
 	}
 }
 
+// TestDisputedMonthStarts_AreMonthStarts verifies every entry in the disputed
+// set is an actual lunar-month start per the engine — a mistyped or off-by-one
+// date would silently flag the wrong month.
+func TestDisputedMonthStarts_AreMonthStarts(t *testing.T) {
+	if len(disputedMonthStarts) != 7 {
+		t.Fatalf("disputed set has %d entries, want 7", len(disputedMonthStarts))
+	}
+	for jd := range disputedMonthStarts {
+		dd, mm, yy := jdToDate(jd)
+		day, _, _, _ := solarToLunar(dd, mm, yy)
+		if day != 1 {
+			t.Errorf("%02d/%02d/%d (jd %d) is lunar day %d, want month start (day 1)", dd, mm, yy, jd, day)
+		}
+	}
+}
+
+// TestNearDisputedBoundary covers the month starting on a disputed boundary,
+// the month ending on one, and ordinary dates on both sides.
+func TestNearDisputedBoundary(t *testing.T) {
+	cases := []struct {
+		dd, mm, yy int
+		want       bool
+	}{
+		{10, 12, 2072, true}, // first day of the disputed month
+		{20, 12, 2072, true}, // inside the month starting on the disputed boundary
+		{9, 12, 2072, true},  // last day of the month ending on the disputed boundary
+		{1, 12, 2072, true},  // inside the month ending on the disputed boundary
+		{1, 6, 2072, false},  // same year, far from the boundary
+		{1, 2, 2073, false},  // after the disputed month
+		{29, 1, 2025, false}, // ordinary modern date
+	}
+	for _, tc := range cases {
+		if got := nearDisputedBoundary(jdFromDate(tc.dd, tc.mm, tc.yy)); got != tc.want {
+			t.Errorf("nearDisputedBoundary(%02d/%02d/%d) = %v, want %v", tc.dd, tc.mm, tc.yy, got, tc.want)
+		}
+	}
+}
+
 func TestCanChiYear(t *testing.T) {
 	for year, want := range map[int]string{
 		2024: "Giáp Thìn",

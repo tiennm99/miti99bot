@@ -35,8 +35,11 @@ Both dates are pinned in `lunar_test.go` `knownDates` so a future
 **Razor-edge lunations from 2072 on.** New moon within ~2 minutes of UTC+7
 midnight, so the month boundary — and therefore output within roughly 30 days
 of it — may differ by one day from future official tables: 09/12/2072,
-15/11/2077, 07/05/2130, 26/05/2150, 17/05/2159, 22/01/2175, 26/01/2199. Not
-fixable today, only documentable. The bot gives no caveat for these dates.
+15/11/2077, 07/05/2130, 26/05/2150, 17/05/2159, 22/01/2175, 26/01/2199. Those
+are the disputed new-moon days themselves; the engine begins each of these
+months on the following day (`disputedMonthStarts` in `lunar.go`). Not fixable
+today. Both commands append a caveat when the result falls in a lunar month
+that starts or ends on one of these boundaries.
 
 **ΔT extrapolation drift.** The two-branch polynomial diverges from actual
 Earth rotation (ΔT has been roughly flat near 69 s since ~2016 against
@@ -64,7 +67,9 @@ source will see a mismatch that is not an error.
 **`/duonglich` defaults inside leap months.** A bare day argument fills in the
 current month as a regular month; the leap month requires the explicit `nhuan`
 flag. In leap years such as 2028 (leap 5) and 2031 (leap 3) this is ambiguous
-to the user, but the output is correct for what was entered.
+to the user, but the output is correct for what was entered. When the queried
+month is also that year's leap month (and the exact leap date exists), the
+reply appends a hint suggesting the `nhuan` flag.
 
 ## Handled, with regression tests
 
@@ -77,14 +82,20 @@ to the user, but the output is correct for what was entered.
 
 ## Open questions
 
-1. Should the seven razor-edge lunations from 2072 on carry a caveat in the
-   bot's reply? Currently silent.
-2. Should pre-1968 UTC+8 be modelled explicitly? The current algorithm matches
-   the published record on both known razor-edge cases by numeric coincidence
-   rather than by rule. An explicit UTC+8 mode would change roughly 1/24 of
-   pre-1968 month boundaries and diverge from the standard everyone else uses —
-   not worth doing unless a user reports a concrete mismatch.
+1. ~~Should the seven razor-edge lunations carry a caveat?~~ Resolved: both
+   commands append a caveat for results in the lunar months touching those
+   boundaries — months only, not the whole lunar year.
+2. ~~Should pre-1968 UTC+8 be modelled explicitly?~~ Closed: don't build. Per
+   Hồ Ngọc Đức's historic-calendar notes it is not even a single rule — the
+   North used UTC+8 from 1945–67, but the South used UTC+7 until 1959 and
+   UTC+8 only from 1960–67, with dynastic tables before 1945. Any concrete
+   user-reported mismatch gets a doc note, not a mode.
 3. Revisit the ΔT model if the flat IERS trend persists. A data-driven update
-   only pays off near razor-edge boundaries.
+   only pays off near razor-edge boundaries — and would diverge from the
+   reference algorithm the whole ecosystem runs, so it needs official tables
+   as cover before it is worth it.
 4. Watch for state calendar bureau tables published past 2100; they would be
-   the first ground truth for the 2072+ disputes.
+   the first ground truth for the 2072+ disputes. Related far-future
+   uncertainty in the same bucket: the CGPM votes in late 2026 on abolishing
+   the leap second, which would let civil UTC+7 drift slowly from the
+   astronomical time the algorithm models.

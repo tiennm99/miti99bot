@@ -27,6 +27,15 @@ const duonglichUsage = `Cách dùng: /duonglich <dd[/mm[/yyyy]]> [nhuan] — đ�
 // next to the algorithm it protects.
 var yearRangeMessage = fmt.Sprintf("Chỉ hỗ trợ các năm từ %d đến %d.", minLunarYear, maxLunarYear)
 
+// leapHintFormat is appended to a /duonglich reply when the queried month is
+// also that year's leap month and the user gave no "nhuan" flag — the input
+// was ambiguous, and the answer shown is for the regular month.
+const leapHintFormat = `Lưu ý: năm âm lịch %d có tháng %d nhuận — thêm "nhuan" nếu ý bạn là tháng nhuận.`
+
+// disputedCaveat is appended when the result falls in a lunar month whose
+// boundary is astronomically too close to call (see disputedMonthStarts).
+const disputedCaveat = "Lưu ý: ngày này gần ranh giới tháng âm lịch chưa chắc chắn; kết quả có thể lệch 1 ngày so với lịch chính thức sau này."
+
 func amlichCommand() modules.Command {
 	return modules.Command{
 		Name:        "amlich",
@@ -55,6 +64,9 @@ func amlichCommand() modules.Command {
 			lunarDay, lunarMonth, lunarYear, leap := solarToLunar(day, month, year)
 			text := fmt.Sprintf("Dương lịch %02d/%02d/%d là ngày %d tháng %d%s năm %s %d âm lịch.",
 				day, month, year, lunarDay, lunarMonth, leapLabel(leap), canChiYear(lunarYear), lunarYear)
+			if nearDisputedBoundary(jdFromDate(day, month, year)) {
+				text += "\n" + disputedCaveat
+			}
 			return chathelper.Reply(ctx, b, update.Message, text)
 		},
 	}
@@ -102,6 +114,17 @@ func duonglichCommand() modules.Command {
 			}
 			text := fmt.Sprintf("Âm lịch ngày %d tháng %d%s năm %s %d là %02d/%02d/%d dương lịch.",
 				day, month, leapLabel(leap), canChiYear(year), year, solarDay, solarMonth, solarYear)
+			// A bare month is ambiguous when the year also has that month as a
+			// leap month and the exact leap date exists; probing lunarToSolar
+			// reuses its validation (a 29-day leap month can't hide a day 30).
+			if !leap {
+				if _, _, _, hintErr := lunarToSolar(day, month, year, true); hintErr == nil {
+					text += "\n" + fmt.Sprintf(leapHintFormat, year, month)
+				}
+			}
+			if nearDisputedBoundary(jdFromDate(solarDay, solarMonth, solarYear)) {
+				text += "\n" + disputedCaveat
+			}
 			return chathelper.Reply(ctx, b, update.Message, text)
 		},
 	}
