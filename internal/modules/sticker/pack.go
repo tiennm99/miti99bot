@@ -38,12 +38,16 @@ type PackStore = storage.DocStore[Pack]
 // have a pack" — they cannot answer "who holds this name". Without that second
 // question the module cannot tell its own interrupted attempt from a set
 // belonging to someone else, because both look identical from the caller's
-// side: a pending record naming a set that exists. Adopting on that evidence
-// alone let any user take over any pack whose public link they could guess.
+// side: a pending record naming a set that exists.
 //
-// The reservation is the missing half. It is claimed with a create-only write
-// before Telegram is touched, so the first claimant of a name is the only user
-// who can ever adopt a set under it.
+// The reservation answers the question the pack record cannot: who is entitled
+// to create under a given name. It is claimed with a create-only write before
+// Telegram is touched, so the first claimant wins the name and everyone else is
+// refused before any set exists.
+//
+// It is NOT ownership of whatever set may already sit under that name. Nothing
+// in this module grants that, because nothing stored here survives the wipe
+// that would make the grant necessary.
 type SlugReservation struct {
 	Slug      string `bson:"slug"`
 	OwnerID   int64  `bson:"ownerId"`

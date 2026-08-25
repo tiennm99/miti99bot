@@ -299,6 +299,34 @@ per-user pack limit is one (former O2).
 
 ## Design Revisions
 
+### 2026-08-25 — pack adoption removed
+
+Verification found the round-4 guard defeated by the module's own recovery
+branch: an inconclusive `GetStickerSet` keeps the reservation, which turns a
+*fresh* claim into a *resumed* one, so two ordinary `/newpack` commands took
+over a stranger's pack. `resolveStaleIntent` had a second adopt path that never
+consulted the guard at all. Reproduced against the real handlers.
+
+That is the fourth consecutive failure of the same mechanism, and the reason is
+structural rather than a bug that can be patched. Adoption needs to prove "this
+set is mine to finish" from local state, and local state is exactly what a
+restart on the in-memory backend erases while the packs at Telegram survive.
+Once the proof is gone the honest and the malicious case are indistinguishable.
+
+Adoption is therefore removed entirely — both branches. `/newpack` refuses any
+name a set already occupies, for everyone, whatever the records say.
+
+Implementing it surfaced a second hole the option did not cover: a *pending*
+record is not evidence either, and `/delpack` deletes by set name, which
+Telegram authorises for every set this bot created. Keeping a refused intent so
+the user could `/delpack` it would hand over a way to destroy the pack we had
+just refused to adopt. `/delpack` now clears a pending record locally and calls
+Telegram only for a confirmed one.
+
+Accepted cost: a crash between creating a set and recording it strands that set
+permanently. Documented rather than mitigated, because every mitigation is the
+mechanism that just failed four times.
+
 ### 2026-08-25 — three-lens review pass (security, correctness, tests)
 
 Three independent reviewers ran against the finished module. What they changed:
