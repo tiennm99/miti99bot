@@ -39,9 +39,10 @@ const (
 //   - an owner-keyed pending Pack — "does this user have a pack?" (claimSlug)
 //
 // Both are needed. The pending record alone proves only that this caller *asked
-// for* the name, which a user naming someone else's pack also does; treating it
-// as proof of ownership was a pack-takeover hole. The reservation is what makes
-// "this set is mine to adopt" a fact rather than an assumption.
+// for* the name, which a user naming someone else's pack also does. The
+// reservation settles who gets to create under a name; neither of them, nor the
+// two together, is ever treated as permission to take over a set that already
+// exists — see createPack.
 func (s *state) handleNewPack(ctx context.Context, b *bot.Bot, update *models.Update) error {
 	ctx, cancel := handlerContext(ctx)
 	defer cancel()
@@ -122,22 +123,21 @@ func (s *state) handleNewPack(ctx context.Context, b *bot.Bot, update *models.Up
 		return err
 	}
 
-	return s.createOrAdopt(ctx, b, msg, claimed, source, created)
+	return s.createPack(ctx, b, msg, claimed, source)
 }
 
 // reserveSlug claims a pack name for ownerID, globally and permanently.
 //
 // Pack records are keyed by owner, so they answer "does this user have a pack"
-// and nothing else. That is not enough to make adoption safe: a user with no
-// pack who names someone else's slug produces exactly the same evidence as a
-// user resuming their own interrupted attempt — a pending record naming a set
-// that exists. Adopting on that evidence let anyone take over any pack whose
-// public link they could guess, and every share link is public.
+// and nothing else — a user naming someone else's slug produces exactly the
+// same record as one resuming their own interrupted attempt. The reservation
+// adds the missing fact about the *name*: who is entitled to create under it.
 //
-// A create-only write on the name itself supplies the missing fact. The first
-// claimant is the only user who can ever adopt a set under that name, so by the
-// time createOrAdopt sees an existing set, "it is ours" has actually been
-// proven rather than assumed.
+// A create-only write on the name itself is what keeps two users from racing
+// for the same name: the first claimant wins it, and everyone else is refused
+// before any set is created. It is deliberately NOT treated as proof of
+// ownership over a set that already exists — see createPack for why no local
+// fact can carry that weight.
 //
 // created reports whether this call wrote the reservation, so a caller that
 // bails can release exactly what it made and never a reservation it merely
@@ -254,11 +254,9 @@ func (s *state) claimSlug(ctx context.Context, b *bot.Bot, msg *models.Message, 
 		return existing, false, nil
 
 	default:
-		// An earlier attempt was interrupted under a *different* name. Probing
-		// first is what makes this safe: if that set was already created,
-		// overwriting the record here would orphan it permanently — the set
-		// would exist, owned by this user, with adoption keyed on a slug the
-		// record no longer holds.
+		// An earlier attempt was interrupted under a *different* name. Probe
+		// before overwriting, so a set that attempt did create is logged as
+		// stranded rather than silently forgotten.
 		return s.resolveStaleIntent(ctx, b, msg, existing, intent)
 	}
 }
@@ -266,19 +264,19 @@ func (s *state) claimSlug(ctx context.Context, b *bot.Bot, msg *models.Message, 
 // resolveStaleIntent decides what to do with a pending record for a slug the
 // caller is no longer asking for.
 func (s *state) resolveStaleIntent(ctx context.Context, b *bot.Bot, msg *models.Message, existing, intent Pack) (Pack, bool, error) {
-	// The old name is only adoptable if this caller reserved it too. They
-	// normally did — the pending record came from their own earlier run through
-	// reserveSlug — but adoption is the dangerous operation in this module, so
-	// it is re-proven rather than inferred from the pending record.
+	// Establish whether this caller still holds the old name before touching
+	// anything under it. They normally do — the pending record came from their
+	// own earlier run through reserveSlug — but it is re-read rather than
+	// inferred from the pending record.
 	held, found, err := getSlugReservation(ctx, s.slugs, existing.Slug)
 	if err != nil {
 		log.Error("sticker_newpack_stale_reservation", "err", err)
 		return Pack{}, true, reply(ctx, b, msg, genericFailure)
 	}
 	if !found || held.OwnerID != intent.OwnerID {
-		// Someone else holds the old name, or it was released. Either way this
-		// caller cannot adopt under it; drop the dead intent and let them
-		// proceed with the name they actually asked for.
+		// Someone else holds the old name, or it was released. Either way the
+		// old intent is dead; replace it and let the caller proceed with the
+		// name they actually asked for.
 		if putErr := s.store.Put(ctx, packKey(intent.OwnerID), intent); putErr != nil {
 			log.Error("sticker_newpack_replace_intent", "err", putErr)
 			return Pack{}, true, reply(ctx, b, msg, genericFailure)
@@ -289,19 +287,21 @@ func (s *state) resolveStaleIntent(ctx context.Context, b *bot.Bot, msg *models.
 	_, err = b.GetStickerSet(ctx, &bot.GetStickerSetParams{Name: existing.Name})
 	switch {
 	case err == nil:
-		// The old set exists — adopt it rather than stranding it.
-		adopted := existing
-		adopted.Pending = false
-		if adopted.Count == 0 {
-			adopted.Count = 1
-		}
-		if commitErr := s.commitPack(ctx, adopted); commitErr != nil {
-			log.Error("sticker_newpack_adopt_commit", "err", commitErr)
+		// The old name is occupied. This branch used to adopt, on the strength
+		// of a reservation it re-read here — and it never consulted the newer
+		// per-invocation guard at all, so it stayed a takeover route after that
+		// guard was added. No adoption happens anywhere in this module now.
+		//
+		// The old reservation stays: a set genuinely exists under that name, so
+		// the name is not free, and releasing it would only send the next
+		// caller down this same refusal. The dead intent is replaced so the
+		// caller can get on with the name they actually asked for.
+		if putErr := s.store.Put(ctx, packKey(intent.OwnerID), intent); putErr != nil {
+			log.Error("sticker_newpack_replace_intent", "err", putErr)
 			return Pack{}, true, reply(ctx, b, msg, genericFailure)
 		}
-		return Pack{}, true, reply(ctx, b, msg, fmt.Sprintf(
-			"You already have a pack (%s) from an earlier attempt — it has been restored.\n%s\nUse /delpack first if you want a different name.",
-			adopted.Slug, shareLink(adopted.Name)))
+		log.Error("sticker_newpack_stranded_set", "slug", existing.Slug, "owner", existing.OwnerID)
+		return intent, false, nil
 
 	case isStickerSetMissing(err):
 		// Nothing was created under the old name; take over the record. A
@@ -322,45 +322,29 @@ func (s *state) resolveStaleIntent(ctx context.Context, b *bot.Bot, msg *models.
 	}
 }
 
-// createOrAdopt performs the Telegram-side creation for a claimed intent, or
-// adopts a set an interrupted attempt already created.
+// createPack performs the Telegram-side creation for a claimed intent.
 //
-// freshReservation reports that *this* invocation first claimed the name, which
-// is what disqualifies adoption: see the err == nil branch.
-func (s *state) createOrAdopt(ctx context.Context, b *bot.Bot, msg *models.Message, pack Pack, source stickerSource, freshReservation bool) error {
+// It never takes over a set that already exists, for anybody, under any local
+// evidence. Adoption was the source of four consecutive takeover holes, and the
+// reason is structural rather than a bug that can be patched: every fact this
+// module could use to prove "that set is mine to finish" lives in the same
+// store that a restart on the in-memory backend erases, while the packs at
+// Telegram survive. Once the proof is gone, a real interrupted attempt and an
+// attacker naming a victim's public slug present identical evidence.
+//
+// Removing the branch removes the class. Nothing local can be forged into
+// rights over an existing set, because no local fact grants them.
+func (s *state) createPack(ctx context.Context, b *bot.Bot, msg *models.Message, pack Pack, source stickerSource) error {
 	_, err := b.GetStickerSet(ctx, &bot.GetStickerSetParams{Name: pack.Name})
 	switch {
 	case err == nil:
-		// A set exists under this name. Adopting it grants full control -
-		// DeleteStickerSet, DeleteStickerFromSet and SetStickerSetTitle are all
-		// keyed by set name alone, with no owner scoping - so this branch must
-		// prove the set is the caller's own interrupted attempt, not merely
-		// assume it.
-		//
-		// The reservation proves it only if it outlived the set. It does not
-		// always: the reservation lives in our store and the set lives at
-		// Telegram, and the store can be wiped (a restart on the in-memory
-		// backend does exactly that) while every pack survives. Then the
-		// evidence a takeover produces and the evidence a real resume produces
-		// are once again identical.
-		//
-		// freshReservation separates them without any new state. A genuine
-		// interrupted attempt reserved the name *before* creating the set, so it
-		// re-enters here having found its own reservation, never having made
-		// one. Claiming the name for the first time therefore proves the set
-		// under it is somebody else's.
-		if freshReservation {
-			log.Error("sticker_newpack_adopt_refused", "slug", pack.Slug, "owner", pack.OwnerID)
-			// Leave nothing behind. The intent records an attempt that is not
-			// going to happen, and the reservation names a set this caller has
-			// just been refused — holding either would deny the name to the
-			// set's real owner, who after a store wipe has to re-register it
-			// exactly as this caller tried to.
-			s.dropIntent(ctx, pack.OwnerID)
-			s.releaseSlug(ctx, pack.OwnerID, pack.Slug)
-			return reply(ctx, b, msg, slugTaken)
-		}
-		return s.finishNewPack(ctx, b, msg, pack, true)
+		// Occupied. Leave nothing behind: a pending record naming a set this
+		// caller does not own is itself a weapon, because /delpack deletes by
+		// set name and Telegram authorises that on any set this bot created —
+		// including the real owner's.
+		s.dropIntent(ctx, pack.OwnerID)
+		s.releaseSlug(ctx, pack.OwnerID, pack.Slug)
+		return reply(ctx, b, msg, slugTaken)
 
 	case isStickerSetMissing(err):
 		// Free: create it.
@@ -390,18 +374,19 @@ func (s *state) createOrAdopt(ctx context.Context, b *bot.Bot, msg *models.Messa
 	if err != nil {
 		// Only a refusal that proves nothing was created lets us undo the
 		// claim. On anything else the create may have succeeded server-side, so
-		// both the intent and the reservation stay and a re-run adopts the set.
+		// both the intent and the reservation stay — a re-run then reports the
+		// name as taken rather than guessing, which is the safe direction.
 		if createRefused(err) {
 			s.dropIntent(ctx, pack.OwnerID)
 			s.releaseSlug(ctx, pack.OwnerID, pack.Slug)
 		}
 		return replyAPIError(ctx, b, msg, "sticker_newpack_create", err)
 	}
-	return s.finishNewPack(ctx, b, msg, pack, false)
+	return s.finishNewPack(ctx, b, msg, pack)
 }
 
 // finishNewPack commits the confirmed record and replies with the share link.
-func (s *state) finishNewPack(ctx context.Context, b *bot.Bot, msg *models.Message, pack Pack, adopted bool) error {
+func (s *state) finishNewPack(ctx context.Context, b *bot.Bot, msg *models.Message, pack Pack) error {
 	pack.Pending = false
 	if pack.Count == 0 {
 		pack.Count = 1
@@ -410,12 +395,8 @@ func (s *state) finishNewPack(ctx context.Context, b *bot.Bot, msg *models.Messa
 		log.Error("sticker_newpack_commit", "err", err)
 		return reply(ctx, b, msg, genericFailure)
 	}
-	prefix := "Created"
-	if adopted {
-		prefix = "Finished an earlier attempt at"
-	}
-	return reply(ctx, b, msg, fmt.Sprintf("%s %s.\n%s\n\nAdd more with /addsticker while replying to a sticker.",
-		prefix, pack.Title, shareLink(pack.Name)))
+	return reply(ctx, b, msg, fmt.Sprintf("Created %s.\n%s\n\nAdd more with /addsticker while replying to a sticker.",
+		pack.Title, shareLink(pack.Name)))
 }
 
 // dropIntent removes a write-ahead record whose creation never happened, so the

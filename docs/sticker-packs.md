@@ -97,15 +97,17 @@ never says *who* holds a name. Refusals about *managing* a pack are deliberately
 uniform for the opposite reason — see below.
 
 A name is claimed *before* the bot calls Telegram, not after the pack exists.
-That ordering is the point: the claim is what proves, on a later re-run, that an
-existing set under that name is yours to finish rather than someone else's to
-take.
+That ordering is what keeps two users from racing for the same name: the first
+claimant wins it and everyone else is refused before any set is created.
 
 The claim is given up again whenever the bot has positive evidence that no pack
 stands behind it — Telegram refusing the creation outright, `/delpack`, or a
 later command finding the set already gone. A `/newpack` that never got as far
 as claiming, or that is refused before Telegram is contacted, leaves nothing
 behind.
+
+The claim is deliberately **not** treated as proof of ownership over a set that
+already exists. See "The bot never takes over an existing pack" below.
 
 Telegram may keep a deleted short name reserved on its own side, so a freed name
 is not guaranteed to be usable again by anyone, including its previous owner.
@@ -114,17 +116,28 @@ is not guaranteed to be usable again by anyone, including its previous owner.
 "that sticker isn't from your pack" produce the exact same reply. Distinct
 wording would let anyone probe which sets exist under this bot.
 
-**An interrupted `/newpack` can be finished.** The bot records your intent
-before calling Telegram, so if a deploy or crash lands mid-creation, re-running
-the same `/newpack` command completes it instead of reporting the name taken.
-`/mypack` marks an unfinished attempt so it is visible rather than mysterious.
+**The bot never takes over an existing pack.** If a set already exists under the
+name you ask for, `/newpack` refuses — always, for everyone, whatever the bot's
+records say about it.
 
-This depends on the bot still holding your claim to the name. If its storage has
-been wiped since — which is what a restart does when no database is configured —
-the claim is gone while the pack at Telegram is not, and `/newpack` reports the
-name as taken rather than adopting a set it can no longer prove is yours.
-Recovering a pack in that state needs operator help. Run this module against a
-real database, not the in-memory backend.
+Earlier versions adopted such a set when local records suggested it came from
+your own interrupted attempt. That was wrong in a way no amount of checking
+fixes: every fact the bot could use to prove "this set is yours" lives in the
+same storage a restart erases, while the packs at Telegram survive. Once the
+proof is gone, a genuine interrupted attempt and a stranger naming your pack's
+public link present the bot with identical evidence. The feature was the hole,
+so the feature is gone.
+
+The cost is real and worth stating plainly: if the bot crashes between creating
+your set at Telegram and recording it, the set is stranded. It exists, it is
+linkable, and no command in this bot can manage or delete it. `/mypack` marks
+the unfinished attempt, and `/delpack` clears the leftover record so you can
+create a pack under a different name — but it will not delete anything at
+Telegram, because an unfinished record is not evidence that the bot made that
+set for you. Anyone can produce such a record for any name.
+
+Run this module against a real database. On the in-memory backend every restart
+strands every pack.
 
 **Deleting the last sticker may delete the pack.** Telegram's behaviour here is
 undocumented, so the bot does not guess: it will not remove your pack record on

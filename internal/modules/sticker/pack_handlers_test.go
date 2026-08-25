@@ -80,58 +80,67 @@ func TestNewPack_SecondPackRefusedWithoutAPICall(t *testing.T) {
 // Re-running the same command after an interruption must complete the pack,
 // not report the slug taken. This is what keeps a crash from stranding a
 // permanent URL.
-func TestNewPack_ResumesInterruptedAttempt(t *testing.T) {
+// An interrupted attempt whose set DOES exist is refused, not resumed.
+//
+// This used to adopt. Adoption is gone: no local fact can prove a set belongs
+// to the caller, because the store holding that fact is exactly what a restart
+// on the in-memory backend erases while the packs survive. The cost is that a
+// crash between creation and commit strands the set; the benefit is that the
+// same evidence cannot be manufactured by an attacker.
+func TestNewPack_InterruptedAttemptWithLiveSetIsRefused(t *testing.T) {
 	rb := testutil.NewRecordingBot(t)
 	stubBotIdentity(rb)
 	setExists(rb)
 	s := newTestState()
+	ctx := context.Background()
 
 	seedInterrupted(t, s, "mypack", testSet)
 
-	if err := s.handleNewPack(context.Background(), rb.Bot, stickerReply("/newpack mypack My Pack", otherSet)); err != nil {
+	if err := s.handleNewPack(ctx, rb.Bot, stickerReply("/newpack mypack My Pack", otherSet)); err != nil {
 		t.Fatalf("handleNewPack: %v", err)
 	}
 
-	// The set already exists, so it is adopted rather than recreated.
 	if countMethod(rb, "createNewStickerSet") != 0 {
-		t.Errorf("methods = %v, want no create — the set already existed", methodsSent(rb))
+		t.Errorf("methods = %v, want no create — a set already exists under that name", methodsSent(rb))
 	}
-	pack, _ := loadPack(t, s)
-	if pack.Pending {
-		t.Error("record still Pending after the resumed attempt")
+	if got := rb.LastSent().Text(); !strings.Contains(got, slugTaken) {
+		t.Errorf("reply = %q, want the name-taken refusal", got)
 	}
-	if strings.Contains(rb.LastSent().Text(), "taken") {
-		t.Errorf("reply = %q, want a success message", rb.LastSent().Text())
+	if pack, found := loadPack(t, s); found && !pack.Pending {
+		t.Errorf("adopted the existing set: %+v", pack)
+	}
+	// Nothing left behind: a pending record naming a set the caller may not own
+	// is a delete primitive, since /delpack deletes by set name.
+	if _, found := loadPack(t, s); found {
+		t.Error("refusal kept the intent — /delpack could then aim it at that set")
+	}
+	if _, held, _ := getSlugReservation(ctx, s.slugs, "mypack"); held {
+		t.Error("refusal kept the reservation")
 	}
 }
 
-// A pending record under a *different* slug whose set exists must be adopted,
-// not overwritten: overwriting orphans that set permanently, because adoption
-// keys on the slug matching.
-func TestNewPack_DifferentSlugAdoptsExistingSet(t *testing.T) {
+// A pending record under a *different* slug whose set exists is likewise not
+// adopted; the caller proceeds under the name they asked for, and the stranded
+// name stays reserved because a set really does occupy it.
+func TestNewPack_DifferentSlugDoesNotAdoptExistingSet(t *testing.T) {
 	rb := testutil.NewRecordingBot(t)
 	stubBotIdentity(rb)
 	setExists(rb)
 	s := newTestState()
+	ctx := context.Background()
 
 	seedInterrupted(t, s, "oldslug", testSet)
 
-	if err := s.handleNewPack(context.Background(), rb.Bot, stickerReply("/newpack newslug New", otherSet)); err != nil {
+	if err := s.handleNewPack(ctx, rb.Bot, stickerReply("/newpack newslug New", otherSet)); err != nil {
 		t.Fatalf("handleNewPack: %v", err)
 	}
 
-	if countMethod(rb, "createNewStickerSet") != 0 {
-		t.Errorf("methods = %v, want no create", methodsSent(rb))
+	if pack, found := loadPack(t, s); found && pack.Slug == "oldslug" && !pack.Pending {
+		t.Errorf("adopted the old set: %+v", pack)
 	}
-	pack, _ := loadPack(t, s)
-	if pack.Slug != "oldslug" {
-		t.Errorf("slug = %q, want the adopted oldslug — the old set must not be orphaned", pack.Slug)
-	}
-	if pack.Pending {
-		t.Error("adopted record still Pending")
-	}
-	if !strings.Contains(rb.LastSent().Text(), "oldslug") {
-		t.Errorf("reply = %q, want it to name the adopted pack", rb.LastSent().Text())
+	// The old name stays claimed: a set exists under it, so it is not free.
+	if _, held, _ := getSlugReservation(ctx, s.slugs, "oldslug"); !held {
+		t.Error("released a name that still has a set behind it")
 	}
 }
 
@@ -568,26 +577,12 @@ func TestNewPack_ReservationReleasedWhenClaimFails(t *testing.T) {
 	}
 }
 
-// A reservation the caller merely resumed must not be released when a later
-// step bails — it predates this command.
-func TestNewPack_ResumedReservationSurvivesABail(t *testing.T) {
-	rb := testutil.NewRecordingBot(t)
-	stubBotIdentity(rb)
-	rb.FailMethod("getStickerSet", 500, `{"ok":false,"description":"upstream is unhappy"}`)
-	s := newTestState()
-	ctx := context.Background()
-
-	seedInterrupted(t, s, "mypack", testSet)
-
-	if err := s.handleNewPack(ctx, rb.Bot, stickerReply("/newpack mypack My Pack", otherSet)); err != nil {
-		t.Fatalf("handleNewPack: %v", err)
-	}
-	if _, held, _ := getSlugReservation(ctx, s.slugs, "mypack"); !held {
-		t.Error("a resumed reservation was released on an unknown error; the name is now claimable by others while the set may exist")
-	}
-}
-
-// The two tests below are the only coverage of the `created` flag itself.
+// These two are the only coverage of the `created` flag itself.
+//
+// A predecessor named ...ResumedReservationSurvivesABail sat here and did not
+// test its name: its bail happened after claimSlug, which never consults the
+// flag, so it passed with the whole distinction deleted. It duplicated
+// TestNewPack_UnknownLookupErrorAborts and has been removed.
 //
 // Both drive a bail *inside* claimSlug, which is the single place handleNewPack
 // consults `created`. The other reservation tests bail later — in createOrAdopt
@@ -688,4 +683,170 @@ func TestNewPack_WipedStoreCannotAdoptSurvivingPack(t *testing.T) {
 	if _, held, _ := getSlugReservation(ctx, s.slugs, "mypack"); held {
 		t.Error("the refused attempt kept the reservation, denying the name to the set's actual owner")
 	}
+}
+
+// The two-command takeover: no crash, no store error, two ordinary /newpack
+// calls, and the attacker used to end up owning a stranger's pack.
+//
+// The first command's GetStickerSet is inconclusive (429, 5xx, a deadline), so
+// the module correctly keeps the intent and the reservation — re-running is how
+// a real user recovers. But that turned the attacker's *fresh* reservation into
+// a *resumed* one, which defeated the per-invocation guard that was supposed to
+// make adoption safe. The second identical command then adopted.
+//
+// The guard is gone; refusing outright is what closes this. The starting state
+// is an empty store, which is what a restart on the in-memory backend leaves
+// behind while every pack at Telegram survives.
+func TestNewPack_InconclusiveProbeThenLiveSetCannotTakeOver(t *testing.T) {
+	s := newTestState()
+	ctx := context.Background()
+
+	rb1 := testutil.NewRecordingBot(t)
+	stubBotIdentity(rb1)
+	rb1.FailMethod("getStickerSet", 500, `{"ok":false,"description":"upstream is unhappy"}`)
+	if err := s.handleNewPack(ctx, rb1.Bot, stickerReply("/newpack mypack Mine", otherSet)); err != nil {
+		t.Fatalf("first /newpack: %v", err)
+	}
+
+	// Fresh bot: Reset() deliberately keeps registered failures.
+	rb2 := testutil.NewRecordingBot(t)
+	stubBotIdentity(rb2)
+	setExists(rb2)
+	if err := s.handleNewPack(ctx, rb2.Bot, stickerReply("/newpack mypack Mine", otherSet)); err != nil {
+		t.Fatalf("second /newpack: %v", err)
+	}
+
+	if pack, found := loadPack(t, s); found && !pack.Pending {
+		t.Errorf("TAKEOVER: caller now owns %+v and can /delpack a set they never created", pack)
+	}
+	if got := rb2.LastSent().Text(); !strings.Contains(got, slugTaken) {
+		t.Errorf("reply = %q, want the name-taken refusal", got)
+	}
+}
+
+// A pending record is not authority to delete a set.
+//
+// /newpack writes its intent before Telegram is called, so anyone can produce a
+// pending record naming any set. DeleteStickerSet is keyed by set name and
+// Telegram authorises it for every set this bot created — so confirming a
+// delete from a pending record would let one user destroy another's pack, with
+// no adoption needed at all.
+func TestDelPack_PendingRecordDeletesNothingAtTelegram(t *testing.T) {
+	rb := testutil.NewRecordingBot(t)
+	s := newTestState()
+	ctx := context.Background()
+
+	// What a post-wipe /newpack against a stranger's slug leaves behind.
+	seedInterrupted(t, s, "mypack", testSet)
+
+	if err := s.handleDelPack(ctx, rb.Bot, testutil.NewPrivateMessage(testUser, "/delpack")); err != nil {
+		t.Fatalf("handleDelPack: %v", err)
+	}
+
+	if n := countMethod(rb, "deleteStickerSet"); n != 0 {
+		t.Errorf("deleteStickerSet calls = %d, want 0 — an unconfirmed record must not reach Telegram", n)
+	}
+	// It should still clean up locally, so the user is not wedged.
+	if _, found := loadPack(t, s); found {
+		t.Error("local record survived, so /newpack stays blocked")
+	}
+	if _, held, _ := getSlugReservation(ctx, s.slugs, "mypack"); held {
+		t.Error("name stayed reserved with nothing behind it")
+	}
+}
+
+// releaseSlug verifies the holder itself rather than trusting its callers.
+//
+// A bare delete-by-name is a cross-user primitive: it is reached from seven
+// call sites, and one of them getting the owner wrong would hand a live name
+// away while the set still exists.
+func TestReleaseSlug_RefusesANameHeldBySomeoneElse(t *testing.T) {
+	s := newTestState()
+	ctx := context.Background()
+	const holder, caller = int64(1), int64(2)
+
+	if err := s.slugs.Put(ctx, slugKey("mypack"),
+		SlugReservation{Slug: "mypack", OwnerID: holder, CreatedAt: fixedNow.UnixMilli()}); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	s.releaseSlug(ctx, caller, "mypack")
+
+	held, found, err := getSlugReservation(ctx, s.slugs, "mypack")
+	if err != nil {
+		t.Fatalf("read back: %v", err)
+	}
+	if !found || held.OwnerID != holder {
+		t.Error("a non-holder released the name; the holder's set is still live and the name is now claimable")
+	}
+}
+
+// The release must survive a cancelled request context.
+//
+// Both the ownership read and the delete run on a detached context. When only
+// the delete was detached, a shutdown mid-handler failed the read and returned
+// early — leaving a reservation with no pack and no set behind it, which no
+// code path can reach again.
+func TestReleaseSlug_CompletesOnACancelledContext(t *testing.T) {
+	s := newTestState()
+	seed := context.Background()
+
+	if err := s.slugs.Put(seed, slugKey("mypack"),
+		SlugReservation{Slug: "mypack", OwnerID: testUser, CreatedAt: fixedNow.UnixMilli()}); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	// The in-memory backend ignores context entirely, so cancelling one proves
+	// nothing against it — this assertion passed whether or not the code
+	// detached until the store was made to honour cancellation.
+	s.slugs = ctxHonouringSlugs{inner: s.slugs}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // as if SIGTERM landed mid-handler
+
+	s.releaseSlug(ctx, testUser, "mypack")
+
+	if _, held, _ := getSlugReservation(seed, s.slugs, "mypack"); held {
+		t.Error("reservation survived a cancelled release; the name is stranded permanently")
+	}
+}
+
+// ctxHonouringSlugs makes a SlugStore respect context cancellation, which the
+// in-memory backend does not. Needed to test anything about detached contexts:
+// against the bare memory store the operation completes either way.
+type ctxHonouringSlugs struct{ inner SlugStore }
+
+func (c ctxHonouringSlugs) Get(ctx context.Context, id string) (SlugReservation, int64, error) {
+	if err := ctx.Err(); err != nil {
+		return SlugReservation{}, 0, err
+	}
+	return c.inner.Get(ctx, id)
+}
+
+func (c ctxHonouringSlugs) Put(ctx context.Context, id string, val SlugReservation) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return c.inner.Put(ctx, id, val)
+}
+
+func (c ctxHonouringSlugs) PutVersioned(ctx context.Context, id string, expectedVersion int64, val SlugReservation) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return c.inner.PutVersioned(ctx, id, expectedVersion, val)
+}
+
+func (c ctxHonouringSlugs) Delete(ctx context.Context, id string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return c.inner.Delete(ctx, id)
+}
+
+func (c ctxHonouringSlugs) List(ctx context.Context, prefix string) ([]string, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	return c.inner.List(ctx, prefix)
 }
