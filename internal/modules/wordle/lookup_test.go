@@ -4,14 +4,14 @@ import "testing"
 
 func TestNormalizeWord(t *testing.T) {
 	cases := map[string]string{
-		"":           "",
-		"crane":      "crane",
-		"CRANE":      "crane",
-		"  crane  ":  "crane",
-		"c-r-a-n-e":  "crane",
-		"héllo":      "hllo", // strips non a-z (including the é and accented o-equivalent)
-		"!@#$%":      "",
-		"42 crane":   "crane",
+		"":          "",
+		"crane":     "crane",
+		"CRANE":     "crane",
+		"  crane  ": "crane",
+		"c-r-a-n-e": "crane",
+		"héllo":     "hllo", // strips non a-z (including the é and accented o-equivalent)
+		"!@#$%":     "",
+		"42 crane":  "crane",
 	}
 	for in, want := range cases {
 		if got := normalizeWord(in); got != want {
