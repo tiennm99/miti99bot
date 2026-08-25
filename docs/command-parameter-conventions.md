@@ -15,6 +15,7 @@ remain responsible for parsing and validation.
 |---|---|---|
 | Required value | `<name>` | `<ticker>` |
 | Required comma-separated values | `<name,...>` | `<option,...>` |
+| Required remaining text | `<name...>` | `<title...>` |
 | Optional value | `[name]` | `[date]` |
 | Optional remaining text | `[name...]` | `[target...]` |
 | Alternatives in an optional group | `[literal | literal <name>]` | `[users | user <username>]` |
@@ -40,6 +41,7 @@ language or extra punctuation without a user-facing need.
 
 ```text
 /stock_buy <quantity> <ticker>
+/renamepack <title...>
 /lol [date]
 /trongtruonghop [target...]
 /stats [users | user <username> | cmd <command_name>]
