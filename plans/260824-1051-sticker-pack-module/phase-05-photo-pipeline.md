@@ -1,7 +1,7 @@
 ---
 phase: 5
 title: "Phase 5: Photo pipeline and pack icon"
-status: todo
+status: done
 priority: P1
 effort: "8h"
 dependencies: [1, 2, 3, 4]
@@ -49,6 +49,10 @@ figure appears in no current official page (plan R4). It is a client-side ceilin
 must not be described as spec in code comments or user-facing text.
 
 ### Source selection
+
+This is the photo branch of Phase 4's `resolveSource(ctx, b, ownerID, msg)`, which already
+takes every parameter this branch needs — no call site changes, and no `photoRef` type: the
+branch resolves to a `fileID` like the sticker branch, by uploading first.
 
 From `msg.ReplyToMessage`:
 
@@ -159,28 +163,28 @@ which a 512px sticker's `file_id` does not meet. Confirm in Phase 6's smoke test
 
 ## Todo
 
-- [ ] Add `golang.org/x/image`; verify `go mod tidy` produces no diff
-- [ ] `download.go` with 2 MB `LimitReader`, own client timeout, sentinel conversion
-- [ ] `classify(err)` returning a coarse label that cannot contain a URL
-- [ ] `toStickerPNG` with DecodeConfig guard, CatmullRom scale, PNG size ladder
-- [ ] `toThumbnailPNG` at exactly 100×100 with transparent padding
-- [ ] Photo/document source selection with mime allowlist and 2 MB pre-check
-- [ ] Wire photo branch into `/addsticker` and `/newpack`
-- [ ] `/setpackicon` handler and registration
-- [ ] `image_test.go` with in-test generated fixtures (no committed binaries)
-- [ ] `download_test.go` asserting no token or URL in any returned error
+- [x] Add `golang.org/x/image`; verify `go mod tidy` produces no diff
+- [x] `download.go` with 2 MB `LimitReader`, own client timeout, sentinel conversion
+- [x] `classify(err)` returning a coarse label that cannot contain a URL
+- [x] `toStickerPNG` with DecodeConfig guard, CatmullRom scale, PNG size ladder
+- [x] `toThumbnailPNG` at exactly 100×100 with transparent padding
+- [x] Photo/document source selection with mime allowlist and 2 MB pre-check
+- [x] Wire photo branch into `/addsticker` and `/newpack`
+- [x] `/setpackicon` handler and registration
+- [x] `image_test.go` with in-test generated fixtures (no committed binaries)
+- [x] `download_test.go` asserting no token or URL in any returned error
 
 ## Success Criteria
 
-- [ ] 1024×512 → 512×256; 300×900 → 171×512; 512×512 → 512×512
-- [ ] 1×5000 extreme aspect: short edge clamped to ≥1, no panic, no zero-dimension image
-- [ ] Alpha channel preserved through the resize
-- [ ] Source above 2 MB rejected with zero HTTP requests made
-- [ ] Decoded dimensions above 4096×4096 rejected before pixel allocation
-- [ ] Unsupported document mime rejected before download
-- [ ] `toThumbnailPNG` output is exactly 100×100
-- [ ] **A forced transport failure against an `httptest` server yields an error whose text contains neither `"bot"` nor the URL** — asserted, not assumed
-- [ ] `go mod tidy && git diff --exit-code go.mod go.sum` clean
+- [x] 1024×512 → 512×256; 300×900 → 171×512; 512×512 → 512×512
+- [x] 1×5000 extreme aspect: short edge clamped to ≥1, no panic, no zero-dimension image
+- [x] Alpha channel preserved through the resize
+- [x] Source above 2 MB rejected with zero HTTP requests made
+- [x] Decoded dimensions above 4096×4096 rejected before pixel allocation
+- [x] Unsupported document mime rejected before download
+- [x] `toThumbnailPNG` output is exactly 100×100
+- [x] **A forced transport failure against an `httptest` server yields an error whose text contains neither `"bot"` nor the URL** — asserted, not assumed
+- [x] `go mod tidy && git diff --exit-code go.mod go.sum` clean
 
 ## Risk Assessment
 

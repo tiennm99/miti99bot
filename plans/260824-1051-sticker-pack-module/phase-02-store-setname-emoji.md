@@ -1,7 +1,7 @@
 ---
 phase: 2
 title: "Phase 2: Store, set names, emoji parsing"
-status: todo
+status: done
 priority: P1
 effort: "3h"
 dependencies: [1]
@@ -146,29 +146,29 @@ from a replied sticker yields at most one element.
 
 ## Todo
 
-- [ ] Define `Pack` incl. `Count` and `Pending`; assert no reserved-bson collision
-- [ ] `packKey(ownerID)` and `getPack` returning a found flag
-- [ ] `senderID` rejecting nil/zero/`IsBot`/`SenderChat` with an explanatory message
-- [ ] `slugRe` validation incl. `__`, trailing `_`, 40-char cap
-- [ ] `makeSetName` with 64-char guard and budget-reporting error
-- [ ] `ownsSet` case-insensitive match against stored `Pack.Name`
-- [ ] `usernameResolver` caching success but never failure, taking the handler's `b`
-- [ ] `parseEmoji` cluster scanner with the 20-entry cap
-- [ ] Four test files per the success criteria
+- [x] Define `Pack` incl. `Count` and `Pending`; assert no reserved-bson collision
+- [x] `packKey(ownerID)` and `getPack` returning a found flag
+- [x] `senderID` rejecting nil/zero/`IsBot`/`SenderChat` with an explanatory message
+- [x] `slugRe` validation incl. `__`, trailing `_`, 40-char cap
+- [x] `makeSetName` with 64-char guard and budget-reporting error
+- [x] `ownsSet` case-insensitive match against stored `Pack.Name`
+- [x] `usernameResolver` caching success but never failure, taking the handler's `b`
+- [x] `parseEmoji` cluster scanner with the 20-entry cap
+- [x] Four test files per the success criteria
 
 ## Success Criteria
 
-- [ ] `getPack` for owner A never returns owner B's pack
-- [ ] `getPack` on an unknown owner returns `found == false` and a nil error
-- [ ] No `List` call exists anywhere in the module
-- [ ] Slug table rejects leading digit, `__`, trailing `_`, 2 chars, 41 chars
-- [ ] `makeSetName` errors when `len(slug)+len("_by_"+username) > 64`
-- [ ] `ownsSet` matches `MyPack_by_Bot` against a stored `mypack_by_bot`
-- [ ] `ownsSet` returns false for a set name belonging to another bot
-- [ ] A simulated bot username change does **not** break `ownsSet` for an existing pack
-- [ ] `senderID` rejects `IsBot: true` and a non-nil `SenderChat`, each with zero store access
-- [ ] `parseEmoji` handles joined input, ZWJ family, flag, keycap, skin tone; rejects plain text; errors above 20
-- [ ] `gofmt -l internal/modules/sticker` empty; `go test`/`go vet` clean
+- [x] `getPack` for owner A never returns owner B's pack
+- [x] `getPack` on an unknown owner returns `found == false` and a nil error
+- [x] No `List` call exists anywhere in the module
+- [x] Slug table rejects leading digit, `__`, trailing `_`, 2 chars, 41 chars
+- [x] `makeSetName` errors when `len(slug)+len("_by_"+username) > 64`
+- [x] `ownsSet` matches `MyPack_by_Bot` against a stored `mypack_by_bot`
+- [x] `ownsSet` returns false for a set name belonging to another bot
+- [x] A simulated bot username change does **not** break `ownsSet` for an existing pack
+- [x] `senderID` rejects `IsBot: true` and a non-nil `SenderChat`, each with zero store access
+- [x] `parseEmoji` handles joined input, ZWJ family, flag, keycap, skin tone; rejects plain text; errors above 20
+- [x] `gofmt -l internal/modules/sticker` empty; `go test`/`go vet` clean
 
 ## Risk Assessment
 

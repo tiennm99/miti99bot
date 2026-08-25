@@ -1,7 +1,7 @@
 ---
 phase: 6
 title: "Phase 6: Wiring, menu, docs"
-status: todo
+status: partial
 priority: P2
 effort: "4h"
 dependencies: [1, 2, 3, 4, 5]
@@ -100,6 +100,15 @@ modules' descriptions.
 `[emoji...]`, `delsticker` → ``, `editsticker` → `<emoji...>`, `ordersticker` → `<position>`,
 `setpackicon` → ``, `renamepack` → `<title...>`, `delpack` → ``, `mypack` → ``.
 
+**`<name...>` is not yet a documented form.** `docs/command-parameter-conventions.md:15-20`
+defines `<name>`, `<name,...>`, `[name]`, and `[name...]` — required *remaining text* appears
+nowhere, and no existing command uses it (`rg "Parameters:"` across `internal/` confirms).
+Three of the nine (`<title...>` twice, `<emoji...>`) need it. Add the row
+`| Required remaining text | \`<name...>\` | \`<title...>\` |` to that table and an example
+line, in the same change that registers the commands — the conventions doc is the authority
+these registrations are validated against, so shipping an undocumented form silently
+demotes it.
+
 ### README and docs
 
 Module table row listing the nine commands, then a `### Sticker packs` section: **one pack per
@@ -146,20 +155,21 @@ dispatcher hook (`dispatcher.go:80-84`).
 ## Todo
 
 - [ ] Set `MODULES` explicitly in the deployed environment and verify
-- [ ] Update `.env.example` with the explicit list and a why-comment
-- [ ] Confirm `mypack` is free in the registry alongside the other eight
-- [ ] Draft nine descriptions within the measured budget and re-measure `RenderHelp`
-- [ ] Add `"sticker": sticker.New` to `factories()`
-- [ ] Add nine entries to `expectedParameters`
-- [ ] README module-table row + `### Sticker packs` section
-- [ ] `docs/sticker-packs.md`
-- [ ] Full validation gate
+- [x] Update `.env.example` with the explicit list and a why-comment
+- [x] Confirm `mypack` is free in the registry alongside the other eight
+- [x] Draft nine descriptions within the measured budget and re-measure `RenderHelp`
+- [x] Add `"sticker": sticker.New` to `factories()`
+- [x] Add nine entries to `expectedParameters`
+- [x] Add the `<name...>` row + example to `docs/command-parameter-conventions.md`
+- [x] README module-table row + `### Sticker packs` section
+- [x] `docs/sticker-packs.md`
+- [x] Full validation gate
 - [ ] Manual smoke sequence against a real token
 
 ## Success Criteria
 
-- [ ] `gofmt -l .` empty; `go vet ./...` clean; `go test ./...` passes; `golangci-lint run` clean
-- [ ] `RenderHelp` stays under 4096 runes with all nine commands registered
+- [x] `gofmt -l .` empty; `go vet ./...` clean; `go test ./...` passes; `golangci-lint run` clean
+- [x] `RenderHelp` stays under 4096 runes with all nine commands registered
 - [ ] With `MODULES` unset in a scratch environment, the module still loads — confirming C10 is understood rather than assumed away
 - [ ] With the explicit `MODULES` list and no `sticker` entry, none of the nine commands register
 - [ ] Smoke: reply to a sticker with `/newpack smoke_pack Smoke Pack`; the returned link opens

@@ -1,7 +1,7 @@
 ---
 phase: 3
 title: "Phase 3: Pack lifecycle commands"
-status: todo
+status: done
 priority: P1
 effort: "7h"
 dependencies: [1, 2]
@@ -41,6 +41,18 @@ Registry key is `sticker`; command names stay unprefixed — the registry keys c
 `cmd.Name` independent of module name (`registry.go:176`), which is why `misc` ships `/ff`.
 
 `handlerTimeout = 10 * time.Second` is a package constant; every handler opens with it.
+
+> **Superseded during implementation — see plan.md, "post-implementation review:
+> global slug reservation".** Step 5 below adopts an existing set on the strength
+> of a `Pending` record for this owner and slug. Review proved that insufficient:
+> the pack record is keyed by owner, so a user with *no* pack who types someone
+> else's slug produces identical evidence and took over their pack. The shipped
+> code adds a create-only global reservation (`slug:<slug>` → ownerID) written
+> before Telegram is touched, and adopts only when it names the caller. Steps 4-7
+> read as implemented **except** that a reservation check precedes step 4, and
+> step 5's "abort, delete the pending record" on an unknown error is wrong for
+> the same reason rule 4 exists — the shipped code keeps both the intent and the
+> reservation unless the refusal is positively classified.
 
 ### `/newpack <pack> <title...>` — write-ahead intent
 
@@ -209,39 +221,39 @@ into prose by the Bot API server; everything else arrives as `Bad Request: <CODE
 
 ## Todo
 
-- [ ] `state.go` with store, pending view, resolver, locks, nowFn, `handlerTimeout`
-- [ ] `sticker.go` factory registering 4 commands + callback prefix
-- [ ] `errors.go`: `replyAPIError` code table + `isStickerSetMissing`
-- [ ] `/mypack` reading `Count`, marking a pending record, zero API calls
-- [ ] `/newpack` steps 1-7 incl. `PutVersioned` intent, three `ErrConflict` branches, adoption
-- [ ] Different-slug pending branch probes `GetStickerSet(oldName)` before overwriting
-- [ ] `/renamepack` reply: new title, unchanged link, and the /delpack + /newpack route
-- [ ] `/delpack` confirm prompt: title, sticker count, link, permanence
-- [ ] `pending_delete.go` with TTL, chat/message binding, opaque id
-- [ ] `/delpack` naming the pack in its confirm prompt
-- [ ] `delpack_callback.go` with expiry, binding, nil-message guard, single-use
-- [ ] Record self-heal on `isStickerSetMissing` across commands
-- [ ] Tests per the success criteria
+- [x] `state.go` with store, pending view, resolver, locks, nowFn, `handlerTimeout`
+- [x] `sticker.go` factory registering the module's commands + callback prefix (9 as shipped, once phases 4-5 landed)
+- [x] `errors.go`: `replyAPIError` code table + `isStickerSetMissing`
+- [x] `/mypack` reading `Count`, marking a pending record, zero API calls
+- [x] `/newpack` steps 1-7 incl. `PutVersioned` intent, three `ErrConflict` branches, adoption
+- [x] Different-slug pending branch probes `GetStickerSet(oldName)` before overwriting
+- [x] `/renamepack` reply: new title, unchanged link, and the /delpack + /newpack route
+- [x] `/delpack` confirm prompt: title, sticker count, link, permanence
+- [x] `pending_delete.go` with TTL, chat/message binding, opaque id
+- [x] `/delpack` naming the pack in its confirm prompt
+- [x] `delpack_callback.go` with expiry, binding, nil-message guard, single-use
+- [x] Record self-heal on `isStickerSetMissing` across commands
+- [x] Tests per the success criteria
 
 ## Success Criteria
 
-- [ ] `/mypack` records **zero** entries in `RecordingBot.Sent()`
-- [ ] A second `/newpack` with a confirmed pack present is refused, names the existing slug, and makes zero API calls
-- [ ] Interrupted `/newpack` (pending record, same slug, set exists) completes on re-run and does not report the slug taken
-- [ ] Interrupted `/newpack` with a *different* slug where the old set **exists** adopts the old set and refuses the new slug, leaving nothing orphaned
-- [ ] Interrupted `/newpack` with a *different* slug where the old set is **missing** replaces the pending record and proceeds
-- [ ] `/newpack` where `GetStickerSet` fails with a non-missing error aborts, deletes the pending record, and never calls `CreateNewStickerSet`
-- [ ] `/newpack` uses `PutVersioned(…, 0, …)`; the create path never calls `Put` for a new record
-- [ ] `/renamepack` with no pack replies "you don't have a pack yet" and makes zero API calls
-- [ ] `/delpack` confirm after `ExpiresAt` is refused as expired, with no `DeleteStickerSet`
-- [ ] `/delpack` confirm from a different `From.ID` is refused, with no `DeleteStickerSet`
-- [ ] `/delpack` confirm with a nil `CallbackQuery.Message.Message` is handled without panic
-- [ ] Pressing the same confirm twice deletes once; the second press reports already-used
-- [ ] Callback data is asserted ≤ 64 bytes
-- [ ] A command receiving `STICKERSET_INVALID` deletes the stale record, unblocking `/newpack`
-- [ ] Title of 65 chars rejected locally, before any API call
-- [ ] `/delpack` confirm text contains the pack title, the sticker count, and the share link
-- [ ] `/renamepack` reply names the `/delpack` + `/newpack` route
+- [x] `/mypack` records **zero** entries in `RecordingBot.Sent()`
+- [x] A second `/newpack` with a confirmed pack present is refused, names the existing slug, and makes zero API calls
+- [x] Interrupted `/newpack` (pending record, same slug, set exists) completes on re-run and does not report the slug taken
+- [x] Interrupted `/newpack` with a *different* slug where the old set **exists** adopts the old set and refuses the new slug, leaving nothing orphaned
+- [x] Interrupted `/newpack` with a *different* slug where the old set is **missing** replaces the pending record and proceeds
+- [x] `/newpack` where `GetStickerSet` fails with a non-missing error aborts and never calls `CreateNewStickerSet`, **keeping** the pending record and the reservation — superseded, see the note at the top of this file. Deleting them on an unknown error is what strands a slug: the set may exist, and re-running is how the user recovers.
+- [x] `/newpack` uses `PutVersioned(…, 0, …)`; the create path never calls `Put` for a new record
+- [x] `/renamepack` with no pack replies "you don't have a pack yet" and makes zero API calls
+- [x] `/delpack` confirm after `ExpiresAt` is refused as expired, with no `DeleteStickerSet`
+- [x] `/delpack` confirm from a different `From.ID` is refused, with no `DeleteStickerSet`
+- [x] `/delpack` confirm with a nil `CallbackQuery.Message.Message` is handled without panic
+- [x] Pressing the same confirm twice deletes once; the second press reports already-used
+- [x] Callback data is asserted ≤ 64 bytes
+- [x] A command receiving `STICKERSET_INVALID` deletes the stale record, unblocking `/newpack`
+- [x] Title of 65 chars rejected locally, before any API call
+- [x] `/delpack` confirm text contains the pack title, the sticker count, and the share link
+- [x] `/renamepack` reply names the `/delpack` + `/newpack` route
 
 ## Risk Assessment
 
