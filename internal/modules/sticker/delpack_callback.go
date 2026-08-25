@@ -38,6 +38,20 @@ func (s *state) handleDelPack(ctx context.Context, b *bot.Bot, update *models.Up
 		return reply(ctx, b, msg, noPackYet)
 	}
 
+	// A pending record is bookkeeping, not proof that this bot created a set
+	// under that name on this user's behalf — /newpack writes it before
+	// Telegram is called, and anyone can make one naming any set. Deleting by
+	// set name is authorised by Telegram for every set this bot created, so
+	// confirming a delete from a pending record would let one user destroy
+	// another's pack. Clear the local record only, and touch nothing upstream.
+	if pack.Pending {
+		defer s.lockUser(ownerID)()
+		s.dropPackRecord(ctx, ownerID)
+		return reply(ctx, b, msg, fmt.Sprintf(
+			"Cleared an unfinished attempt at %s and freed the name. Nothing was deleted at Telegram; if that attempt did create a pack, it is no longer reachable through this bot.",
+			pack.Slug))
+	}
+
 	id, err := newActionID()
 	if err != nil {
 		log.Error("sticker_delpack_id", "err", err)
@@ -115,6 +129,9 @@ func (s *state) handleDelPackCallback(ctx context.Context, b *bot.Bot, update *m
 		return answerCallback(ctx, b, query.ID, "Could not load this confirmation. Try /delpack again.")
 	}
 
+	// Unreachable by construction — the action was loaded under this presser's
+	// own key, so a foreign press already returned above. Kept as defence in
+	// depth against a future change to how actions are addressed.
 	if query.From.ID != action.OwnerID {
 		return answerCallback(ctx, b, query.ID, "Only the user who ran /delpack can confirm it.")
 	}
@@ -153,6 +170,19 @@ func (s *state) handleDelPackCallback(ctx context.Context, b *bot.Bot, update *m
 	}
 
 	defer s.lockUser(action.OwnerID)()
+
+	// Re-check under the lock that the record still authorises a Telegram-side
+	// delete. handleDelPack refuses to prompt for a pending record, so this
+	// should be unreachable — but the guard belongs on the destructive
+	// operation rather than only on the path that normally reaches it.
+	if current, found, err := getPack(ctx, s.store, action.OwnerID); err != nil {
+		log.Error("sticker_delpack_recheck", "err", err)
+		return answerCallback(ctx, b, query.ID, "Could not confirm right now. Try /delpack again.")
+	} else if found && current.Pending && ownsSet(current, action.SetName) {
+		s.dropPendingDelete(ctx, key)
+		clearButton(ctx, b, action.ChatID, action.MessageID)
+		return answerCallback(ctx, b, query.ID, "That attempt was never confirmed, so nothing was deleted at Telegram.")
+	}
 
 	// Consume the action *before* the destructive call, so a double press
 	// cannot delete twice or race a second confirmation.

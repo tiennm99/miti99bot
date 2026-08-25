@@ -106,7 +106,14 @@ func TestDelPackCallback_HappyPath(t *testing.T) {
 
 // Identity comes from From.ID, never from the payload — the payload is
 // client-controlled.
-func TestDelPackCallback_RejectsOtherUser(t *testing.T) {
+// A foreign presser gets nothing. The mechanism is the key, not the owner
+// comparison: the action is loaded by the presser's own id, so someone else's
+// press finds no action at all and returns before the owner check is reached.
+//
+// Named for that, because the previous name claimed to exercise the owner
+// comparison at delpack_callback.go and did not — that branch is unreachable
+// by construction, and is kept only as defence in depth.
+func TestDelPackCallback_ForeignPresserResolvesToNothing(t *testing.T) {
 	rb := testutil.NewRecordingBot(t)
 	s := newTestState()
 	seedPack(t, s, 3)
