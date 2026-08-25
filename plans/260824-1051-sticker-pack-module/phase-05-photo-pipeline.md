@@ -127,7 +127,7 @@ matters. Do not restructure into upload-now-use-later.
 
 ### `/setpackicon`
 
-No arguments; reply to a sticker in one of the caller's packs.
+No arguments; reply to a sticker in the caller's pack.
 
 1. `resolveOwned` (Phase 4).
 2. `GetFile` + download that sticker's image, then `toThumbnailPNG`.
