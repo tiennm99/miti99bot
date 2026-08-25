@@ -250,8 +250,14 @@ func (s *state) claimSlug(ctx context.Context, b *bot.Bot, msg *models.Message, 
 			existing.Slug, shareLink(existing.Name)))
 
 	case existing.Slug == slug:
-		// Our own interrupted attempt for this exact name: resume it.
-		return existing, false, nil
+		// Our own interrupted attempt for this exact name: resume it, but with
+		// the title from *this* command. Returning the stored record verbatim
+		// silently discarded a retyped title and then reported success using
+		// the old one — "/newpack mypack New Title" answering "Created Old."
+		resumed := existing
+		resumed.Title = intent.Title
+		resumed.Name = intent.Name
+		return resumed, false, nil
 
 	default:
 		// An earlier attempt was interrupted under a *different* name. Probe
@@ -512,6 +518,11 @@ func (s *state) dropPackRecord(ctx context.Context, ownerID int64) {
 		log.Error("sticker_drop_record", "user", ownerID, "err", delErr)
 		return
 	}
+
+	// Any outstanding /delpack confirmation was issued against the record just
+	// removed, so it no longer authorises anything. The callback re-checks too;
+	// this keeps a dead prompt from surviving to be pressed at all.
+	s.dropPendingDelete(commitCtx, pendingDeleteKey(ownerID))
 
 	if err == nil && found && pack.Slug != "" {
 		s.releaseSlug(commitCtx, ownerID, pack.Slug)

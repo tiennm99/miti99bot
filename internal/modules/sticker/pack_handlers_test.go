@@ -164,6 +164,12 @@ func TestNewPack_DifferentSlugReplacesDeadIntent(t *testing.T) {
 	if pack.Slug != "mypack" || pack.Pending {
 		t.Errorf("pack = %+v, want a confirmed mypack record", pack)
 	}
+	// The old name had nothing behind it, so it must return to the pool.
+	// Without this assertion the test was named for a behaviour it never
+	// checked: every abandoned attempt would quietly shrink the namespace.
+	if _, held, _ := getSlugReservation(context.Background(), s.slugs, "oldslug"); held {
+		t.Error("the dead name stayed reserved with no set behind it")
+	}
 }
 
 // An unclassifiable getStickerSet failure means "unknown". Guessing either way
@@ -849,4 +855,58 @@ func (c ctxHonouringSlugs) List(ctx context.Context, prefix string) ([]string, e
 		return nil, err
 	}
 	return c.inner.List(ctx, prefix)
+}
+
+// A record that goes away takes its outstanding confirmation with it.
+//
+// The callback re-checks authority anyway, so this is defence in depth — but an
+// unpinned guard is how the last one rotted into a blocklist unnoticed.
+func TestDropPackRecord_ClearsAnOutstandingConfirmation(t *testing.T) {
+	s := newTestState()
+	ctx := context.Background()
+
+	seedPack(t, s, 3)
+	seedPendingDelete(t, s, nil)
+
+	s.dropPackRecord(ctx, testUser)
+
+	if _, _, err := s.pending.Get(ctx, pendingDeleteKey(testUser)); err == nil {
+		t.Error("confirmation outlived the record that authorised it")
+	}
+}
+
+// Resuming an interrupted attempt must use the title from the command the user
+// just sent, not the one stored by the attempt that failed.
+//
+// The stored record was returned verbatim, so a retyped title was silently
+// discarded and the success message quoted the old one — "/newpack mypack New"
+// answering "Created Old."
+func TestNewPack_ResumeUsesTheTitleJustTyped(t *testing.T) {
+	rb := testutil.NewRecordingBot(t)
+	stubBotIdentity(rb)
+	setMissing(rb) // nothing was created last time, so this run creates it
+	s := newTestState()
+	ctx := context.Background()
+
+	seedInterrupted(t, s, "mypack", testSet) // stored title is "Old"
+
+	if err := s.handleNewPack(ctx, rb.Bot, stickerReply("/newpack mypack Brand New Title", otherSet)); err != nil {
+		t.Fatalf("handleNewPack: %v", err)
+	}
+
+	pack, found := loadPack(t, s)
+	if !found {
+		t.Fatal("no record after a resumed create")
+	}
+	if pack.Title != "Brand New Title" {
+		t.Errorf("stored title = %q, want the one just typed", pack.Title)
+	}
+	if got := rb.LastSent().Text(); !strings.Contains(got, "Brand New Title") {
+		t.Errorf("reply = %q, want it to quote the title just typed", got)
+	}
+	for _, call := range rb.Sent() {
+		if call.Method == "createNewStickerSet" && call.Form["title"] != "Brand New Title" {
+			t.Errorf("created with title %q, want the one just typed", call.Form["title"])
+		}
+	}
 }

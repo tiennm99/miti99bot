@@ -79,9 +79,18 @@ func mediaContext(ctx context.Context) (context.Context, context.CancelFunc) {
 	return chathelper.FetchContext(ctx)
 }
 
-// lockUser serialises a user's mutations. Handlers run one at a time today, but
-// the cron scheduler and the detached per-command stats hook run concurrently
-// with them, so this is load-bearing rather than decorative.
+// lockUser serialises a user's mutations.
+//
+// Nothing contends for it today: the map is state-local to this module, the bot
+// dispatches inline with a single worker, and this module registers neither a
+// cron nor a command hook. An earlier version of this comment claimed the cron
+// scheduler and stats hook contended here — they do not, and a wrong reason for
+// a right guard is worse than none, because the next reader trusts it.
+//
+// It stays because every mutation here is a read-modify-write, which is wrong
+// the moment dispatch stops being serial, and an uncontended mutex costs
+// nothing. Note that releaseSlug's read-then-delete is not atomic under this
+// lock either; that is safe only while dispatch is serial.
 func (s *state) lockUser(ownerID int64) func() {
 	return s.locks.Acquire(strconv.FormatInt(ownerID, 10))
 }
