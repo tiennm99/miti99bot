@@ -256,7 +256,10 @@ func (s *state) claimSlug(ctx context.Context, b *bot.Bot, msg *models.Message, 
 		// the old one — "/newpack mypack New Title" answering "Created Old."
 		resumed := existing
 		resumed.Title = intent.Title
-		resumed.Name = intent.Name
+		// Name is deliberately NOT refreshed. It is derived from the bot's
+		// username, which can change at BotFather; the stored one names the set
+		// the interrupted attempt may already have created, and repointing it
+		// would orphan that set and aim later commands at a different name.
 		return resumed, false, nil
 
 	default:

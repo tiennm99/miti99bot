@@ -910,3 +910,34 @@ func TestNewPack_ResumeUsesTheTitleJustTyped(t *testing.T) {
 		}
 	}
 }
+
+// Resuming must not re-derive the set name.
+//
+// Pack.Name is built from the bot's username, which can change at BotFather.
+// The stored name identifies the set the interrupted attempt may already have
+// created; refreshing it from the current username would repoint the record at
+// a name nothing exists under, orphaning that set and aiming every later
+// command at the wrong one. ownsSet documents the same rule.
+func TestNewPack_ResumeKeepsTheStoredSetName(t *testing.T) {
+	rb := testutil.NewRecordingBot(t)
+	stubBotIdentity(rb) // resolves to "testbot"
+	setMissing(rb)
+	s := newTestState()
+	ctx := context.Background()
+
+	// The earlier attempt ran while the bot was called something else.
+	const legacySet = "mypack_by_oldbot"
+	seedInterrupted(t, s, "mypack", legacySet)
+
+	if err := s.handleNewPack(ctx, rb.Bot, stickerReply("/newpack mypack My Pack", otherSet)); err != nil {
+		t.Fatalf("handleNewPack: %v", err)
+	}
+
+	pack, found := loadPack(t, s)
+	if !found {
+		t.Fatal("no record after resume")
+	}
+	if pack.Name != legacySet {
+		t.Errorf("set name = %q, want the stored %q — the earlier attempt's set is now orphaned", pack.Name, legacySet)
+	}
+}

@@ -406,48 +406,84 @@ func TestDelPackCallback_ReleasesTheName(t *testing.T) {
 
 // A confirmation must never outlive the authority it was issued under.
 //
-// Reachable with ordinary commands and no attacker: U runs /delpack and does
-// not press; U's pack then disappears from Telegram's side, so a self-heal
-// clears U's record and frees the name; V legitimately claims that name; U
-// finally presses. DeleteStickerSet is keyed by set name, which Telegram
-// authorises for every set this bot created, so the press landed on V's pack.
+// Each case leaves the PendingDelete intact and breaks the pack record a
+// different way, so the press actually reaches the under-lock allowlist. An
+// earlier version of this test called dropPackRecord, which now clears the
+// confirmation too — so the callback returned at the pending.Get miss ~50 lines
+// before the guard, and the test passed with the whole guard reverted. Every
+// disjunct is exercised here on purpose.
 //
-// The re-check that was supposed to stop this was written as a blocklist — it
-// refused only a *pending* record still naming this set, and fell through when
-// the record was missing or had moved on. Authority must be proven, not
-// disproven.
-func TestDelPackCallback_StalePressCannotDeleteTheNextHolder(t *testing.T) {
-	rb := testutil.NewRecordingBot(t)
-	s := newTestState()
-	ctx := context.Background()
-
-	// U has a confirmed pack and a live confirmation prompt for it.
-	seedPack(t, s, 3)
-	action := seedPendingDelete(t, s, nil)
-
-	// U's set vanishes at Telegram; a self-heal clears the record and the name.
-	s.dropPackRecord(ctx, testUser)
-
-	// V now legitimately holds that name, with a set behind it.
+// The damage is cross-user: DeleteStickerSet is keyed by set name, which
+// Telegram authorises for every set this bot created, so a press with stale
+// authority destroys whoever holds that name at press time.
+func TestDelPackCallback_StaleAuthorityNeverReachesTelegram(t *testing.T) {
 	const victim = int64(99)
-	if err := s.slugs.Put(ctx, slugKey("mypack"),
-		SlugReservation{Slug: "mypack", OwnerID: victim, CreatedAt: fixedNow.UnixMilli()}); err != nil {
-		t.Fatalf("seed victim reservation: %v", err)
-	}
-	if err := s.store.Put(ctx, packKey(victim), Pack{
-		Slug: "mypack", Name: testSet, Title: "V's pack", OwnerID: victim, Count: 5,
-	}); err != nil {
-		t.Fatalf("seed victim pack: %v", err)
+
+	cases := []struct {
+		name   string
+		break_ func(t *testing.T, s *state, ctx context.Context)
+	}{
+		{
+			// !found — a self-heal removed the record but the prompt survived.
+			name: "record gone",
+			break_: func(t *testing.T, s *state, ctx context.Context) {
+				if err := s.store.Delete(ctx, packKey(testUser)); err != nil {
+					t.Fatalf("delete record: %v", err)
+				}
+			},
+		},
+		{
+			// current.Pending — the record is an unconfirmed attempt, which is
+			// no evidence this bot made that set for this user.
+			name: "record is unconfirmed",
+			break_: func(t *testing.T, s *state, ctx context.Context) {
+				pack, _ := loadPack(t, s)
+				pack.Pending = true
+				if err := s.store.Put(ctx, packKey(testUser), pack); err != nil {
+					t.Fatalf("mark pending: %v", err)
+				}
+			},
+		},
+		{
+			// !ownsSet — the record has moved on to a different pack.
+			name: "record moved on",
+			break_: func(t *testing.T, s *state, ctx context.Context) {
+				if err := s.store.Put(ctx, packKey(testUser), Pack{
+					Slug: "newslug", Name: "newslug_by_testbot", Title: "New", OwnerID: testUser, Count: 7,
+				}); err != nil {
+					t.Fatalf("move record: %v", err)
+				}
+			},
+		},
 	}
 
-	if err := s.handleDelPackCallback(ctx, rb.Bot, confirmPress(action, testUser)); err != nil {
-		t.Fatalf("callback: %v", err)
-	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			rb := testutil.NewRecordingBot(t)
+			s := newTestState()
+			ctx := context.Background()
 
-	if n := countMethod(rb, "deleteStickerSet"); n != 0 {
-		t.Errorf("deleteStickerSet calls = %d, want 0 — the press destroyed whoever holds that name now", n)
-	}
-	if _, _, err := s.store.Get(ctx, packKey(victim)); err != nil {
-		t.Errorf("victim's pack record damaged: %v", err)
+			seedPack(t, s, 3)
+			action := seedPendingDelete(t, s, nil)
+			tc.break_(t, s, ctx)
+
+			// Someone else now holds that name, with a live set behind it.
+			if err := s.store.Put(ctx, packKey(victim), Pack{
+				Slug: "mypack", Name: testSet, Title: "V's pack", OwnerID: victim, Count: 5,
+			}); err != nil {
+				t.Fatalf("seed victim: %v", err)
+			}
+
+			if err := s.handleDelPackCallback(ctx, rb.Bot, confirmPress(action, testUser)); err != nil {
+				t.Fatalf("callback: %v", err)
+			}
+
+			if n := countMethod(rb, "deleteStickerSet"); n != 0 {
+				t.Errorf("deleteStickerSet calls = %d, want 0 — a stale confirmation destroyed the current holder's pack", n)
+			}
+			if _, _, err := s.store.Get(ctx, packKey(victim)); err != nil {
+				t.Errorf("victim's pack record damaged: %v", err)
+			}
+		})
 	}
 }

@@ -190,6 +190,10 @@ func (s *state) handleDelPackCallback(ctx context.Context, b *bot.Bot, update *m
 		log.Error("sticker_delpack_recheck", "err", err)
 		return answerCallback(ctx, b, query.ID, "Could not confirm right now. Try /delpack again.")
 	}
+	// !found is stated explicitly even though ownsSet already returns false for
+	// a zero-value record's empty Name — mutation testing shows it is currently
+	// redundant. It stays because that redundancy is an accident of ownsSet's
+	// empty-string guard, not something this check should depend on.
 	if !found || current.Pending || !ownsSet(current, action.SetName) {
 		s.dropPendingDelete(ctx, key)
 		clearButton(ctx, b, action.ChatID, action.MessageID)
