@@ -1,7 +1,7 @@
 ---
 title: "Sticker packs module"
 description: "internal/modules/sticker — public, one-pack-per-user Telegram sticker set management via single-shot reply commands using @Stickers command names"
-status: pending
+status: partial
 priority: P2
 effort: ""
 tags: ["sticker", "telegram-bot", "module"]
@@ -190,12 +190,12 @@ structs, so under the current harness they can only ever **error**. `FailMethod`
 
 | # | Phase | Status |
 |---|-------|--------|
-| 1 | [Phase 1: Shared prerequisites](./phase-01-shared-prerequisites.md) | Pending |
-| 2 | [Phase 2: Store, set names, emoji parsing](./phase-02-store-setname-emoji.md) | Pending |
-| 3 | [Phase 3: Pack lifecycle commands](./phase-03-pack-lifecycle.md) | Pending |
-| 4 | [Phase 4: Sticker commands (reply path)](./phase-04-sticker-commands.md) | Pending |
-| 5 | [Phase 5: Photo pipeline and pack icon](./phase-05-photo-pipeline.md) | Pending |
-| 6 | [Phase 6: Wiring, menu, docs](./phase-06-wiring-docs.md) | Pending |
+| 1 | [Phase 1: Shared prerequisites](./phase-01-shared-prerequisites.md) | Done |
+| 2 | [Phase 2: Store, set names, emoji parsing](./phase-02-store-setname-emoji.md) | Done |
+| 3 | [Phase 3: Pack lifecycle commands](./phase-03-pack-lifecycle.md) | Done |
+| 4 | [Phase 4: Sticker commands (reply path)](./phase-04-sticker-commands.md) | Done |
+| 5 | [Phase 5: Photo pipeline and pack icon](./phase-05-photo-pipeline.md) | Done |
+| 6 | [Phase 6: Wiring, menu, docs](./phase-06-wiring-docs.md) | Partial — code + docs done; live smoke and deployed MODULES pending |
 
 ## Dependencies
 
@@ -261,6 +261,7 @@ Public module creating durable Telegram-side objects on a single-threaded dispat
 | R7 | A transient error deletes a live pack's record | `/mypack` reports no pack though the user can still open theirs via link | Rule 4 — destructive store deletes require positive `STICKERSET_INVALID` |
 | R8 | Bot username changes in BotFather | Every pack refuses as "not yours" after restart | Ownership matches stored `Pack.Name` against `Sticker.SetName`; username only builds *new* names (Phase 2) |
 | R9 | `golang.org/x/image` resampling disappoints | Visibly soft or aliased stickers in smoke | Swap `CatmullRom` for `ApproxBiLinear`; one line, one file |
+| R12 | `AddStickerToSet` may reject a `file_id` from a set this bot did not create | `/addsticker` on a sticker from any other pack fails while the photo path works | The one API assumption in this plan never checked against the live API — the docs allow a `file_id` in `InputSticker.sticker` but are silent on provenance. Settle with one live call before writing Phase 4's handler. If rejected, `/addsticker`'s sticker path routes through Phase 5's `GetFile` → download → `UploadStickerFile`, which makes Phase 4 depend on Phase 5 rather than the reverse — cheap to know first, expensive to discover after |
 
 ## Accepted disclosure
 
@@ -297,6 +298,42 @@ takes no pack argument because no command but `/newpack` does (former O1), and t
 per-user pack limit is one (former O2).
 
 ## Design Revisions
+
+### 2026-08-25 — three-lens review pass (security, correctness, tests)
+
+Three independent reviewers ran against the finished module. What they changed:
+
+- **Adoption no longer trusts the reservation alone.** The reservation proves
+  ownership only while it outlives the sets it guards, and it does not: it lives
+  in our store, the packs live at Telegram, and the in-memory backend is
+  selected silently whenever `MONGO_URL` is unset. After any wipe the original
+  takeover was reachable again. `createOrAdopt` now refuses to adopt when *this*
+  invocation first claimed the name — a genuine interrupted attempt always finds
+  its own reservation waiting, so there are no false negatives.
+- **Post-action cleanup reads moved onto the detached context.** They wrote via
+  `commitContext` but read on the request context, so a cancelled request failed
+  the read and skipped the release while still deleting the pack record —
+  stranding a name permanently. Found independently by two reviewers.
+- **Emoji clustering.** Nine valid emoji were refused outright; tag-sequence
+  flags shattered; and three inputs (trailing ZWJ, a joiner before a flag, an
+  odd regional-indicator count) passed validation and would have sent an
+  `emoji_list` Telegram rejects.
+- **A reply tail is now reserved** from the handler budget via the existing
+  `chathelper.FetchContext`, which every other data-fetching module already
+  used. A slow photo `/newpack` could spend the whole 10s before Telegram was
+  called, and then send its error reply on a dead context — the user saw nothing.
+- **The compression ladder resamples the scaled image, not the source.** It was
+  paying a full-size resample per rung: measured 1.99s versus 74ms for the three
+  rungs, on a dispatcher that runs handlers one at a time.
+- **Tests.** Mutation testing refuted the previous round's non-vacuity claim in
+  three places. The `created`-flag release machinery had no coverage in either
+  direction; two emoji assertions passed against a handler that never called
+  Telegram; and nothing pinned module registration — the whole module could be
+  removed from `factories()` with the suite still green.
+
+Left open deliberately: the shutdown path never joins the polling goroutine, so
+`context.WithoutCancel` does not actually survive process exit. That is
+`cmd/server/main.go`, outside this module and affecting every module's commits.
 
 ### 2026-08-25 — one pack per user
 
@@ -350,6 +387,86 @@ overwrote the pending record unconditionally, which permanently orphans a set th
 before an interruption. It now probes `GetStickerSet(oldName)` first and adopts rather than
 overwrites when the old set exists.
 
+
+### 2026-08-25 — post-implementation review: global slug reservation
+
+An independent review of the implemented module found a **pack takeover** in
+`/newpack`, and it traces back to this plan, not only to the code.
+
+Phase 3 step 5 said: `GetStickerSet` succeeds → "we hold a `Pending` record for
+this owner and slug, so this is our own interrupted attempt: adopt it". The
+plan's own risk section stated the supporting invariant as *"a `Pending` record
+for an owner means that owner asked for that name"*. That is true and **not
+sufficient**. Asking is not creating. `PutVersioned` is create-only per *owner
+key* (`packKey` is the owner ID alone); nothing reserved a name globally. So a
+user with no pack who typed another user's slug produced byte-identical evidence
+to a genuine resumed attempt — and adopted their pack, then could `/delpack` it.
+Every share link is public, so slugs are trivially enumerable.
+
+The plan pre-authorised one response to this signal ("disable adoption — a
+one-line change"), which would have closed the hole by dropping the
+"an interrupted `/newpack` can be completed by re-running" success criterion.
+The user chose the stronger fix instead:
+
+**A global slug reservation.** `SlugReservation{Slug, OwnerID}` is written
+create-only under `slug:<slug>` *before* Telegram is touched. Adoption is
+allowed only when the reservation names the caller. The first claimant of a name
+is the only user who can ever adopt a set under it, so "this set is mine" became
+a proven fact rather than an assumption — and both success criteria survive.
+
+Consequent changes:
+
+- `reserveSlug` runs before `claimSlug`; a name held by anyone else replies
+  "that pack name is taken" with **zero** API calls.
+- `resolveStaleIntent` re-proves the *old* slug's reservation before adopting
+  under it, and releases it on a positive "no such set".
+- `dropIntent` no longer fires on unknown errors (was a plan rule 4 violation in
+  its own right): on anything but a *classified* refusal both the intent and the
+  reservation survive, which is what lets a re-run recover. Only a positive
+  refusal releases them.
+- `/delpack` keeps the reservation, so a deleted name stays recoverable by its
+  owner and unavailable to everyone else — which also matches Telegram's likely
+  behaviour for deleted short names (R11).
+
+Four further defects fixed in the same pass:
+
+- **A stale `/delpack` confirmation deleted a live pack's record.** Pending
+  actions used a random key per invocation, so two could be live at once, and
+  the delete path cleared the record *by owner* without checking it still named
+  the set being deleted — precisely the documented delete-then-recreate URL
+  change. Now keyed per user (matching `stock/pending_dividend.go`), superseded
+  by a newer prompt, and gated on `ownsSet` before clearing.
+- **Unbounded storage from a public command.** The same random key meant a user
+  who ran `/delpack` and never tapped left a permanent document.
+- **The panic barrier missed the detached hook goroutine**, so a panicking
+  `CommandHook` (the `stats` module ships one) still killed the process. C9's
+  "Phase 1 closes this" was true for handlers only.
+- `/delpack`'s result message bypassed `chathelper.Reply`, so in a forum
+  supergroup it landed in General instead of the topic.
+
+### 2026-08-25 — Phase 4 review pass
+
+Ten findings applied before implementation began. Six changed what gets written:
+
+- `resolveSource` takes `(ctx, b, ownerID, msg)` from the start, and `photoRef` is gone — the
+  photo branch resolves to a `file_id` like every other path, so Phase 5 adds a branch instead
+  of rewriting call sites.
+- The static-only gate moves onto `resolveSource`, the path that can actually receive a
+  non-static sticker, and now also rejects `Type != "regular"` — a mask sticker is static yet
+  invalid for a regular set, which `IsAnimated || IsVideo` does not catch.
+- `/addsticker` gained its missing no-pack path, and the note on why its refusal is
+  deliberately *not* the uniform `resolveOwned` one.
+- `/delsticker` takes the same per-user keylock as `/addsticker`; both do the same
+  read-modify-write on `Count`.
+- `/delsticker`'s "never deletes the record" criterion was scoped to transient and unknown
+  errors. Unqualified, it forbade Phase 3's `STICKERSET_INVALID` self-heal — the very
+  mechanism that unwedges a user whose set Telegram removed.
+- The animated/video check moved ahead of the store read in `resolveOwned`'s numbered gate.
+
+Also: the `Count: 0` aftermath now names its recovery route, `STICKERS_TOO_MUCH` and the
+no-pack paths gained success criteria, R12 records the unverified `file_id`-reuse premise, and
+Phase 6 must document `<name...>` in the conventions doc rather than shipping an undocumented
+parameter form.
 
 #### Consistency sweep — one-pack revision
 

@@ -1,7 +1,7 @@
 ---
 phase: 1
 title: "Phase 1: Shared prerequisites"
-status: todo
+status: done
 priority: P1
 effort: "4h"
 dependencies: []
@@ -122,26 +122,26 @@ is not entangled with sticker logic.
 
 ## Todo
 
-- [ ] `recover()` in the command closure with `metrics.IncError("handler-panic")`
-- [ ] `recover()` in the callback closure with guarded `AnswerCallbackQuery`
-- [ ] Fix the stale `recover()` comment at `dispatcher.go:167`
-- [ ] `RecordingBot.StubMethod(method, resultJSON)`
-- [ ] `RecordingBot.FailMethodCode(method, errorCode, description)`
-- [ ] Document that `FailMethod` produces a codeless failure
-- [ ] `dispatcher_panic_test.go`: panicking command handler
-- [ ] `dispatcher_panic_test.go`: panicking callback handler
-- [ ] `recording_bot_test.go`: stubbed `getStickerSet` decodes into `models.StickerSet`
-- [ ] `recording_bot_test.go`: `FailMethodCode` yields `bot.ErrorBadRequest`
+- [x] `recover()` in the command closure with `metrics.IncError("handler-panic")`
+- [x] `recover()` in the callback closure with guarded `AnswerCallbackQuery`
+- [x] Fix the stale `recover()` comment at `dispatcher.go:167`
+- [x] `RecordingBot.StubMethod(method, resultJSON)`
+- [x] `RecordingBot.FailMethodCode(method, errorCode, description)`
+- [x] Document that `FailMethod` produces a codeless failure
+- [x] `dispatcher_panic_test.go`: panicking command handler
+- [x] `dispatcher_panic_test.go`: panicking callback handler
+- [x] `recording_bot_test.go`: stubbed `getStickerSet` decodes into `models.StickerSet`
+- [x] `recording_bot_test.go`: `FailMethodCode` yields `bot.ErrorBadRequest`
 
 ## Success Criteria
 
-- [ ] A command handler that panics is recovered; the test process survives and the error metric increments
-- [ ] A callback handler that panics is recovered and the callback query is still answered
-- [ ] `rg "recover\(\)" internal/modules/dispatcher.go` returns two hits
-- [ ] No comment in the repo claims a `recover()` exists in `webhook.go`
-- [ ] `rb.StubMethod("getStickerSet", ...)` lets `b.GetStickerSet` return a populated `*models.StickerSet` with a nil error
-- [ ] `rb.FailMethodCode("getStickerSet", 400, "Bad Request: STICKERSET_INVALID")` produces an error satisfying `errors.Is(err, bot.ErrorBadRequest)`
-- [ ] `go test ./...` passes with no changes to any existing test file other than additions
+- [x] A command handler that panics is recovered; the test process survives and the error metric increments
+- [x] A callback handler that panics is recovered and the callback query is still answered
+- [x] `rg "recover\(\)" internal/modules/dispatcher.go` returns two hits
+- [x] No comment in the repo claims a `recover()` exists in `webhook.go`
+- [x] `rb.StubMethod("getStickerSet", ...)` lets `b.GetStickerSet` return a populated `*models.StickerSet` with a nil error
+- [x] `rb.FailMethodCode("getStickerSet", 400, "Bad Request: STICKERSET_INVALID")` produces an error satisfying `errors.Is(err, bot.ErrorBadRequest)`
+- [x] `go test ./...` passes with no changes to any existing test file other than additions
 
 ## Risk Assessment
 
