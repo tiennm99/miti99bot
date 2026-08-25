@@ -1,8 +1,10 @@
 package testutil
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -39,6 +41,7 @@ type RecordingBot struct {
 	mu            sync.Mutex
 	calls         []SentCall
 	failures      map[string]failureResponse
+	stubs         map[string]string
 	nextMessageID int
 }
 
@@ -87,15 +90,66 @@ func (rb *RecordingBot) LastSent() SentCall {
 	return rb.calls[len(rb.calls)-1]
 }
 
-// Reset drops all captured calls. Useful between sub-tests sharing one bot.
+// Reset drops all captured calls.
+//
+// It deliberately does NOT clear registered failures or stubs — those are setup,
+// not observations. A sub-test that needs different responses should register
+// them explicitly or build its own bot.
 func (rb *RecordingBot) Reset() {
 	rb.mu.Lock()
 	rb.calls = nil
 	rb.mu.Unlock()
 }
 
+// StubMethod makes method return resultJSON as the "result" field of an ok
+// response, so methods that decode into a struct can be exercised at all.
+//
+// Without a stub, okResponseFor answers every non-message-producing method with
+// `{"ok":true,"result":true}` — which getStickerSet, getFile, uploadStickerFile,
+// and getMe cannot decode, so under the bare harness they can only ever return
+// "json: cannot unmarshal bool" errors.
+//
+// resultJSON is the raw JSON value for "result" — an object, array, or scalar:
+//
+//	rb.StubMethod("getStickerSet", `{"name":"p_by_bot","title":"P","sticker_type":"regular","stickers":[]}`)
+//
+// A failure registered for the same method wins, so a test can override a
+// stubbed happy path without unregistering the stub.
+func (rb *RecordingBot) StubMethod(method string, resultJSON string) {
+	rb.mu.Lock()
+	defer rb.mu.Unlock()
+	if rb.stubs == nil {
+		rb.stubs = map[string]string{}
+	}
+	rb.stubs[method] = resultJSON
+}
+
+// FailMethodCode makes method fail with a Telegram-shaped error carrying an
+// error_code, so the library maps it to the same sentinel production emits
+// (bot.ErrorBadRequest for 400, bot.ErrorForbidden for 403, and so on).
+//
+// This is the difference from FailMethod: the library switches on the
+// error_code *in the response body* (raw_request.go:103-125), not the HTTP
+// status, so a codeless failure never takes a sentinel shape. Handlers that
+// classify errors with errors.Is must be tested through this method.
+//
+//	rb.FailMethodCode("addStickerToSet", 400, "Bad Request: STICKERS_TOO_MUCH")
+func (rb *RecordingBot) FailMethodCode(method string, errorCode int, description string) {
+	body, _ := json.Marshal(map[string]any{
+		"ok":          false,
+		"error_code":  errorCode,
+		"description": description,
+	})
+	rb.FailMethod(method, errorCode, string(body))
+}
+
 // FailMethod makes the recording server return a Telegram API error for a
 // specific method while still recording the attempted call.
+//
+// The body is emitted verbatim, so unless it carries an "error_code" field the
+// resulting error is **codeless**: the library returns a generic decode/status
+// error rather than bot.ErrorBadRequest or any other sentinel. Use
+// FailMethodCode when the test asserts on the error's classification.
 func (rb *RecordingBot) FailMethod(method string, status int, body string) {
 	rb.mu.Lock()
 	defer rb.mu.Unlock()
@@ -118,22 +172,51 @@ func (rb *RecordingBot) FailMethod(method string, status int, body string) {
 func (rb *RecordingBot) handle(w http.ResponseWriter, r *http.Request) {
 	method := apiMethodFromPath(r.URL.Path)
 
-	// 8 MiB cap — well above any realistic test payload but bounded for gosec.
-	// #nosec G120 — explicit upper bound above
-	if err := r.ParseMultipartForm(8 << 20); err != nil {
-		http.Error(w, "bad form", http.StatusBadRequest)
+	// Parameterless methods (getMe) send no body at all, so a parse failure is
+	// not an error there — it just means there are no form fields to record.
+	// Failing the request would make those methods untestable no matter what
+	// the test registered.
+	//
+	// That tolerance is scoped to requests that carry no multipart body. A
+	// request that claims to be multipart and then fails to parse is a real
+	// fault, and answering it 200 with an empty Form would quietly satisfy
+	// every test that asserts a field is *absent*.
+	// Read the body before parsing, because an empty body and a corrupt one are
+	// otherwise indistinguishable: multipart reports both as "no parts".
+	//
+	// The distinction matters. Parameterless methods (getMe) genuinely send no
+	// body, and rejecting them would make those methods untestable. A body that
+	// is present but unparseable is a real fault, and answering it 200 with an
+	// empty form would quietly satisfy every test that asserts a field is
+	// *absent* — several outside this package do exactly that.
+	//
+	// 8 MiB cap: well above any realistic test payload, bounded for gosec.
+	const maxBody = 8 << 20
+	body, err := io.ReadAll(io.LimitReader(r.Body, maxBody))
+	if err != nil {
+		http.Error(w, "read body: "+err.Error(), http.StatusBadRequest)
 		return
 	}
-	form := make(map[string]string, len(r.MultipartForm.Value))
-	for k, vs := range r.MultipartForm.Value {
-		if len(vs) > 0 {
-			form[k] = vs[0]
+
+	form := map[string]string{}
+	if len(body) > 0 {
+		r.Body = io.NopCloser(bytes.NewReader(body))
+		// #nosec G120 — bounded by maxBody above
+		if err := r.ParseMultipartForm(maxBody); err != nil {
+			http.Error(w, "bad multipart form: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+		for k, vs := range r.MultipartForm.Value {
+			if len(vs) > 0 {
+				form[k] = vs[0]
+			}
 		}
 	}
 
 	rb.mu.Lock()
 	rb.calls = append(rb.calls, SentCall{Method: method, Form: form})
 	failure, shouldFail := rb.failures[method]
+	stub, hasStub := rb.stubs[method]
 	messageID := rb.nextMessageID
 	if !shouldFail && isMessageProducingMethod(method) {
 		rb.nextMessageID++
@@ -142,9 +225,14 @@ func (rb *RecordingBot) handle(w http.ResponseWriter, r *http.Request) {
 	rb.mu.Unlock()
 
 	w.Header().Set("Content-Type", "application/json")
+	// Failures win over stubs so a test can override a stubbed happy path.
 	if shouldFail {
 		w.WriteHeader(failure.status)
 		_, _ = w.Write([]byte(failure.body))
+		return
+	}
+	if hasStub {
+		_, _ = w.Write([]byte(`{"ok":true,"result":` + stub + `}`))
 		return
 	}
 	_, _ = w.Write([]byte(okResponseFor(method, messageID)))
