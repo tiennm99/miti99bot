@@ -299,6 +299,30 @@ per-user pack limit is one (former O2).
 
 ## Design Revisions
 
+### 2026-08-25 — /delpack confirmations must prove authority, not disprove it
+
+Removing adoption closed the takeover class, but the same DeleteStickerSet
+primitive stayed reachable through a stale confirmation. The under-lock re-check
+was written as a blocklist — it refused only a *pending* record still naming the
+set — and fell through on the two states that mattered: no record at all, and a
+record that had moved on. Reproduced with ordinary commands and no attacker:
+prompt, pack disappears at Telegram, self-heal frees the name, another user
+claims it, first user presses, their pack is destroyed.
+
+Inverted to an allowlist: delete only when a confirmed record still names this
+exact set. A guard phrased as "which states do I refuse" cannot fail closed
+against a state nobody enumerated. Dropping a pack record also clears any
+outstanding confirmation, so a dead prompt is gone rather than merely refused.
+
+This also closes the reservation leak on the confirmed-delete path, since the
+moved-on case no longer reaches Telegram at all.
+
+Fixed alongside: resuming an interrupted `/newpack` silently discarded a retyped
+title and reported success with the old one; a test named for freeing a dead
+name never asserted it; and `lockUser`'s comment justified the lock with cron
+and stats-hook contention that does not exist — the map is state-local and this
+module registers neither.
+
 ### 2026-08-25 — pack adoption removed
 
 Verification found the round-4 guard defeated by the module's own recovery
