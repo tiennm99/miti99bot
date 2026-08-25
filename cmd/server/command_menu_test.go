@@ -72,6 +72,15 @@ func TestCommandDiscovery_AllPublicCommandsHaveSafeMetadata(t *testing.T) {
 		"monkeyd_crawl":        "<url> [font_size]",
 		"monkeyd_tags":         "<url>",
 		"random":               "<option,...>",
+		"newpack":              "<pack> <title...>",
+		"mypack":               "",
+		"addsticker":           "[emoji...]",
+		"delsticker":           "",
+		"editsticker":          "<emoji...>",
+		"ordersticker":         "<position>",
+		"setpackicon":          "",
+		"renamepack":           "<title...>",
+		"delpack":              "",
 		"stats":                "[users | user <username> | cmd <command_name>]",
 		"stock_events":         "<ticker> [days]",
 		"stock_info":           "<ticker>",
@@ -91,7 +100,11 @@ func TestCommandDiscovery_AllPublicCommandsHaveSafeMetadata(t *testing.T) {
 	if len(menu) != len(reg.PublicCommands()) {
 		t.Fatalf("menu commands = %d, public commands = %d", len(menu), len(reg.PublicCommands()))
 	}
+	// This map lists the commands whose parameter strings are pinned; commands
+	// absent from it are not asserted (the lookup yields "" for them).
+	seen := map[string]bool{}
 	for _, command := range reg.PublicCommands() {
+		seen[command.Name] = true
 		if got := command.Parameters; got != expectedParameters[command.Name] {
 			t.Errorf("/%s parameters = %q, want %q", command.Name, got, expectedParameters[command.Name])
 		}
@@ -104,6 +117,20 @@ func TestCommandDiscovery_AllPublicCommandsHaveSafeMetadata(t *testing.T) {
 		}
 		if utf8.RuneCountInString(description) > telegramCommandDescriptionMaxRunesForTest {
 			t.Errorf("/%s native menu description exceeds Telegram limit: %d", command.Name, utf8.RuneCountInString(description))
+		}
+	}
+
+	// Every expectation must correspond to a registered command.
+	//
+	// Without this, an entry whose command stopped being registered simply
+	// stopped being checked: the forward loop only visits commands that exist,
+	// so removing a whole module from factories() left the suite green. That is
+	// also what makes the parameterless entries above load-bearing rather than
+	// decorative — "" == "" asserts nothing on its own, but the command having
+	// to exist at all does.
+	for name := range expectedParameters {
+		if !seen[name] {
+			t.Errorf("/%s is expected but not registered — a module dropped out of factories()", name)
 		}
 	}
 
