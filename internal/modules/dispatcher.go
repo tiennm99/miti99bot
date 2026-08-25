@@ -2,6 +2,7 @@ package modules
 
 import (
 	"context"
+	"runtime/debug"
 	"strings"
 	"time"
 
@@ -71,6 +72,7 @@ func Install(b *bot.Bot, reg *Registry, auth Auth) {
 				return matchCommand(nameCopy, update)
 			},
 			func(ctx context.Context, b *bot.Bot, update *models.Update) {
+				defer recoverHandler("command", cmdCopy.Name, nil)
 				if !auth.Permits(cmdCopy.Visibility, update) {
 					return // silent — do not leak existence of gated commands
 				}
@@ -78,6 +80,10 @@ func Install(b *bot.Bot, reg *Registry, auth Auth) {
 				// context.Background is intentional: the hook must outlive the request
 				// context so stats writes complete even after the handler returns.
 				go func() { //nolint:gosec // G118: goroutine intentionally detached from request context
+					// This goroutine is outside the handler's barrier above, so
+					// it needs its own: a panicking hook on its own goroutine
+					// still terminates the process.
+					defer recoverHandler("command hook", cmdCopy.Name, nil)
 					hookCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 					defer cancel()
 					reg.RunCommandHooks(hookCtx, cmdCopy.Name, update)
@@ -95,6 +101,11 @@ func Install(b *bot.Bot, reg *Registry, auth Auth) {
 		prefixCopy := prefix
 		b.RegisterHandler(bot.HandlerTypeCallbackQueryData, prefixCopy, bot.MatchTypePrefix,
 			func(ctx context.Context, b *bot.Bot, update *models.Update) {
+				defer recoverHandler("callback", prefixCopy, func() {
+					if update != nil && update.CallbackQuery != nil {
+						_, _ = b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{CallbackQueryID: update.CallbackQuery.ID})
+					}
+				})
 				if !auth.Permits(callbackCopy.Visibility, update) {
 					if update != nil && update.CallbackQuery != nil {
 						_, _ = b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{CallbackQueryID: update.CallbackQuery.ID})
@@ -108,6 +119,34 @@ func Install(b *bot.Bot, reg *Registry, auth Auth) {
 				}
 			})
 	}
+}
+
+// recoverHandler contains a panic raised by a module handler. The bot runs with
+// bot.WithNotAsyncHandlers() and a single worker, so the handler executes inline
+// on the polling goroutine: without this barrier one panicking handler ends the
+// process for every user. Mirrors the barrier the cron scheduler already puts
+// around its handlers (internal/cron/scheduler.go).
+//
+// The panic is logged at ERROR with a full stack and counted under a distinct
+// handler-panic metric, so a handler that panics on every call is loud rather
+// than quietly failing per-request.
+//
+// onPanic, when non-nil, runs after logging — the callback path uses it to
+// answer the query so the caller's client stops showing a spinner. It is itself
+// guarded, because a panic raised inside the recovery path would have no
+// remaining barrier.
+func recoverHandler(kind, name string, onPanic func()) {
+	rec := recover()
+	if rec == nil {
+		return
+	}
+	metrics.IncError("handler-panic")
+	log.Error(kind+" panic", kind, name, "panic", rec, "stack", string(debug.Stack()))
+	if onPanic == nil {
+		return
+	}
+	defer func() { _ = recover() }()
+	onPanic()
 }
 
 // logCommand emits one structured line per authorized command invocation: what
@@ -163,8 +202,9 @@ func matchCommand(name string, update *models.Update) bool {
 			continue
 		}
 		// Bounds check: defensive against malformed entities from a future
-		// API revision; the library's match func omits this so a bad entity
-		// would panic the goroutine before our recover() in webhook.go.
+		// API revision. The library's match func omits it, and a matcher runs
+		// outside Install's panic barrier, so a bad entity would panic the
+		// polling goroutine with nothing to catch it.
 		end := e.Offset + e.Length
 		if e.Offset < 0 || end > len(text) || e.Length < 1 {
 			continue
