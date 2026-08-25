@@ -1,6 +1,6 @@
 ---
 title: "Sticker packs module"
-description: "internal/modules/sticker — public, multi-pack-per-user Telegram sticker set management via single-shot reply+args commands using @Stickers command names"
+description: "internal/modules/sticker — public, one-pack-per-user Telegram sticker set management via single-shot reply commands using @Stickers command names"
 status: pending
 priority: P2
 effort: ""
@@ -15,10 +15,13 @@ blocks: []
 
 ## Overview
 
-New module `internal/modules/sticker` letting **any** user create and manage their own
-Telegram sticker packs through the bot. Packs are created on behalf of the calling user
-(`user_id`), named `<slug>_by_<bot_username>`, and stay bot-manageable because the bot
-created them.
+New module `internal/modules/sticker` letting **any** user create and manage **one**
+personal Telegram sticker pack through the bot. The pack is created on behalf of the calling
+user (`user_id`), named `<slug>_by_<bot_username>`, and stays bot-manageable because the bot
+created it.
+
+One pack per user is the central simplification: no command except `/newpack` takes a pack
+argument, because there is only ever one pack to act on.
 
 Command names mirror @Stickers (`/newpack`, `/addsticker`, …) but each command is
 **single-shot**: one message carrying its arguments, optionally replying to a sticker or
@@ -31,19 +34,20 @@ prerequisites, not incidental work.
 
 | # | Goal | Priority |
 |---|------|----------|
-| 1 | Any user can create and fill a personal sticker pack without leaving the chat | P1 |
-| 2 | Ownership is enforced structurally — a user can never mutate another's pack | P1 |
-| 3 | No sticker command can stall the bot for other users beyond a bounded deadline | P1 |
-| 4 | A partial failure never permanently strands a user's pack | P1 |
-| 5 | Command names and semantics recognisable to @Stickers users | P2 |
-| 6 | Enabling the module is an explicit operator decision | P2 |
+| 1 | Any user can create and fill their personal sticker pack without leaving the chat | P1 |
+| 2 | No command but `/newpack` requires naming a pack | P1 |
+| 3 | Ownership is enforced structurally — a user can never mutate another's pack | P1 |
+| 4 | No sticker command can stall the bot for other users beyond a bounded deadline | P1 |
+| 5 | A partial failure never permanently strands a user's pack | P1 |
+| 6 | Command names and semantics recognisable to @Stickers users | P2 |
+| 7 | Enabling the module is an explicit operator decision | P2 |
 
 ## Accepted scope
 
 | Decision | Value |
 |---|---|
 | Visibility | `VisibilityPublic` — every user manages their own packs |
-| Pack model | Named packs, multiple per user, addressed by slug argument |
+| Pack model | **One pack per user.** The slug is chosen at creation and never used as an argument again |
 | Inputs | Existing static stickers (reply) + photos/image documents (reply) |
 | Interaction | Single-shot reply + args; no conversation state, no `/cancel` |
 | Naming | @Stickers command names, no module prefix |
@@ -55,23 +59,27 @@ All `VisibilityPublic`. `Parameters` follows `docs/command-parameter-conventions
 | Command | Parameters | Reply required | API calls |
 |---|---|---|---|
 | `/newpack` | `<pack> <title...>` | yes (sticker/photo) | `GetStickerSet`, `UploadStickerFile`*, `CreateNewStickerSet` |
-| `/addsticker` | `<pack> [emoji...]` | yes (sticker/photo) | `UploadStickerFile`*, `AddStickerToSet` |
+| `/addsticker` | `[emoji...]` | yes (sticker/photo) | `UploadStickerFile`*, `AddStickerToSet` |
 | `/delsticker` | — | yes (sticker in own pack) | `DeleteStickerFromSet` |
 | `/editsticker` | `<emoji...>` | yes (sticker in own pack) | `SetStickerEmojiList` |
 | `/ordersticker` | `<position>` | yes (sticker in own pack) | `SetStickerPositionInSet` |
 | `/setpackicon` | — | yes (sticker in own pack) | `GetFile`, `SetStickerSetThumbnail` |
-| `/renamepack` | `<pack> <title...>` | no | `SetStickerSetTitle` |
-| `/delpack` | `<pack>` | no (inline confirm) | `DeleteStickerSet` |
-| `/packlist` | — | no | **none** — counts come from the store |
+| `/renamepack` | `<title...>` | no | `SetStickerSetTitle` |
+| `/delpack` | — | no (inline confirm) | `DeleteStickerSet` |
+| `/mypack` | — | no | **none** — count comes from the store |
 
 `*` only on the photo path.
 
-### Deviation from the approved command preview
+### Slug is a name, not an address
 
-The preview showed `/editsticker my_memes 😂🔥` with an explicit pack argument. This plan
-drops it: the replied-to sticker carries `set_name`, which is matched against the caller's
-stored packs. `/delsticker`, `/editsticker`, `/ordersticker`, `/setpackicon` all resolve the
-pack that way. Open question O1.
+`<pack>` survives on `/newpack` alone, where it fixes the permanent share URL
+`t.me/addstickers/<slug>_by_<bot>`. Telegram has no rename-short-name method, so that choice
+is unfixable afterwards — which is exactly why it stays user-chosen rather than derived from
+a user ID (which would publish the owner's numeric Telegram ID forever) or generated opaquely.
+
+Every other command resolves the caller's single pack from the store, or from the replied
+sticker's `set_name` matched against it. This supersedes the earlier multi-pack design in
+which `<pack>` was an argument to `/addsticker`, `/renamepack`, and `/delpack`.
 
 ### Dropped from @Stickers
 
@@ -227,9 +235,11 @@ repo's first *direct* `golang.org/x/*` requirement; all current ones are indirec
 
 Public module creating durable Telegram-side objects on a single-threaded dispatcher (C1):
 
-- `maxPacksPerUser = 10`, enforced before `CreateNewStickerSet`.
+- One pack per user, enforced by a create-only write before `CreateNewStickerSet`. This is
+  the quota; there is no separate counter to keep.
 - `handlerTimeout = 10s` on every handler — the primary bound (C2).
-- `/packlist` makes **zero** API calls; counts live on the `Pack` record.
+- `/mypack` makes **zero** API calls; the count lives on the `Pack` record. A single `Get`,
+  no `List`, no per-pack fan-out.
 - Photo source rejected above 2 MB; decoded dimensions capped at 4096×4096.
 - Slug alphabet `^[a-z][a-z0-9_]{2,39}$`, no `__`, no trailing `_`.
 - `internal/keylock` per-user serialization — genuinely load-bearing, not decorative,
@@ -241,12 +251,14 @@ Public module creating durable Telegram-side objects on a single-threaded dispat
 | # | Risk | Signal it broke | Response |
 |---|---|---|---|
 | R1 | A handler stalls the bot for all users (C1) | Reply latency spikes for unrelated commands | `handlerTimeout` caps it at 10s; if still felt, lower it, then consider offloading the photo path (Phase 5 R1) |
-| R2 | Partial failure strands a pack | User reports a slug reported taken that `/packlist` does not show | Write-ahead intent + `WithoutCancel` commits (Phase 3). Reverse gaps for `/delpack` and `/renamepack` documented in Phase 3 |
+| R11 | A deleted slug may not be reclaimable | `/newpack <old-slug>` after `/delpack` reports the slug taken | Unknown at decision time; official docs are silent and community reports lean toward short names staying reserved. Does **not** block the URL-change path, which needs a *different* name. Settled empirically in Phase 6 smoke; if reserved, say so in `/delpack`'s confirm text |
+| R10 | A user wants two packs and cannot have one | Requests for a second pack | Accepted by design. Reversing it means restoring `<pack>` arguments across four commands — a deliberate, not incidental, change |
+| R2 | Partial failure strands a pack | User reports a slug reported taken that `/mypack` does not show | Write-ahead intent + `WithoutCancel` commits (Phase 3). Reverse gaps for `/delpack` and `/renamepack` documented in Phase 3 |
 | R3 | Error-code matching drifts | Users see the generic reply where a specific one was expected | Match MTProto **codes**, never human text; confirm empirically in Phase 6 smoke |
 | R4 | The 512 KB static-sticker ceiling may not be real | Uploads succeed above it, or fail below it | Client-side ceiling only; never stated as spec in user-facing text |
 | R5 | Bot token leaks through a transport error | Any log line containing `api.telegram.org/file/bot` | Sentinel conversion at the download boundary + a test asserting the error text is clean (Phase 5) |
 | R6 | Ownership collapses for anonymous senders | Two users see each other's packs | Cross-cutting rule 3 refuses them before any store access |
-| R7 | A transient error deletes a live pack's record | `/packlist` loses an entry the user can still open via link | Rule 4 — destructive store deletes require positive `STICKERSET_INVALID` |
+| R7 | A transient error deletes a live pack's record | `/mypack` reports no pack though the user can still open theirs via link | Rule 4 — destructive store deletes require positive `STICKERSET_INVALID` |
 | R8 | Bot username changes in BotFather | Every pack refuses as "not yours" after restart | Ownership matches stored `Pack.Name` against `Sticker.SetName`; username only builds *new* names (Phase 2) |
 | R9 | `golang.org/x/image` resampling disappoints | Visibly soft or aliased stickers in smoke | Swap `CatmullRom` for `ApproxBiLinear`; one line, one file |
 
@@ -262,11 +274,14 @@ otherwise disclose which of the caller's own guesses correspond to real packs.
 ## Success Criteria
 
 - [ ] A non-admin user can reply to a sticker with `/newpack mypack My Pack` and receive a working `t.me/addstickers/mypack_by_<bot>` link
-- [ ] `/addsticker mypack 😂` on a photo produces a valid static sticker with a 512px long edge and correct aspect ratio
+- [ ] `/addsticker 😂` on a photo produces a valid static sticker with a 512px long edge and correct aspect ratio, with no pack named
 - [ ] Managing a pack the caller does not own fails with an ownership error and makes zero API calls
 - [ ] The not-owned reply text is byte-identical whether the set is another user's or another bot's
-- [ ] `/packlist` shows slug, title, count, and link for the caller's packs only, making no API calls
-- [ ] `/delpack` requires inline confirmation bound to invoker, chat, message, and a TTL
+- [ ] `/mypack` shows slug, title, count, and link for the caller's own pack, making no API calls
+- [ ] A second `/newpack` while a pack exists is refused, naming the existing pack and pointing at `/delpack`
+- [ ] `/delpack` takes no argument and requires inline confirmation bound to invoker, chat, message, and a TTL
+- [ ] `/delpack`'s confirm prompt states the title, sticker count, link, and permanence before the tap
+- [ ] `/renamepack`'s reply names the `/delpack` + `/newpack` route to a different URL
 - [ ] Every handler is bounded by an explicit deadline; no handler can exceed `handlerTimeout`
 - [ ] A panic in any module handler is contained and logged, and does not terminate the process
 - [ ] An interrupted `/newpack` can be completed by re-running the same command
@@ -277,10 +292,79 @@ otherwise disclose which of the caller's own guesses correspond to real packs.
 
 ## Open Questions
 
-- **O1** — Should `/editsticker` keep the explicit `<pack>` argument from the approved
-  command preview, or resolve the pack from the replied sticker's `set_name` as planned?
-- **O2** — `maxPacksPerUser = 10` no longer drives `/packlist` cost now that counts are
-  stored, so it is a pure product choice. Keep 10?
+None. Both prior questions were resolved by the one-pack-per-user revision: `/editsticker`
+takes no pack argument because no command but `/newpack` does (former O1), and the
+per-user pack limit is one (former O2).
+
+## Design Revisions
+
+### 2026-08-25 — one pack per user
+
+The accepted scope originally chose "named packs, multiple per user, addressed by slug
+argument". The user revised it to one pack per user, with every command operating on that
+pack implicitly.
+
+Removed by the revision:
+
+- `<pack>` arguments on `/addsticker`, `/renamepack`, and `/delpack`
+- `/packlist` (replaced by `/mypack`, singular) and its `List` + per-pack `Get` fan-out
+- `maxPacksPerUser` as a tunable — the limit is one
+- The separate default-pack command and per-user prefs record that a multi-pack default
+  would have required
+
+Red-team findings this revision resolves outright rather than mitigates:
+
+- Finding 4 (`/packlist` unbounded: 60s client timeout x 10 calls plus an N+1) — `/mypack`
+  is a single `Get` and makes no API calls at all
+- Former open question O2 (`maxPacksPerUser` sizing) — no longer a choice
+
+Unaffected: Phase 1 (panic barrier, test harness) and Phase 5 (photo pipeline, token-leak
+sentinel) need no changes. The write-ahead intent machinery, anonymous-sender rule,
+`handlerTimeout`, and bot-rename resilience all carry over unchanged.
+
+Trade-off accepted: a user who wants a memes pack and a reactions pack separately cannot
+have both (R10).
+
+### 2026-08-25 — `/delpack` as the URL-change path
+
+`/delpack` was reviewed as a destructive convenience. It is in fact the **only** mechanism for
+changing a pack's URL, because Telegram exposes no rename-short-name method. That reframing
+changed three things without adding a command:
+
+- `/renamepack`'s reply now names the delete-and-recreate route instead of only stating that
+  the link cannot change — turning a dead end into an answer.
+- `/delpack`'s confirm prompt must state the pack title, the sticker count being destroyed, the
+  exact link being surrendered, and that both are permanent. It is the last point at which a
+  user learns stickers do not survive a URL change.
+- A `/repack <newslug>` migration command was considered and **rejected for this plan**: copying
+  a full pack is up to ~121 sequential API calls, which blows `handlerTimeout` and stalls the
+  bot for every user under C1. It is viable only after Phase 5's goroutine offload lands, and is
+  recorded here as a follow-up rather than scoped in.
+
+The @Stickers command set was mapped exhaustively against the one-pack model; all nine of our
+commands are either direct adaptations or (for `/mypack`) a justified addition, and every
+dropped @Stickers command has a stated reason.
+
+**Bug found during this pass** (Phase 3, `/newpack`): the different-slug pending branch
+overwrote the pending record unconditionally, which permanently orphans a set that was created
+before an interruption. It now probes `GetStickerSet(oldName)` first and adopts rather than
+overwrites when the old set exists.
+
+
+#### Consistency sweep — one-pack revision
+
+- Files reread: plan.md and all six phase files.
+- Deltas checked: 9 (`<pack>` dropped from `/addsticker`, `/renamepack`, `/delpack`;
+  `/packlist` -> `/mypack`; `listPacks` -> `getPack`; key `<ownerID>:<slug>` -> `<ownerID>`;
+  `maxPacksPerUser` removed; `matchPack` -> `ownsSet`; `buildSetName` -> `makeSetName`).
+- Stale references reconciled: 4 (incl. the frontmatter description, which said
+  "multi-pack-per-user" and is surfaced by every `ak plan list`). Two live risk signals in the R2/R7 rows still named
+  `/packlist`; Phase 5's `/setpackicon` still said "one of the caller's packs". Phase 5 was
+  therefore **not** untouched, contrary to the initial assessment.
+- Remaining `/packlist`, `listPacks`, and `maxPacksPerUser` mentions are all deliberate
+  comparative or historical text ("this replaced X", the revision log, the red-team table).
+- Phases 1 and 5 confirmed free of multi-pack phrasing after the fix.
+- Unresolved contradictions: 0
 
 ## Red Team Review
 
