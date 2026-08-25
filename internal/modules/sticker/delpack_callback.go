@@ -171,17 +171,30 @@ func (s *state) handleDelPackCallback(ctx context.Context, b *bot.Bot, update *m
 
 	defer s.lockUser(action.OwnerID)()
 
-	// Re-check under the lock that the record still authorises a Telegram-side
-	// delete. handleDelPack refuses to prompt for a pending record, so this
-	// should be unreachable — but the guard belongs on the destructive
-	// operation rather than only on the path that normally reaches it.
-	if current, found, err := getPack(ctx, s.store, action.OwnerID); err != nil {
+	// Re-establish, under the lock, that the caller still holds this exact set.
+	//
+	// The authority to delete comes from the record, not from the prompt, and a
+	// prompt outlives the record: /delpack can sit unpressed for ten minutes
+	// while the pack disappears from Telegram's side, a self-heal frees the
+	// name, and somebody else claims it. DeleteStickerSet is keyed by set name
+	// and Telegram authorises it for every set this bot created, so a press
+	// then lands on whoever holds the name at that moment.
+	//
+	// Stated as an allowlist deliberately. The first version of this guard
+	// listed the states it would refuse — a pending record still naming this
+	// set — and fell through on the two that mattered: no record at all, and a
+	// record that had moved on to a different pack. Proving authority is the
+	// only formulation that fails closed against a state nobody thought of.
+	current, found, err := getPack(ctx, s.store, action.OwnerID)
+	if err != nil {
 		log.Error("sticker_delpack_recheck", "err", err)
 		return answerCallback(ctx, b, query.ID, "Could not confirm right now. Try /delpack again.")
-	} else if found && current.Pending && ownsSet(current, action.SetName) {
+	}
+	if !found || current.Pending || !ownsSet(current, action.SetName) {
 		s.dropPendingDelete(ctx, key)
 		clearButton(ctx, b, action.ChatID, action.MessageID)
-		return answerCallback(ctx, b, query.ID, "That attempt was never confirmed, so nothing was deleted at Telegram.")
+		return answerCallback(ctx, b, query.ID,
+			"This confirmation is out of date — that pack is no longer yours to delete. Run /delpack again if you still want to.")
 	}
 
 	// Consume the action *before* the destructive call, so a double press
