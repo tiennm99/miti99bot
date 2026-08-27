@@ -72,6 +72,12 @@ service is unset, unavailable, unauthorized, or returns a non-GIF response,
 `/wheelofnames` falls back to the same plain text winner reply as `/random`.
 Successful GIF replies include the result behind Telegram spoiler formatting.
 
+When a renderer is configured, the bot posts a `Spinning...` holding message
+first, because the render takes several seconds. The GIF then replaces it; a
+render or upload failure edits that same message into the plain text winner
+instead. With no renderer configured there is no holding message — the winner
+reply is immediate.
+
 ## 1. MongoDB Atlas (M0)
 
 1. Create a free **M0** cluster (512 MB — ample for the tiny paper-trading KV).

@@ -214,7 +214,19 @@ func TestWheelOfNames_UsesRemoteAPIWhenConfigured(t *testing.T) {
 	}
 	assertWheelRemoteDefaults(t, got)
 
-	call := rb.LastSent()
+	sent := rb.Sent()
+	if len(sent) != 3 {
+		t.Fatalf("calls = %+v, want placeholder, sendAnimation, deleteMessage", sent)
+	}
+	if sent[0].Method != "sendMessage" || sent[0].Text() != wheelPlaceholder {
+		t.Fatalf("first call = %+v, want placeholder %q", sent[0], wheelPlaceholder)
+	}
+	// The placeholder cannot be edited into media, so it is dropped once the
+	// animation lands and the animation itself carries the result.
+	if sent[2].Method != "deleteMessage" || sent[2].Form["message_id"] != "1" {
+		t.Fatalf("last call = %+v, want deleteMessage of the placeholder", sent[2])
+	}
+	call := sent[1]
 	if call.Method != "sendAnimation" {
 		t.Fatalf("method = %q, want sendAnimation", call.Method)
 	}
@@ -252,19 +264,52 @@ func TestWheelOfNames_RemoteFailureFallsBackToRandomReply(t *testing.T) {
 	if calls != 1 {
 		t.Fatalf("remote calls = %d, want 1", calls)
 	}
+	sent := rb.Sent()
+	if len(sent) != 2 {
+		t.Fatalf("calls = %+v, want placeholder then in-place edit", sent)
+	}
+	if sent[0].Method != "sendMessage" || sent[0].Text() != wheelPlaceholder {
+		t.Fatalf("first call = %+v, want placeholder %q", sent[0], wheelPlaceholder)
+	}
+	if sent[1].Method != "editMessageText" || sent[1].Text() != "Alice" {
+		t.Fatalf("fallback call = %+v, want editMessageText Alice", sent[1])
+	}
+	if got := sent[1].Form["message_id"]; got != "1" {
+		t.Fatalf("edited message_id = %q, want the placeholder id 1", got)
+	}
+}
+
+// A failed edit still has to deliver the winner, so the handler falls back to a
+// fresh reply rather than leaving "Spinning..." on screen forever.
+func TestWheelOfNames_PlaceholderEditFailureFallsBackToReply(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "no", http.StatusInternalServerError)
+	}))
+	defer server.Close()
+	t.Setenv(wheelOfNamesAPIURLEnv, server.URL+"/api/gif")
+
+	rb, _ := installMisc(t, 999)
+	rb.FailMethod("editMessageText", http.StatusInternalServerError, "")
+	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(7, "/wheelofnames Alice"))
+
 	call := rb.LastSent()
 	if call.Method != "sendMessage" || call.Text() != "Alice" {
 		t.Fatalf("fallback call = %+v, want sendMessage Alice", call)
 	}
 }
 
+// Without a renderer there is nothing to wait for, so the winner must land
+// straight away with no placeholder flashing before it.
 func TestWheelOfNames_NotConfiguredFallsBackToRandomReply(t *testing.T) {
 	rb, _ := installMisc(t, 999)
 	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(7, "/wheelofnames Alice"))
 
-	call := rb.LastSent()
-	if call.Method != "sendMessage" || call.Text() != "Alice" {
-		t.Fatalf("fallback call = %+v, want sendMessage Alice", call)
+	calls := rb.Sent()
+	if len(calls) != 1 {
+		t.Fatalf("calls = %+v, want a single winner reply", calls)
+	}
+	if calls[0].Method != "sendMessage" || calls[0].Text() != "Alice" {
+		t.Fatalf("fallback call = %+v, want sendMessage Alice", calls[0])
 	}
 }
 
@@ -281,14 +326,19 @@ func TestWheelOfNames_SendAnimationFailureFallsBackToRandomReply(t *testing.T) {
 	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(7, "/wheelofnames Alice"))
 
 	calls := rb.Sent()
-	if len(calls) != 2 {
-		t.Fatalf("calls = %+v, want sendAnimation then sendMessage", calls)
+	if len(calls) != 3 {
+		t.Fatalf("calls = %+v, want placeholder, sendAnimation, in-place edit", calls)
 	}
-	if calls[0].Method != "sendAnimation" {
-		t.Fatalf("first method = %q, want sendAnimation", calls[0].Method)
+	if calls[0].Method != "sendMessage" || calls[0].Text() != wheelPlaceholder {
+		t.Fatalf("first call = %+v, want placeholder %q", calls[0], wheelPlaceholder)
 	}
-	if calls[1].Method != "sendMessage" || calls[1].Text() != "Alice" {
-		t.Fatalf("fallback call = %+v, want sendMessage Alice", calls[1])
+	if calls[1].Method != "sendAnimation" {
+		t.Fatalf("second method = %q, want sendAnimation", calls[1].Method)
+	}
+	// The placeholder survives a failed animation precisely so the winner can
+	// replace it instead of stranding "Spinning..." in the chat.
+	if calls[2].Method != "editMessageText" || calls[2].Text() != "Alice" {
+		t.Fatalf("fallback call = %+v, want editMessageText Alice", calls[2])
 	}
 }
 
@@ -305,12 +355,16 @@ func TestWheelOfNames_ForwardsMessageThreadID(t *testing.T) {
 	update.Message.MessageThreadID = 42
 	rb.Bot.ProcessUpdate(context.Background(), update)
 
-	call := rb.LastSent()
-	if call.Method != "sendAnimation" {
-		t.Fatalf("method = %q, want sendAnimation", call.Method)
+	for _, call := range rb.Sent() {
+		switch call.Method {
+		case "sendMessage", "sendAnimation":
+			if got := call.Form["message_thread_id"]; got != "42" {
+				t.Fatalf("%s message_thread_id = %q, want 42", call.Method, got)
+			}
+		}
 	}
-	if got := call.Form["message_thread_id"]; got != "42" {
-		t.Fatalf("message_thread_id = %q, want 42", got)
+	if got := rb.Sent()[1].Method; got != "sendAnimation" {
+		t.Fatalf("second method = %q, want sendAnimation", got)
 	}
 }
 

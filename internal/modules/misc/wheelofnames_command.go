@@ -35,12 +35,13 @@ func wheelOfNamesCommand() modules.Command {
 				return chathelper.Reply(ctx, b, update.Message, wheelUsage)
 			}
 			winner := pickWheelOption(options)
+			placeholder := sendWheelPlaceholder(ctx, b, update.Message)
 			animation, err := renderWheelOfNamesAnimation(ctx, options, winner)
 			if err != nil {
 				if !errors.Is(err, errWheelAPINotConfigured) {
 					log.Warn("wheelofnames remote render failed", "err", err)
 				}
-				return chathelper.Reply(ctx, b, update.Message, options[winner])
+				return replaceWheelPlaceholder(ctx, b, update.Message, placeholder, options[winner])
 			}
 			_, err = b.SendAnimation(ctx, &bot.SendAnimationParams{
 				ChatID:          update.Message.Chat.ID,
@@ -57,7 +58,12 @@ func wheelOfNamesCommand() modules.Command {
 			})
 			if err != nil {
 				log.Warn("wheelofnames send animation failed", "chat", update.Message.Chat.ID, "err", err)
-				return chathelper.Reply(ctx, b, update.Message, options[winner])
+				return replaceWheelPlaceholder(ctx, b, update.Message, placeholder, options[winner])
+			}
+			// The animation carries the result, so the placeholder is retired
+			// only once it is safely delivered.
+			if err := chathelper.DeleteMessage(ctx, b, update.Message, placeholder); err != nil {
+				log.Warn("wheelofnames placeholder delete failed", "chat", update.Message.Chat.ID, "err", err)
 			}
 			return nil
 		},
@@ -65,6 +71,40 @@ func wheelOfNamesCommand() modules.Command {
 }
 
 const wheelUsage = "Usage: /wheelofnames <option,...>"
+
+const wheelPlaceholder = "Spinning..."
+
+// sendWheelPlaceholder posts the "Spinning..." holding message and returns its
+// id, or 0 when none was posted.
+//
+// It is skipped unless a renderer is configured: without one the winner reply
+// is immediate, and a placeholder would only flash. A failed placeholder is
+// non-fatal — the spin still resolves, just without the holding message.
+func sendWheelPlaceholder(ctx context.Context, b *bot.Bot, msg *models.Message) int {
+	if _, err := wheelAPIEndpoint(newWheelAPIClientFromEnv().URL); err != nil {
+		return 0
+	}
+	id, err := chathelper.SendText(ctx, b, msg, wheelPlaceholder)
+	if err != nil {
+		log.Warn("wheelofnames placeholder send failed", "chat", msg.Chat.ID, "err", err)
+		return 0
+	}
+	return id
+}
+
+// replaceWheelPlaceholder resolves the spin in place by editing the holding
+// message to the winner, falling back to a fresh reply when there is no
+// placeholder to edit or the edit is rejected.
+func replaceWheelPlaceholder(ctx context.Context, b *bot.Bot, msg *models.Message, placeholder int, winner string) error {
+	if placeholder != 0 {
+		err := chathelper.EditText(ctx, b, msg, placeholder, winner)
+		if err == nil {
+			return nil
+		}
+		log.Warn("wheelofnames placeholder edit failed", "chat", msg.Chat.ID, "err", err)
+	}
+	return chathelper.Reply(ctx, b, msg, winner)
+}
 
 func wheelResultCaption(options []string, winner int) string {
 	result := padWheelResultCaption(options, truncateWheelResultCaption(options[winner]))
