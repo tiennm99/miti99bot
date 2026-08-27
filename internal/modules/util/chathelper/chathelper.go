@@ -123,13 +123,54 @@ func FetchContext(ctx context.Context) (context.Context, context.CancelFunc) {
 // message_thread_id to the General topic — that mis-routing is the precise
 // reason this helper takes the whole message instead of just a chat ID.
 func Reply(ctx context.Context, b *bot.Bot, msg *models.Message, text string) error {
+	_, err := SendText(ctx, b, msg, text)
+	return err
+}
+
+// SendText behaves like Reply but returns the id of the message it sent, so a
+// caller that posts a progress placeholder can later edit or delete it with
+// EditText or DeleteMessage. Returns 0 when nothing was sent.
+func SendText(ctx context.Context, b *bot.Bot, msg *models.Message, text string) (int, error) {
 	if msg == nil {
-		return nil
+		return 0, nil
 	}
-	_, err := b.SendMessage(ctx, &bot.SendMessageParams{
+	sent, err := b.SendMessage(ctx, &bot.SendMessageParams{
 		ChatID:          msg.Chat.ID,
 		MessageThreadID: msg.MessageThreadID,
 		Text:            text,
+	})
+	if err != nil {
+		return 0, err
+	}
+	return sent.ID, nil
+}
+
+// EditText replaces the text of messageID in the chat msg came from.
+//
+// The chat comes from the inbound message rather than from whatever the send
+// call returned, because that is the chat the bot is addressing; the returned
+// message only supplies the id. No-op when there is no message to edit.
+func EditText(ctx context.Context, b *bot.Bot, msg *models.Message, messageID int, text string) error {
+	if msg == nil || messageID == 0 {
+		return nil
+	}
+	_, err := b.EditMessageText(ctx, &bot.EditMessageTextParams{
+		ChatID:    msg.Chat.ID,
+		MessageID: messageID,
+		Text:      text,
+	})
+	return err
+}
+
+// DeleteMessage removes messageID from the chat msg came from. No-op when
+// there is no message to delete.
+func DeleteMessage(ctx context.Context, b *bot.Bot, msg *models.Message, messageID int) error {
+	if msg == nil || messageID == 0 {
+		return nil
+	}
+	_, err := b.DeleteMessage(ctx, &bot.DeleteMessageParams{
+		ChatID:    msg.Chat.ID,
+		MessageID: messageID,
 	})
 	return err
 }
