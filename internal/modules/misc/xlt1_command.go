@@ -66,7 +66,7 @@ Tôi xin trân trọng cảm ơn! 🙏
 func xlt1Command() modules.Command {
 	return modules.Command{
 		Name:        "xlt1",
-		Visibility:  modules.VisibilityProtected,
+		Visibility:  modules.VisibilityPublic,
 		Description: "Văn mẫu đơn xin lỗi T1 — dành cho lúc trù xong phải quay xe",
 		Handler: func(ctx context.Context, b *bot.Bot, update *models.Update) error {
 			if update.Message == nil {
