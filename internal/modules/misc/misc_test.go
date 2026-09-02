@@ -26,6 +26,7 @@ func TestNew_RegistersExpectedCommands(t *testing.T) {
 		"random":            modules.VisibilityPublic,
 		"wheelofnames":      modules.VisibilityPublic,
 		"ff":                modules.VisibilityProtected,
+		"xlt1":              modules.VisibilityProtected,
 		"the_answer":        modules.VisibilityPrivate,
 		"trongtruonghop":    modules.VisibilityPublic,
 		"tth":               modules.VisibilityPublic,

@@ -368,11 +368,11 @@ func TestWheelOfNames_ForwardsMessageThreadID(t *testing.T) {
 	}
 }
 
-// trongTruongHopUpdate is the inline counterpart of testutil.NewPrivateMessage
+// messageFrom is the inline counterpart of testutil.NewPrivateMessage
 // for cases that need control over From (username, names). The dispatcher
 // requires a bot_command entity, so we lift that from the helper API by reusing
 // NewPrivateMessage and overwriting From.
-func trongTruongHopUpdate(t *testing.T, text string, from *models.User) *models.Update {
+func messageFrom(t *testing.T, text string, from *models.User) *models.Update {
 	t.Helper()
 	u := testutil.NewPrivateMessage(from.ID, text)
 	u.Message.From = from
@@ -381,7 +381,7 @@ func trongTruongHopUpdate(t *testing.T, text string, from *models.User) *models.
 
 func TestTrongTruongHop_DefaultText(t *testing.T) {
 	rb, _ := installMisc(t, 999)
-	rb.Bot.ProcessUpdate(context.Background(), trongTruongHopUpdate(t, "/trongtruonghop",
+	rb.Bot.ProcessUpdate(context.Background(), messageFrom(t, "/trongtruonghop",
 		&models.User{ID: 7, Username: "boss", FirstName: "Boss"}))
 
 	got := rb.LastSent().Text()
@@ -393,7 +393,7 @@ func TestTrongTruongHop_DefaultText(t *testing.T) {
 
 func TestTrongTruongHop_CustomArg(t *testing.T) {
 	rb, _ := installMisc(t, 999)
-	rb.Bot.ProcessUpdate(context.Background(), trongTruongHopUpdate(t, "/trongtruonghop Acme Corp",
+	rb.Bot.ProcessUpdate(context.Background(), messageFrom(t, "/trongtruonghop Acme Corp",
 		&models.User{ID: 7, Username: "boss", FirstName: "Boss"}))
 
 	got := rb.LastSent().Text()
@@ -410,7 +410,7 @@ func TestTrongTruongHop_CustomArg(t *testing.T) {
 
 func TestTTHAlias_CustomArg(t *testing.T) {
 	rb, _ := installMisc(t, 999)
-	rb.Bot.ProcessUpdate(context.Background(), trongTruongHopUpdate(t, "/tth Acme Corp",
+	rb.Bot.ProcessUpdate(context.Background(), messageFrom(t, "/tth Acme Corp",
 		&models.User{ID: 7, Username: "boss", FirstName: "Boss"}))
 
 	got := rb.LastSent().Text()
@@ -424,7 +424,7 @@ func TestTTHAlias_CustomArg(t *testing.T) {
 
 func TestTrongTruongHop_HTMLEscapesArg(t *testing.T) {
 	rb, _ := installMisc(t, 999)
-	rb.Bot.ProcessUpdate(context.Background(), trongTruongHopUpdate(t, "/trongtruonghop <script>",
+	rb.Bot.ProcessUpdate(context.Background(), messageFrom(t, "/trongtruonghop <script>",
 		&models.User{ID: 7, Username: "boss", FirstName: "Boss"}))
 
 	got := rb.LastSent().Text()
@@ -438,7 +438,7 @@ func TestTrongTruongHop_HTMLEscapesArg(t *testing.T) {
 
 func TestTrongTruongHopVNG_DefaultText(t *testing.T) {
 	rb, _ := installMisc(t, 999)
-	rb.Bot.ProcessUpdate(context.Background(), trongTruongHopUpdate(t, "/trongtruonghopvng ignored arg",
+	rb.Bot.ProcessUpdate(context.Background(), messageFrom(t, "/trongtruonghopvng ignored arg",
 		&models.User{ID: 7, Username: "boss", FirstName: "Boss"}))
 
 	got := rb.LastSent().Text()
@@ -450,7 +450,7 @@ func TestTrongTruongHopVNG_DefaultText(t *testing.T) {
 
 func TestTTHVNGAlias_DefaultText(t *testing.T) {
 	rb, _ := installMisc(t, 999)
-	rb.Bot.ProcessUpdate(context.Background(), trongTruongHopUpdate(t, "/tthvng ignored arg",
+	rb.Bot.ProcessUpdate(context.Background(), messageFrom(t, "/tthvng ignored arg",
 		&models.User{ID: 7, Username: "boss", FirstName: "Boss"}))
 
 	got := rb.LastSent().Text()
@@ -462,7 +462,7 @@ func TestTTHVNGAlias_DefaultText(t *testing.T) {
 
 func TestTrongTruongHop_NoUsernameFallsBackToDisplayNameMention(t *testing.T) {
 	rb, _ := installMisc(t, 999)
-	rb.Bot.ProcessUpdate(context.Background(), trongTruongHopUpdate(t, "/trongtruonghop",
+	rb.Bot.ProcessUpdate(context.Background(), messageFrom(t, "/trongtruonghop",
 		&models.User{ID: 42, FirstName: "Anh", LastName: "Le"}))
 
 	got := rb.LastSent().Text()
@@ -474,7 +474,7 @@ func TestTrongTruongHop_NoUsernameFallsBackToDisplayNameMention(t *testing.T) {
 
 func TestTrongTruongHopVNG_NoUsernameFallsBackToDisplayNameMention(t *testing.T) {
 	rb, _ := installMisc(t, 999)
-	rb.Bot.ProcessUpdate(context.Background(), trongTruongHopUpdate(t, "/trongtruonghopvng ignored arg",
+	rb.Bot.ProcessUpdate(context.Background(), messageFrom(t, "/trongtruonghopvng ignored arg",
 		&models.User{ID: 42, FirstName: "Anh", LastName: "Le"}))
 
 	got := rb.LastSent().Text()
@@ -511,6 +511,42 @@ func TestFF_UppercaseFormDispatches(t *testing.T) {
 	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(999, "/FF"))
 	if got := rb.LastSent().Text(); got != ffTemplate {
 		t.Errorf("/FF reply = %q, want the ff template", got)
+	}
+}
+
+func TestXLT1_DeniedToNonAdmin(t *testing.T) {
+	rb, _ := installMisc(t, 999)
+
+	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(7, "/xlt1"))
+	if calls := rb.Sent(); len(calls) != 0 {
+		t.Errorf("non-admin /xlt1 replied: %+v", calls)
+	}
+}
+
+func TestXLT1_RepliesPetitionWithSenderMention(t *testing.T) {
+	rb, _ := installMisc(t, 999)
+
+	// Args are ignored — only the sender mention is substituted, into both the
+	// "Tôi tên là" field and the signature block.
+	rb.Bot.ProcessUpdate(context.Background(), messageFrom(t, "/xlt1 ignored arg",
+		&models.User{ID: 999, Username: "miti99"}))
+
+	got := rb.LastSent().Text()
+	if want := fmt.Sprintf(xlt1Template, "@miti99", "@miti99"); got != want {
+		t.Errorf("/xlt1 reply = %q, want the xlt1 petition", got)
+	}
+	if n := strings.Count(got, "@miti99"); n != 2 {
+		t.Errorf("reply mentions sender %d times, want 2: %q", n, got)
+	}
+}
+
+// Rendered with parse_mode HTML for the tg://user mention, so any raw <, > or &
+// left in the prose would make Telegram reject the send.
+func TestXLT1_TemplateHasNoUnescapedHTML(t *testing.T) {
+	for _, ch := range []string{"<", ">", "&"} {
+		if strings.Contains(xlt1Template, ch) {
+			t.Errorf("xlt1Template contains raw %q, unsafe for parse_mode HTML", ch)
+		}
 	}
 }
 
