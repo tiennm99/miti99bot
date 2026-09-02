@@ -514,12 +514,15 @@ func TestFF_UppercaseFormDispatches(t *testing.T) {
 	}
 }
 
-func TestXLT1_DeniedToNonAdmin(t *testing.T) {
+// Public, unlike its /ff counterpart — anyone in the group can be made to
+// file the paperwork.
+func TestXLT1_AllowedToNonAdmin(t *testing.T) {
 	rb, _ := installMisc(t, 999)
 
-	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(7, "/xlt1"))
-	if calls := rb.Sent(); len(calls) != 0 {
-		t.Errorf("non-admin /xlt1 replied: %+v", calls)
+	rb.Bot.ProcessUpdate(context.Background(), messageFrom(t, "/xlt1",
+		&models.User{ID: 7, Username: "nobody"}))
+	if got := rb.LastSent().Text(); got != fmt.Sprintf(xlt1Template, "@nobody", "@nobody") {
+		t.Errorf("non-admin /xlt1 reply = %q, want the xlt1 petition", got)
 	}
 }
 

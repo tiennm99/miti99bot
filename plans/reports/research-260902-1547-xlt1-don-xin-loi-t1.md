@@ -83,7 +83,7 @@ Bổ sung từ search: meme "tê liệt / ngồi xe lăn" (fan lẫn anti dùng 
 |---|---|---|
 | Tên | `xlt1` | khớp `^[a-z0-9_]{1,32}$` (`internal/modules/validate.go:10`) |
 | Module | `misc` | cùng chỗ với `/ff`, `/tth` |
-| Visibility | `Protected` | soi chiếu `/ff` — cùng thể loại văn mẫu spam nhóm |
+| Visibility | `Public` | user chốt: ai trong nhóm cũng phải làm được đơn; soi chiếu `/tth` chứ không phải `/ff` |
 | Nội suy | mention người gửi ×2 | dùng lại `senderMention()` sẵn có (DRY); lấp ô "Tôi tên là" + "Người làm đơn" |
 | Parse mode | HTML | mention cần thẻ `<a href="tg://user?id=...">`; giống `disclaimerCommand` |
 | Tham số | không | như `/ff`, args bị bỏ qua |
@@ -111,5 +111,5 @@ File mới `internal/modules/misc/xlt1_command.go`, một `const` template + m�
 
 ## Unresolved Questions
 
-1. `/xlt1` nên `Protected` (soi `/ff`) hay `Public` (soi `/tth`)? Đã chọn `Protected`; đổi 1 dòng nếu muốn public.
+1. ~~`Protected` hay `Public`?~~ Đã chốt `Public` (2026-09-02).
 2. Có cần alias (`/xinloit1`)? Hiện chỉ làm đúng `/xlt1` như yêu cầu.
