@@ -109,6 +109,11 @@ func runFFmpeg(ctx context.Context, in, out string, crf int) ([]byte, error) {
 		"scale=w='if(gte(iw,ih),%d,-2)':h='if(gte(iw,ih),-2,%d)':flags=lanczos,fps=%d",
 		stickerEdge, stickerEdge, maxStickerVideoFPS)
 
+	// #nosec G204 — no part of argv is user input. The binary is a package
+	// constant, the flags are literals, the numbers come from constants and the
+	// CRF ladder, the filter is built from constants, and in/out are paths this
+	// function made under its own MkdirTemp directory. The caller's bytes reach
+	// ffmpeg as the *contents* of `in`, never as an argument.
 	cmd := exec.CommandContext(ctx, ffmpegBinary,
 		"-hide_banner", "-loglevel", "error",
 		"-nostdin", // never wait on a terminal; there is none
@@ -138,6 +143,8 @@ func runFFmpeg(ctx context.Context, in, out string, crf int) ([]byte, error) {
 		return nil, refuse("That video could not be turned into a sticker. Try a different clip.")
 	}
 
+	// #nosec G304 — `out` is not a caller-supplied path: it is filepath.Join of
+	// this function's own MkdirTemp directory and a fixed file name.
 	data, err := os.ReadFile(out)
 	if err != nil {
 		return nil, fmt.Errorf("sticker video: read output: %w", err)
