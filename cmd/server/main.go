@@ -18,6 +18,7 @@ import (
 	"github.com/tiennm99/miti99bot/internal/log"
 	"github.com/tiennm99/miti99bot/internal/metrics"
 	"github.com/tiennm99/miti99bot/internal/modules"
+	"github.com/tiennm99/miti99bot/internal/modules/alias"
 	"github.com/tiennm99/miti99bot/internal/modules/amlich"
 	"github.com/tiennm99/miti99bot/internal/modules/coin"
 	"github.com/tiennm99/miti99bot/internal/modules/gold"
@@ -26,6 +27,7 @@ import (
 	"github.com/tiennm99/miti99bot/internal/modules/misc"
 	"github.com/tiennm99/miti99bot/internal/modules/monkeyd"
 	"github.com/tiennm99/miti99bot/internal/modules/stats"
+	"github.com/tiennm99/miti99bot/internal/modules/sticker"
 	"github.com/tiennm99/miti99bot/internal/modules/stock"
 	"github.com/tiennm99/miti99bot/internal/modules/util"
 	"github.com/tiennm99/miti99bot/internal/modules/wordle"
@@ -80,17 +82,19 @@ func resolveCommitSHA(envSourceCommit string) string {
 // import cycle (modules → util → modules).
 func factories() map[string]modules.Factory {
 	return map[string]modules.Factory{
-		"util":               util.New,
-		"misc":               misc.New,
-		"amlich":             amlich.New,
-		"monkeyd":            monkeyd.New,
-		"wordle":             wordle.New,
-		"loldle":             loldle.New,
-		lol.CollectionName:   lol.New,
-		coin.CollectionName:  coin.New,
-		"gold":               gold.New,
-		stock.CollectionName: stock.New,
-		"stats":              stats.New,
+		"util":                 util.New,
+		"misc":                 misc.New,
+		"amlich":               amlich.New,
+		"monkeyd":              monkeyd.New,
+		"wordle":               wordle.New,
+		"loldle":               loldle.New,
+		lol.CollectionName:     lol.New,
+		coin.CollectionName:    coin.New,
+		"gold":                 gold.New,
+		stock.CollectionName:   stock.New,
+		"stats":                stats.New,
+		sticker.CollectionName: sticker.New,
+		"alias":                alias.New,
 	}
 }
 

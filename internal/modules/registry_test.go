@@ -362,3 +362,62 @@ func TestBuild_PerModuleStoreIsolation(t *testing.T) {
 		t.Errorf("beta/score = %q, want 2", got)
 	}
 }
+
+// Fallback and inline are single-slot. Two modules claiming either is a
+// configuration bug the registry catches, rather than leaving the winner to
+// map iteration order.
+func TestBuild_DetectsFallbackConflict(t *testing.T) {
+	withFallback := func(name string) Factory {
+		return func(_ Deps) Module {
+			return Module{Name: name, Fallback: &CommandFallback{
+				Visibility: VisibilityPublic,
+				Handler: func(_ context.Context, _ *bot.Bot, _ string, _ *models.Update) error {
+					return nil
+				},
+			}}
+		}
+	}
+	factories := map[string]Factory{"alpha": withFallback("alpha"), "beta": withFallback("beta")}
+	_, err := Build([]string{"alpha", "beta"}, factories, newProvider(), BuildOptions{})
+	if err == nil || !strings.Contains(err.Error(), "fallback conflict") {
+		t.Errorf("expected fallback conflict, got %v", err)
+	}
+}
+
+func TestBuild_DetectsInlineConflict(t *testing.T) {
+	withInline := func(name string) Factory {
+		return func(_ Deps) Module {
+			return Module{Name: name, Inline: &InlineQuery{
+				Visibility: VisibilityPublic,
+				Handler: func(_ context.Context, _ *bot.Bot, _ *models.Update) error {
+					return nil
+				},
+			}}
+		}
+	}
+	factories := map[string]Factory{"alpha": withInline("alpha"), "beta": withInline("beta")}
+	_, err := Build([]string{"alpha", "beta"}, factories, newProvider(), BuildOptions{})
+	if err == nil || !strings.Contains(err.Error(), "inline conflict") {
+		t.Errorf("expected inline conflict, got %v", err)
+	}
+}
+
+// A declared slot with no handler would panic at dispatch; reject it at build.
+func TestBuild_RejectsHandlerlessFallbackAndInline(t *testing.T) {
+	cases := map[string]Factory{
+		"fallback has no handler": func(_ Deps) Module {
+			return Module{Fallback: &CommandFallback{Visibility: VisibilityPublic}}
+		},
+		"inline has no handler": func(_ Deps) Module {
+			return Module{Inline: &InlineQuery{Visibility: VisibilityPublic}}
+		},
+	}
+	for want, f := range cases {
+		t.Run(want, func(t *testing.T) {
+			_, err := Build([]string{"alpha"}, map[string]Factory{"alpha": f}, newProvider(), BuildOptions{})
+			if err == nil || !strings.Contains(err.Error(), want) {
+				t.Errorf("expected %q, got %v", want, err)
+			}
+		})
+	}
+}

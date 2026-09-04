@@ -7,7 +7,7 @@ Atlas via long polling and an in-process cron scheduler.
 
 | Module | What it does |
 |---|---|
-| `util` | `/help`, `/info`, `/stickerid`, `/addsticker` (adds a replied sticker, image, video or GIF to one shared pack — see [docs/sticker-packs.md](docs/sticker-packs.md)) |
+| `util` | `/help`, `/info`, `/stickerid` |
 | `misc` | `/ping`, `/ping_stats`, `/random`, `/wheelofnames`, `/ff`, `/xlt1`, `/the_answer`, `/trongtruonghop` + `/tth`, `/trongtruonghopvng` + `/tthvng` disclaimers |
 | `amlich` | Vietnamese lunar calendar: `/amlich` (dương lịch → âm lịch, defaults to today), `/duonglich` (âm lịch → dương lịch, `nhuan` flag for leap months); dates accept `d`, `d/m`, or `d/m/yyyy` — missing parts fill from today in the input's calendar. Years 1800–2199 only |
 | `wordle` | Daily Wordle game |
@@ -17,6 +17,8 @@ Atlas via long polling and an in-process cron scheduler.
 | `gold` | Gold paper trading (VNAppMob SJC buy/sell VND/luong) |
 | `coin` | Crypto paper trading in USD (Binance -> Coinbase -> CoinGecko price fallback) |
 | `stats` | `/stats` (top commands), `/stats users`, `/stats user <username>`, `/stats cmd <command_name>` |
+| `sticker` | `/addsticker` — append a replied sticker, image, video or GIF to one shared pack. See [docs/sticker-packs.md](docs/sticker-packs.md) |
+| `alias` | `/alias <name>` save a replied message under a name, then send it back with `/insert <name>`, bare `/<name>`, or inline `@botname <prefix>`; `/aliases` lists, `/unalias` deletes. See [docs/aliases.md](docs/aliases.md) |
 | `monkeyd` | `/monkeyd_crawl <url> [font_size]` export a monkeydd.com novel as a PDF, `/monkeyd_tags <url>` list its tags as hashtags |
 
 Disable modules with the `MODULES` environment variable.

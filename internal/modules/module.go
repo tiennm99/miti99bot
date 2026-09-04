@@ -74,6 +74,34 @@ type Module struct {
 	Callbacks   []Callback
 	Crons       []Cron
 	CommandHook func(ctx context.Context, name string, update *models.Update) // optional; called by dispatcher after each authorized command invocation. update carries the originating Telegram update so hooks can attribute usage to a user.
+	Fallback    *CommandFallback                                             // optional; handles a /command no module registered. At most one across all modules.
+	Inline      *InlineQuery                                                 // optional; handles inline-mode queries. At most one across all modules.
+}
+
+// CommandFallback handles a /command that no module registered.
+//
+// Install registers it after every Command, and the bot library returns the
+// *first* matching handler, so a registered command can never reach here. That
+// ordering is the whole mechanism: code always wins over anything resolved at
+// runtime, including an alias that shares a command's name.
+//
+// Name is the parsed command, lowercased with any @botname suffix stripped —
+// the same normalisation matchCommand applies — so a fallback never re-parses
+// the entity itself.
+type CommandFallback struct {
+	Visibility Visibility
+	Handler    func(ctx context.Context, b *bot.Bot, name string, update *models.Update) error
+}
+
+// InlineQuery handles inline-mode queries ("@botname <text>" typed in any chat).
+//
+// The bot library has no HandlerType for inline queries, so Install matches
+// update.InlineQuery itself. Inline mode must also be enabled for the bot in
+// BotFather; without that Telegram never delivers these updates and the handler
+// is simply never called.
+type InlineQuery struct {
+	Visibility Visibility
+	Handler    func(ctx context.Context, b *bot.Bot, update *models.Update) error
 }
 
 // Deps is the dependency bundle a Factory receives.
