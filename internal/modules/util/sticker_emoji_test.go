@@ -1,4 +1,4 @@
-package sticker
+package util
 
 import (
 	"strings"

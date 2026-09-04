@@ -1,4 +1,4 @@
-package sticker
+package util
 
 import (
 	"bytes"
@@ -106,18 +106,6 @@ func TestToStickerPNG_PreservesAlpha(t *testing.T) {
 	}
 	if _, _, _, a := img.At(128, 128).RGBA(); a != 0 {
 		t.Errorf("alpha = %d at a fully transparent pixel, want 0", a)
-	}
-}
-
-func TestToThumbnailPNG_IsExactly100Square(t *testing.T) {
-	// A non-square input still has to come out exactly 100x100, padded.
-	out, err := toThumbnailPNG(makePNG(t, 800, 400, 255))
-	if err != nil {
-		t.Fatalf("toThumbnailPNG: %v", err)
-	}
-	w, h := decodeSize(t, out)
-	if w != thumbnailEdge || h != thumbnailEdge {
-		t.Errorf("thumbnail = %dx%d, want %dx%d", w, h, thumbnailEdge, thumbnailEdge)
 	}
 }
 

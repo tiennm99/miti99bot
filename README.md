@@ -7,7 +7,7 @@ Atlas via long polling and an in-process cron scheduler.
 
 | Module | What it does |
 |---|---|
-| `util` | `/help`, `/info`, `/stickerid` |
+| `util` | `/help`, `/info`, `/stickerid`, `/addsticker` (adds a replied sticker, image, video or GIF to one shared pack — see [docs/sticker-packs.md](docs/sticker-packs.md)) |
 | `misc` | `/ping`, `/ping_stats`, `/random`, `/wheelofnames`, `/ff`, `/xlt1`, `/the_answer`, `/trongtruonghop` + `/tth`, `/trongtruonghopvng` + `/tthvng` disclaimers |
 | `amlich` | Vietnamese lunar calendar: `/amlich` (dương lịch → âm lịch, defaults to today), `/duonglich` (âm lịch → dương lịch, `nhuan` flag for leap months); dates accept `d`, `d/m`, or `d/m/yyyy` — missing parts fill from today in the input's calendar. Years 1800–2199 only |
 | `wordle` | Daily Wordle game |
@@ -18,7 +18,6 @@ Atlas via long polling and an in-process cron scheduler.
 | `coin` | Crypto paper trading in USD (Binance -> Coinbase -> CoinGecko price fallback) |
 | `stats` | `/stats` (top commands), `/stats users`, `/stats user <username>`, `/stats cmd <command_name>` |
 | `monkeyd` | `/monkeyd_crawl <url> [font_size]` export a monkeydd.com novel as a PDF, `/monkeyd_tags <url>` list its tags as hashtags |
-| `sticker` | One personal sticker pack per user: `/newpack`, `/mypack`, `/addsticker`, `/delsticker`, `/editsticker`, `/ordersticker`, `/setpackicon`, `/renamepack`, `/delpack`. See [docs/sticker-packs.md](docs/sticker-packs.md) |
 
 Disable modules with the `MODULES` environment variable.
 
