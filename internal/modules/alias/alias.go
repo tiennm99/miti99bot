@@ -12,6 +12,8 @@
 package alias
 
 import (
+	"github.com/go-telegram/bot/models"
+
 	"github.com/tiennm99/miti99bot/internal/modules"
 	"github.com/tiennm99/miti99bot/internal/storage"
 )
@@ -29,6 +31,15 @@ type Alias struct {
 	Text      string `bson:"text"`      // message text for kindText, else the caption
 	OwnerID   int64  `bson:"ownerId"`   // who assigned it last
 	CreatedAt int64  `bson:"createdAt"` // unix millis
+
+	// Entities carries the formatting of Text — bold, italic, code, links,
+	// mentions — so an alias comes back looking like what was saved.
+	//
+	// Storing them works because the text is re-sent byte-identical: entity
+	// offsets are relative to that text, so they stay valid. They are sent as
+	// entities rather than re-rendered as HTML, which avoids having to escape
+	// and re-parse content the user never wrote as markup.
+	Entities []models.MessageEntity `bson:"entities,omitempty"`
 }
 
 // Store is the module's typed view over its collection.

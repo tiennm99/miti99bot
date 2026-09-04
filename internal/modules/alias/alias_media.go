@@ -26,6 +26,22 @@ const (
 // only denies.
 const unsupportedRefusal = "That message cannot be saved. Reply to a sticker, photo, GIF, video, video note, audio, voice message, file, or plain text."
 
+// otherBotRefusal explains a refusal no change here can lift.
+//
+// Telegram's own rule: "Bots will not be able to see messages from other bots
+// regardless of mode." The reply arrives with its content stripped, so there is
+// nothing to save and no setting that would help — worth saying outright rather
+// than letting unsupportedRefusal imply the format was wrong.
+const otherBotRefusal = "Telegram does not let bots read other bots' messages, so I cannot save that one. Forward it to yourself first, then reply to your copy."
+
+// fromAnotherBot reports whether a reply that captured nothing came from a bot.
+//
+// Only consulted after capture fails: this bot's *own* messages are readable,
+// so anything of ours captures normally and never reaches here.
+func fromAnotherBot(replied *models.Message) bool {
+	return replied != nil && replied.From != nil && replied.From.IsBot
+}
+
 // capture reduces a replied message to a storable alias.
 //
 // Order matters where Telegram populates more than one field: a GIF arrives as
@@ -38,24 +54,23 @@ func capture(replied *models.Message) (Alias, bool) {
 	case replied.Sticker != nil:
 		return Alias{Kind: kindSticker, FileID: replied.Sticker.FileID}, true
 	case replied.Animation != nil:
-		return Alias{Kind: kindAnimation, FileID: replied.Animation.FileID, Text: replied.Caption}, true
+		return Alias{Kind: kindAnimation, FileID: replied.Animation.FileID, Text: replied.Caption, Entities: replied.CaptionEntities}, true
 	case replied.VideoNote != nil:
 		return Alias{Kind: kindVideoNote, FileID: replied.VideoNote.FileID}, true
 	case replied.Video != nil:
-		return Alias{Kind: kindVideo, FileID: replied.Video.FileID, Text: replied.Caption}, true
+		return Alias{Kind: kindVideo, FileID: replied.Video.FileID, Text: replied.Caption, Entities: replied.CaptionEntities}, true
 	case replied.Voice != nil:
-		return Alias{Kind: kindVoice, FileID: replied.Voice.FileID, Text: replied.Caption}, true
+		return Alias{Kind: kindVoice, FileID: replied.Voice.FileID, Text: replied.Caption, Entities: replied.CaptionEntities}, true
 	case replied.Audio != nil:
-		return Alias{Kind: kindAudio, FileID: replied.Audio.FileID, Text: replied.Caption}, true
+		return Alias{Kind: kindAudio, FileID: replied.Audio.FileID, Text: replied.Caption, Entities: replied.CaptionEntities}, true
 	case len(replied.Photo) > 0:
-		return Alias{Kind: kindPhoto, FileID: largestPhoto(replied.Photo), Text: replied.Caption}, true
+		return Alias{Kind: kindPhoto, FileID: largestPhoto(replied.Photo), Text: replied.Caption, Entities: replied.CaptionEntities}, true
 	case replied.Document != nil:
-		return Alias{Kind: kindDocument, FileID: replied.Document.FileID, Text: replied.Caption}, true
+		return Alias{Kind: kindDocument, FileID: replied.Document.FileID, Text: replied.Caption, Entities: replied.CaptionEntities}, true
 	case replied.Text != "":
-		// Stored as plain text: entities (bold, links, mentions) are dropped,
-		// because re-sending them means carrying offsets that no longer line up
-		// once the text is repeated in a different message.
-		return Alias{Kind: kindText, Text: replied.Text}, true
+		// Entities come along: the text is re-sent unchanged, so the offsets
+		// they carry stay valid and the formatting survives.
+		return Alias{Kind: kindText, Text: replied.Text, Entities: replied.Entities}, true
 	}
 	return Alias{}, false
 }
@@ -91,15 +106,15 @@ func send(ctx context.Context, b *bot.Bot, msg *models.Message, a Alias) error {
 		})
 	case kindPhoto:
 		_, err = b.SendPhoto(ctx, &bot.SendPhotoParams{
-			ChatID: chatID, MessageThreadID: thread, Photo: file, Caption: a.Text,
+			ChatID: chatID, MessageThreadID: thread, Photo: file, Caption: a.Text, CaptionEntities: a.Entities,
 		})
 	case kindAnimation:
 		_, err = b.SendAnimation(ctx, &bot.SendAnimationParams{
-			ChatID: chatID, MessageThreadID: thread, Animation: file, Caption: a.Text,
+			ChatID: chatID, MessageThreadID: thread, Animation: file, Caption: a.Text, CaptionEntities: a.Entities,
 		})
 	case kindVideo:
 		_, err = b.SendVideo(ctx, &bot.SendVideoParams{
-			ChatID: chatID, MessageThreadID: thread, Video: file, Caption: a.Text,
+			ChatID: chatID, MessageThreadID: thread, Video: file, Caption: a.Text, CaptionEntities: a.Entities,
 		})
 	case kindVideoNote:
 		// Nor does a video note: Telegram renders it as a bare round clip.
@@ -108,19 +123,19 @@ func send(ctx context.Context, b *bot.Bot, msg *models.Message, a Alias) error {
 		})
 	case kindAudio:
 		_, err = b.SendAudio(ctx, &bot.SendAudioParams{
-			ChatID: chatID, MessageThreadID: thread, Audio: file, Caption: a.Text,
+			ChatID: chatID, MessageThreadID: thread, Audio: file, Caption: a.Text, CaptionEntities: a.Entities,
 		})
 	case kindVoice:
 		_, err = b.SendVoice(ctx, &bot.SendVoiceParams{
-			ChatID: chatID, MessageThreadID: thread, Voice: file, Caption: a.Text,
+			ChatID: chatID, MessageThreadID: thread, Voice: file, Caption: a.Text, CaptionEntities: a.Entities,
 		})
 	case kindDocument:
 		_, err = b.SendDocument(ctx, &bot.SendDocumentParams{
-			ChatID: chatID, MessageThreadID: thread, Document: file, Caption: a.Text,
+			ChatID: chatID, MessageThreadID: thread, Document: file, Caption: a.Text, CaptionEntities: a.Entities,
 		})
 	case kindText:
 		_, err = b.SendMessage(ctx, &bot.SendMessageParams{
-			ChatID: chatID, MessageThreadID: thread, Text: a.Text,
+			ChatID: chatID, MessageThreadID: thread, Text: a.Text, Entities: a.Entities,
 		})
 	default:
 		// A kind written by a newer version of this module, or a corrupted

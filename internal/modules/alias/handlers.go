@@ -99,13 +99,17 @@ func (s *state) handleAlias(ctx context.Context, b *bot.Bot, update *models.Upda
 	// live registry, so it covers every module loaded in this deploy.
 	if s.reg != nil {
 		if _, taken := s.reg.AllCommands[key]; taken {
-			return chathelper.Reply(ctx, b, msg, fmt.Sprintf(
-				"/%s is already a command of mine. Pick another name.", key))
+			return chathelper.ReplyHTML(ctx, b, msg, fmt.Sprintf(
+				"<code>/%s</code> is already a command of mine. Pick another name.",
+				html.EscapeString(key)))
 		}
 	}
 
 	entry, ok := capture(msg.ReplyToMessage)
 	if !ok {
+		if fromAnotherBot(msg.ReplyToMessage) {
+			return chathelper.Reply(ctx, b, msg, otherBotRefusal)
+		}
 		return chathelper.Reply(ctx, b, msg, unsupportedRefusal)
 	}
 	entry.Name = display
@@ -129,12 +133,13 @@ func (s *state) handleAlias(ctx context.Context, b *bot.Bot, update *models.Upda
 	}
 
 	if existed {
-		return chathelper.Reply(ctx, b, msg, fmt.Sprintf(
-			"Replaced /insert %s — it was a %s, now it is a %s.",
-			display, describe(previous.Kind), describe(entry.Kind)))
+		return chathelper.ReplyHTML(ctx, b, msg, fmt.Sprintf(
+			"Replaced <code>/insert %s</code> — it was a %s, now it is a %s.",
+			html.EscapeString(display), describe(previous.Kind), describe(entry.Kind)))
 	}
-	return chathelper.Reply(ctx, b, msg, fmt.Sprintf(
-		"Saved. Use /insert %s to send that %s.", display, describe(entry.Kind)))
+	return chathelper.ReplyHTML(ctx, b, msg, fmt.Sprintf(
+		"Saved. Use <code>/insert %s</code> to send that %s.",
+		html.EscapeString(display), describe(entry.Kind)))
 }
 
 // handleInsert sends back whatever is stored under a name.
@@ -158,8 +163,9 @@ func (s *state) handleInsert(ctx context.Context, b *bot.Bot, update *models.Upd
 		return chathelper.Reply(ctx, b, msg, genericFailure)
 	}
 	if !found {
-		return chathelper.Reply(ctx, b, msg, fmt.Sprintf(
-			"Nothing is saved as %q. Reply to a message with /alias %s to save one.", display, display))
+		return chathelper.ReplyHTML(ctx, b, msg, fmt.Sprintf(
+			"Nothing is saved as <code>%s</code>. Reply to a message with <code>/alias %s</code> to save one.",
+			html.EscapeString(display), html.EscapeString(display)))
 	}
 
 	if err := send(ctx, b, msg, entry); err != nil {
@@ -167,8 +173,9 @@ func (s *state) handleInsert(ctx context.Context, b *bot.Bot, update *models.Upd
 		// record predates a kind this build understands. Neither is worth an
 		// opaque failure, and neither is retryable by the caller.
 		log.Error("alias_insert_send", "name", key, "kind", entry.Kind, "err", err)
-		return chathelper.Reply(ctx, b, msg, fmt.Sprintf(
-			"%q can no longer be sent. Save it again with /alias %s.", display, display))
+		return chathelper.ReplyHTML(ctx, b, msg, fmt.Sprintf(
+			"<code>%s</code> can no longer be sent. Save it again with <code>/alias %s</code>.",
+			html.EscapeString(display), html.EscapeString(display)))
 	}
 	return nil
 }
@@ -200,14 +207,16 @@ func (s *state) handleUnalias(ctx context.Context, b *bot.Bot, update *models.Up
 		log.Error("alias_unalias_lookup", "err", err)
 		return chathelper.Reply(ctx, b, msg, genericFailure)
 	} else if !found {
-		return chathelper.Reply(ctx, b, msg, fmt.Sprintf("Nothing is saved as %q.", display))
+		return chathelper.ReplyHTML(ctx, b, msg, fmt.Sprintf(
+			"Nothing is saved as <code>%s</code>.", html.EscapeString(display)))
 	}
 
 	if err := s.store.Delete(ctx, key); err != nil {
 		log.Error("alias_unalias", "err", err)
 		return chathelper.Reply(ctx, b, msg, genericFailure)
 	}
-	return chathelper.Reply(ctx, b, msg, fmt.Sprintf("Deleted %q.", display))
+	return chathelper.ReplyHTML(ctx, b, msg, fmt.Sprintf(
+		"Deleted <code>%s</code>.", html.EscapeString(display)))
 }
 
 // handleFallback answers a /command nobody registered by treating it as an
@@ -238,12 +247,7 @@ func (s *state) handleFallback(ctx context.Context, b *bot.Bot, name string, upd
 	return nil
 }
 
-// handleAliases lists every saved name.
-//
-// Names only, not what each one holds: the store answers "which keys exist" in
-// one call, while naming the kinds would cost one read per alias — a round trip
-// each against MongoDB, on a dispatcher that serves one update at a time. The
-// cheap way to find out what a name holds is to /insert it.
+// handleAliases lists every saved name with what it holds.
 func (s *state) handleAliases(ctx context.Context, b *bot.Bot, update *models.Update) error {
 	ctx, cancel := context.WithTimeout(ctx, handlerTimeout)
 	defer cancel()
@@ -266,35 +270,59 @@ func (s *state) handleAliases(ctx context.Context, b *bot.Bot, update *models.Up
 	// List gives no ordering guarantee, and an unstable list is unreadable when
 	// it is the same command run twice.
 	sort.Strings(names)
-	return chathelper.ReplyHTML(ctx, b, msg, renderNames(names))
+	return chathelper.ReplyHTML(ctx, b, msg, s.renderNames(ctx, names))
 }
 
 // renderNames formats the list as Telegram HTML, trimmed to fit one message.
 //
-// Each name is wrapped in <code> so tapping it copies just that name. The list
-// exists to be read *and* reused, and a plain comma-separated run makes the
-// reader select text by hand on a phone.
-func renderNames(names []string) string {
+// One line per alias, each showing what the name holds, with the invocation
+// wrapped in <code> so tapping it copies a command ready to send.
+//
+// This costs one store read per *listed* alias: DocStore has no bulk get and
+// the kind lives in the document. The reads stop as soon as the message is
+// full, so the cost is bounded by what fits in one reply rather than by how
+// many aliases exist.
+func (s *state) renderNames(ctx context.Context, names []string) string {
 	var sb strings.Builder
-	fmt.Fprintf(&sb, "%d aliases:\n", len(names))
+	fmt.Fprintf(&sb, "%d aliases:", len(names))
 
 	for i, name := range names {
-		// Escaped despite parseName already restricting names to [a-zA-Z0-9_]:
-		// the validation and the rendering are far apart, and a later relaxation
-		// of the name rules must not silently become an HTML injection.
-		entry := "<code>" + html.EscapeString(name) + "</code>"
-		// Reserve room for the "…and N more" tail before committing to a name,
+		entry, found, err := s.get(ctx, name)
+		if err != nil {
+			// One unreadable record must not blank the whole list.
+			log.Error("alias_list_get", "name", name, "err", err)
+		} else if !found {
+			continue // deleted between the List above and this read
+		}
+
+		// Escaped despite parseName restricting names to [a-zA-Z0-9_]: the
+		// validation and the rendering are far apart, and a later relaxation of
+		// the name rules must not silently become an HTML injection.
+		line := "\n<code>/" + html.EscapeString(name) + "</code> — " + kindLabel(entry.Kind)
+		// Reserve room for the "…and N more" tail before committing to a line,
 		// so the trim can never be what pushes the message over the limit.
-		if sb.Len()+len(entry)+2 > maxListBytes {
+		if sb.Len()+len(line) > maxListBytes {
 			fmt.Fprintf(&sb, "\n…and %d more.", len(names)-i)
 			return sb.String()
 		}
-		if i > 0 {
-			sb.WriteString(", ")
-		}
-		sb.WriteString(entry)
+		sb.WriteString(line)
 	}
 	return sb.String()
+}
+
+// kindLabel names a kind for the list.
+//
+// Differs from describe in exactly one case: text reads as "message" in a
+// sentence ("send that message") but as "text" in a column of kinds, next to
+// sticker and video. An empty kind means the read above failed.
+func kindLabel(kind string) string {
+	switch kind {
+	case kindText:
+		return "text"
+	case "":
+		return "unreadable"
+	}
+	return describe(kind)
 }
 
 // get reads an alias. A missing name is not an error — it is the normal state
