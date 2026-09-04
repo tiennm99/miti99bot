@@ -1,4 +1,4 @@
-package sticker
+package util
 
 import (
 	"bytes"
@@ -21,9 +21,6 @@ const (
 	// stickerEdge is Telegram's requirement: one side exactly 512px, the other
 	// at most 512px.
 	stickerEdge = 512
-	// thumbnailEdge is the pack thumbnail requirement: exactly 100x100.
-	thumbnailEdge = 100
-
 	// maxDecodeDimension bounds peak allocation. Checked via DecodeConfig,
 	// before any pixel buffer exists.
 	//
@@ -86,25 +83,6 @@ func toStickerPNG(src []byte) ([]byte, error) {
 	}
 	log.Error("sticker_image_oversized", "bytes", len(data))
 	return data, nil
-}
-
-// toThumbnailPNG converts an image to a pack thumbnail: exactly 100x100, with
-// the short edge padded transparently so the aspect ratio survives.
-func toThumbnailPNG(src []byte) ([]byte, error) {
-	img, err := decodeBounded(src)
-	if err != nil {
-		return nil, err
-	}
-
-	b := img.Bounds()
-	w, h := scaleToLongEdge(b.Dx(), b.Dy(), thumbnailEdge)
-	scaled := resize(img, w, h)
-
-	canvas := image.NewNRGBA(image.Rect(0, 0, thumbnailEdge, thumbnailEdge))
-	offset := image.Pt((thumbnailEdge-w)/2, (thumbnailEdge-h)/2)
-	draw.Draw(canvas, scaled.Bounds().Add(offset), scaled, image.Point{}, draw.Src)
-
-	return encodePNG(canvas, png.BestCompression)
 }
 
 // decodeBounded reads the header first and refuses oversized images before any

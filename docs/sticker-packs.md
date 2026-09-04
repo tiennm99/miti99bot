@@ -1,158 +1,178 @@
-# Sticker packs
+# Sticker pack
 
-The `sticker` module lets any user create and manage **one** personal Telegram
-sticker pack through the bot. The pack is created on behalf of the calling user,
-so it appears under their account, and it stays bot-manageable because the bot
-created it.
-
-Every command is single-shot: one message carrying its arguments, optionally
-replying to a sticker or photo. There is no conversation state and no `/cancel`.
-
-## Commands
+`/addsticker` appends a sticker to **one shared pack** that every user of the
+bot contributes to. It lives in the `util` module — there is no `sticker`
+module any more, and no per-user packs.
 
 | Command | Parameters | Reply to | What it does |
 |---|---|---|---|
-| `/newpack` | `<pack> <title...>` | sticker or photo | Creates your pack and returns its share link |
-| `/mypack` | — | — | Shows your pack: name, title, sticker count, link |
-| `/addsticker` | `[emoji...]` | sticker or photo | Adds it to your pack |
-| `/delsticker` | — | a sticker in your pack | Removes it |
-| `/editsticker` | `<emoji...>` | a sticker in your pack | Replaces that sticker's emoji |
-| `/ordersticker` | `<position>` | a sticker in your pack | Moves it; positions start at 0 |
-| `/setpackicon` | — | a sticker in your pack | Uses it as the pack icon |
-| `/renamepack` | `<title...>` | — | Changes the displayed title |
-| `/delpack` | — | — | Deletes the pack, after an inline confirmation |
+| `/addsticker` | `[emoji...]` | sticker, photo, or image document | Adds it to the shared pack and replies with the link |
 
-Only `/newpack` names a pack. Every other command resolves your single pack from
-storage, or from the replied sticker's set.
+Single-shot: one message, optionally replying to a sticker or image. No
+conversation state.
 
-## The pack name is permanent
+## Configuration
 
-`/newpack mypack My Pack` creates `t.me/addstickers/mypack_by_<botusername>`.
+| Env | Default | Meaning |
+|---|---|---|
+| `STICKER_PACK_NAME` | `miti99_by_miti99bot` | The Telegram set to write to |
+| `OWNER_ID` | — | Must be the account that **owns** that set |
 
-**Telegram has no method to rename a sticker set's short name.** That link is
-fixed for the life of the pack. `/renamepack` changes only the displayed title.
+`OWNER_ID` is reused rather than given a sticker-specific twin because
+`addStickerToSet` takes the **set owner's** user ID, not the caller's, and the
+default pack belongs to the bot owner. Point `OWNER_ID` at the owning account if
+the configured pack belongs to someone else.
 
-The only way to a different link is `/delpack` followed by `/newpack` under a new
-name — and the stickers do not come along. `/delpack`'s confirmation states the
-title, the number of stickers it destroys, the exact link being surrendered, and
-that both are permanent, because that prompt is the last point at which someone
-wanting "a rename" learns what it actually costs.
+The caller's identity is used nowhere. That is what makes the command stateless:
+no records, no keys, no per-user locks, and no ownership checks. It is also why
+`/addsticker` needs no storage and fits in `util`.
 
-Pack-name rules: 3–40 characters, lowercase letters, digits and underscores,
-starting with a letter, no two underscores in a row, no trailing underscore.
+`STICKER_PACK_NAME` **must end in `_by_<this bot's username>`** — Telegram
+requires that suffix on every set a bot creates, and refuses to let a bot edit
+any set it did not create. A name without the suffix therefore cannot be this
+bot's, which makes it a configuration fault the command can prove offline,
+before any download or API call:
 
-## Images
+> The shared pack is not one this bot can manage. Ask the bot owner to check its
+> configuration.
 
-Static stickers only. Animated, video, mask, and custom-emoji stickers are
-rejected.
+## Creating the pack
 
-- A replied **sticker** is added directly.
-- A replied **photo** or image **document** (`image/png`, `image/jpeg`,
-  `image/webp`) is downloaded, resized so its long edge is exactly 512px with
-  the aspect ratio preserved, and uploaded as a PNG.
-- Pack icons are resized to exactly 100×100, padded transparently.
-- Sources above 2 MB, or with either side above 4096px, are rejected.
+**The pack creates itself on first use.** If the set does not exist, the first
+`/addsticker` creates it — owned by `OWNER_ID`, titled with the slug half of the
+name (`miti99_by_miti99bot` → *miti99*), and seeded with the sticker that
+triggered it, because Telegram cannot create an empty set. The reply says
+*"Created the shared pack with this sticker."*
 
-Telegram allows 120 stickers per pack and 1–20 emoji per sticker. There is no
-documented file-size limit for static stickers; the module applies its own
-client-side ceiling and never presents it as a Telegram rule.
+Rename the title afterwards through `@Stickers` if the derived one is not wanted.
+The name itself is permanent — Telegram has no method to rename a set's short
+name.
 
-## Who can use it
+The order is add-first, create-on-missing, not probe-then-add: probing with
+`getStickerSet` would cost an extra call on every invocation forever, and return
+the set's entire sticker list each time, to save one call on the single
+invocation that creates the pack.
 
-Public — every user manages their own pack.
+**A name already taken by a set this bot cannot write to is an error, not a
+takeover.** If the add reports the set missing *and* the create reports the name
+occupied, something stands there that this bot cannot manage — a set created by
+another bot, or by this bot for a different owner:
 
-**Anonymous group admins are refused.** Telegram substitutes a single global
-`GroupAnonymousBot` user for every anonymous admin message, so without this
-refusal all anonymous admins across all groups would share one pack. Turn off
-anonymous posting for the message and try again.
+> A sticker set with that name already exists and this bot cannot manage it. Ask
+> the bot owner to check it.
 
-## Deliberate omissions
+**The owner cannot be verified up front.** `getStickerSet` returns a set's name,
+title, type, stickers and thumbnail — and no owner or creator ID. So the suffix
+proves *which bot* created a set, but nothing proves *which user* owns it until
+Telegram refuses the write. That refusal is what the message above reports.
 
-- **Usage statistics** (`/stats`, `/top`, `/packstats`, …) — the Bot API does
-  not expose sticker usage counts, and `/stats` belongs to the `stats` module.
-- **Animated, video, emoji, and mask packs** — out of scope; this module is
-  static-only.
-- **More than one pack per user** — a deliberate simplification. It is what lets
-  every command but `/newpack` drop its pack argument.
-- **`/cancel`** — meaningless without conversation state.
-- **A `/repack` migration command** — copying a full pack is up to ~121
-  sequential API calls, which would stall the bot for every user.
+## No moderation, by design
+
+Anyone who can reach the bot can add to the pack. There is no approval step, no
+per-contributor limit, and no way to remove a sticker through the bot —
+`/delsticker`, `/editsticker`, `/ordersticker`, `/setpackicon`, `/renamepack`
+and `/delpack` were removed along with the per-user model.
+
+Cleanup is done by the pack's owner through Telegram's own `@Stickers` bot,
+which can edit any set the owner owns. Two consequences worth accepting on
+purpose before enabling this:
+
+- The pack carries the owner's name and sits in the sticker tray of everyone who
+  installed it, but its contents are decided by whoever runs the command.
+- The 120-sticker ceiling is shared. One user can fill it.
+
+## What it accepts
+
+| Replied message | Result |
+|---|---|
+| **Sticker** — static, animated (.TGS), or video (.WEBM) | Copied by `file_id`, no conversion |
+| **Photo** or image **document** (`image/png`, `image/jpeg`, `image/webp`) | Converted to a 512px PNG and uploaded |
+| **Video, GIF, animation, video note** | Transcoded to a WEBM/VP9 video sticker |
+| **Mask or custom-emoji sticker** | Refused — the pack is a `regular` set |
+
+**All three sticker formats go in the same pack.** Since Bot API 7.2 the format
+is a property of each sticker, not of the set: `createNewStickerSet` lost its
+`sticker_format` parameter and `StickerSet` lost `is_animated`/`is_video`. So a
+pack seeded with a static sticker takes video stickers later with no migration.
+
+**A sticker is copied, never converted.** It already lives in a set Telegram
+accepted, so it satisfies every dimension, duration and size rule for its
+format. That is why animated and video *stickers* work here while an ordinary
+video or GIF *file* does not. Copying a sticker out of someone else's pack is
+normal Telegram behaviour and does not touch that pack.
+
+A replied photo or image document is downloaded, resized so its long edge is
+exactly 512px with the aspect ratio preserved, uploaded as a PNG, and then
+added — attributed to the pack owner, matching the set it is about to join.
+Sources above 2 MB, or with either side above 4096px, are rejected.
+
+## Video and GIF
+
+A replied video, GIF, animation or video note is downloaded and transcoded with
+**ffmpeg** to what Telegram requires of a video sticker: WEBM/VP9, long edge
+exactly 512px, at most 3 seconds, at most 30 FPS, at most 256 KB, and **no
+audio stream**. Documents count too — `image/gif`, `video/mp4`, `video/webm`,
+`video/quicktime`, `video/x-matroska`.
+
+Every one of those rules is applied by the filter chain and encoder flags rather
+than checked afterwards, so there is no case where a source slips through
+half-converted:
+
+- The long edge is scaled to exactly 512 **in either direction**. A 100×50 GIF
+  becomes 512×256 — deliberately not `force_original_aspect_ratio=decrease`,
+  which leaves a small source undersized and so fails the "one side must be
+  exactly 512" rule.
+- `-t 3` cuts the length; `fps=30` caps the rate.
+- `-an -sn -dn` drops audio, subtitle and data streams. Telegram refuses a video
+  sticker carrying audio, so this is not merely tidiness.
+- `-pix_fmt yuva420p` keeps GIF transparency; VP9 carries an alpha plane.
+
+Size is the one rule that cannot be known before encoding, so it retries down a
+CRF ladder (32 → 42 → 52) until the output fits. Ordinary footage lands around
+30–70 KB at the first rung, well inside the limit. If even the last rung is too
+big, the smallest attempt is sent and Telegram is left to be the authority.
+
+`image/gif` is transcoded rather than reduced to its first frame — a GIF is sent
+to be animated. (Note that a GIF forwarded through Telegram usually arrives as
+an `Animation` in mp4 form, not as `image/gif` at all.)
+
+**ffmpeg is a hard runtime dependency.** Telegram accepts no other codec for a
+video sticker, Go's standard library has no VP9 encoder
+(`golang.org/x/image/vp8` decodes only), and the binary is built
+`CGO_ENABLED=0` so a cgo encoder would not link. The runtime image is therefore
+`alpine` with `apk add ffmpeg` rather than `distroless/static`, which cannot
+carry a second binary — the one reason that base was given up, and it takes the
+image from roughly 20 MB to 213 MB.
+
+**A transcode holds the whole bot.** Handlers run inline on a single worker, so
+an encode is time no other user is served. A 1280×720 source encodes in about
+0.4 s with these flags, and one encode is capped at 20 s so a pathological input
+fails rather than hangs. The moving path also gets a longer handler deadline
+(45 s, against 10 s for stills) — chosen from the replied message before any API
+call, so a still never pays for the video budget. Source downloads are capped at
+10 MB for video against 2 MB for images, since the ceiling is on the input and
+the 256 KB limit applies to the output.
+
+Telegram allows 120 stickers per pack and 1–20 emoji per sticker. Emoji come
+from the command's arguments, else the replied sticker's own emoji, else `⭐`.
+There is no documented file-size limit for static stickers; the code applies its
+own client-side ceiling and never presents it as a Telegram rule.
 
 ## Behaviour worth knowing
 
-**Sticker counts are advisory.** `/mypack` reads the count from storage and
-makes no API calls at all. Editing your pack through @Stickers changes the real
-count without the bot seeing it; the number re-syncs whenever a command already
-has a fresh view of the set.
+**The reply carries no sticker count.** Nothing is stored, and reading the count
+back would mean a `getStickerSet` call that returns the entire set on every add.
 
-**Pack names are claimed first-come and held permanently.** The bot records who
-claimed each name before it creates anything on Telegram, and only that user can
-ever manage a pack under it. This is what stops someone from reading a pack's
-name off its public link and taking it over.
+**Download errors are never echoed.** A Telegram file URL embeds the bot token,
+and every transport failure from the HTTP client formats that URL into its error
+text. The download path replaces all of them with one opaque error and logs only
+a coarse type label, so no failure mode can print the token.
 
-`/newpack` therefore reports when a name is taken, which reveals that some user
-of this bot holds it. That is accepted: `t.me/addstickers/<name>_by_<bot>` is
-publicly probeable without the bot, so the command discloses nothing new. It
-never says *who* holds a name. Refusals about *managing* a pack are deliberately
-uniform for the opposite reason — see below.
+**Telegram's refusals are translated, not forwarded.** `STICKERS_TOO_MUCH`,
+`STICKERSET_INVALID` and the emoji errors get sentences a user can act on;
+anything unrecognised becomes a generic line plus an ERROR log.
 
-A name is claimed *before* the bot calls Telegram, not after the pack exists.
-That ordering is what keeps two users from racing for the same name: the first
-claimant wins it and everyone else is refused before any set is created.
-
-The claim is given up again whenever the bot has positive evidence that no pack
-stands behind it — Telegram refusing the creation outright, `/delpack`, or a
-later command finding the set already gone. A `/newpack` that never got as far
-as claiming, or that is refused before Telegram is contacted, leaves nothing
-behind.
-
-The claim is deliberately **not** treated as proof of ownership over a set that
-already exists. See "The bot never takes over an existing pack" below.
-
-Telegram may keep a deleted short name reserved on its own side, so a freed name
-is not guaranteed to be usable again by anyone, including its previous owner.
-
-**Ownership refusals are identical by design.** "You don't have a pack" and
-"that sticker isn't from your pack" produce the exact same reply. Distinct
-wording would let anyone probe which sets exist under this bot.
-
-**The bot never takes over an existing pack.** If a set already exists under the
-name you ask for, `/newpack` refuses — always, for everyone, whatever the bot's
-records say about it.
-
-Earlier versions adopted such a set when local records suggested it came from
-your own interrupted attempt. That was wrong in a way no amount of checking
-fixes: every fact the bot could use to prove "this set is yours" lives in the
-same storage a restart erases, while the packs at Telegram survive. Once the
-proof is gone, a genuine interrupted attempt and a stranger naming your pack's
-public link present the bot with identical evidence. The feature was the hole,
-so the feature is gone.
-
-The cost is real and worth stating plainly: if the bot crashes between creating
-your set at Telegram and recording it, the set is stranded. It exists, it is
-linkable, and no command in this bot can manage or delete it. `/mypack` marks
-the unfinished attempt, and `/delpack` clears the leftover record so you can
-create a pack under a different name — but it will not delete anything at
-Telegram, because an unfinished record is not evidence that the bot made that
-set for you. Anyone can produce such a record for any name.
-
-Run this module against a real database. On the in-memory backend every restart
-strands every pack.
-
-**Deleting the last sticker may delete the pack.** Telegram's behaviour here is
-undocumented, so the bot does not guess: it will not remove your pack record on
-anything less than a positive "this set no longer exists" from Telegram. If a
-command reports the pack is gone, `/delpack` clears the stale record and
-`/newpack` works again.
-
-## Operations
-
-The module is enabled by listing `sticker` in `MODULES` (an empty `MODULES`
-loads every module). It stores one record per user, keyed by Telegram user ID,
-plus at most one pending `/delpack` confirmation per user — running `/delpack`
-again supersedes the previous prompt, and a confirmation stops working after 10
-minutes.
-
-Every handler runs under a 10-second deadline. The bot processes updates one at
-a time, so this bound is what keeps an image conversion from stalling other
-users.
+The handler runs under a 10-second deadline, with the download-and-upload leg
+bounded inside it so the reply always has budget left. The bot processes updates
+one at a time, so that bound is what keeps an image conversion from stalling
+other users.

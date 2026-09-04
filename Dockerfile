@@ -19,9 +19,21 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
     -o /out/server \
     ./cmd/server
 
-FROM gcr.io/distroless/static:nonroot
+# Alpine rather than distroless/static, for one reason: /addsticker transcodes
+# video and GIF sources to WEBM/VP9, which needs ffmpeg. Telegram accepts no
+# other codec for a video sticker, Go's standard library has no VP9 encoder
+# (golang.org/x/image/vp8 decodes only), and the binary is built CGO_ENABLED=0
+# so a cgo encoder would not link either. ffmpeg is therefore a hard runtime
+# dependency, and distroless/static has no way to carry it.
+#
+# ffmpeg comes from Alpine's own package rather than a third-party static-ffmpeg
+# image, keeping the supply chain to bases already trusted by this build.
+FROM alpine:3.22
 # No fonts are installed here: the monkeyd module's PDF renderer falls back to a
 # font compiled into the binary when the host has none.
+RUN apk add --no-cache ffmpeg ca-certificates \
+    && addgroup -g 65532 -S nonroot \
+    && adduser -u 65532 -S -G nonroot nonroot
 COPY --from=builder /out/server /server
 USER nonroot:nonroot
 EXPOSE 8080

@@ -1,4 +1,4 @@
-package sticker
+package util
 
 import (
 	"fmt"
@@ -34,9 +34,9 @@ const (
 // pairs, and keycaps. A sequence that splits wrongly is a test case to add, not
 // a redesign.
 //
-// Because no sticker command takes a pack argument any more, every argument
-// reaching here is meant to be an emoji: a stray word fails loudly rather than
-// being silently reinterpreted.
+// /addsticker takes no argument but emoji, so every argument reaching here is
+// meant to be one: a stray word fails loudly rather than being silently
+// reinterpreted.
 func parseEmoji(args []string) ([]string, error) {
 	joined := strings.Join(args, "")
 	joined = strings.TrimSpace(joined)

@@ -1,4 +1,4 @@
-package sticker
+package util
 
 import (
 	"context"
@@ -49,7 +49,7 @@ func TestDownloadFile_ErrorNeverLeaksTokenOrURL(t *testing.T) {
 		t.Fatalf("bot.New: %v", err)
 	}
 
-	_, err = downloadFile(context.Background(), b, "f1")
+	_, err = downloadFile(context.Background(), b, "f1", maxSourceBytes)
 	if err == nil {
 		t.Fatal("downloadFile succeeded against a hung-up server; want an error")
 	}
@@ -111,7 +111,7 @@ func TestDownloadFile_RejectsOversizedBeforeFetching(t *testing.T) {
 		t.Fatalf("bot.New: %v", err)
 	}
 
-	if _, err := downloadFile(context.Background(), b, "f1"); err == nil {
+	if _, err := downloadFile(context.Background(), b, "f1", maxSourceBytes); err == nil {
 		t.Fatal("downloadFile accepted an oversized file")
 	}
 	if fetches != 0 {
@@ -150,7 +150,7 @@ func TestDownloadFile_BoundsBodyRegardlessOfContentLength(t *testing.T) {
 		t.Fatalf("bot.New: %v", err)
 	}
 
-	data, err := downloadFile(context.Background(), b, "f1")
+	data, err := downloadFile(context.Background(), b, "f1", maxSourceBytes)
 	if err == nil {
 		t.Fatalf("downloadFile accepted %d bytes despite the %d-byte cap", len(data), maxSourceBytes)
 	}
