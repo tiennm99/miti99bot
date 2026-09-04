@@ -132,6 +132,9 @@ func main() {
 	if err := lol.InitStore(rootCtx, provider.Collection(lol.CollectionName)); err != nil {
 		log.Fatal("lol storage init failed", "err", err)
 	}
+	if err := initStickerStore(rootCtx, provider); err != nil {
+		log.Fatal("sticker storage init failed", "err", err)
+	}
 	migrationCtx, cancelMigration := context.WithTimeout(rootCtx, stockMigrationTimeout)
 	if err := initStockStore(migrationCtx, provider); err != nil {
 		cancelMigration()
@@ -242,6 +245,20 @@ func initStatsStoreWith(ctx context.Context, provider storage.Provider, init sta
 	return init(
 		ctx,
 		provider.Collection("stats"),
+		provider.Collection(systemstate.CollectionName),
+	)
+}
+
+func initStickerStore(ctx context.Context, provider storage.Provider) error {
+	return initStickerStoreWith(ctx, provider, sticker.InitStore)
+}
+
+type stickerStoreInitializer func(context.Context, storage.Collection, storage.Collection) error
+
+func initStickerStoreWith(ctx context.Context, provider storage.Provider, init stickerStoreInitializer) error {
+	return init(
+		ctx,
+		provider.Collection(sticker.CollectionName),
 		provider.Collection(systemstate.CollectionName),
 	)
 }
