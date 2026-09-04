@@ -5,10 +5,15 @@ import (
 )
 
 // pollingAllowedUpdates restricts getUpdates to the update kinds the modules
-// actually handle (text commands + inline-keyboard callbacks), matching the
-// allowed_updates the old webhook registration set. Anything else (channel
-// posts, edited messages, etc.) is dropped server-side by Telegram.
-var pollingAllowedUpdates = bot.AllowedUpdates{"message", "callback_query"}
+// actually handle: text commands, inline-keyboard callbacks, and inline-mode
+// queries. Anything else (channel posts, edited messages, etc.) is dropped
+// server-side by Telegram.
+//
+// This list is a hard gate, not an optimisation. Telegram filters on its side,
+// so a handler for a kind missing here is never called and leaves no trace —
+// no log line, no error, nothing to debug from. Any module that starts handling
+// a new update kind must add it here in the same change.
+var pollingAllowedUpdates = bot.AllowedUpdates{"message", "callback_query", "inline_query"}
 
 // NewBot constructs a Telegram bot for long-polling mode (the sole transport
 // on self-host — b.Start runs the getUpdates loop in cmd/server):

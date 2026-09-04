@@ -68,9 +68,15 @@ is the payoff for storing a `file_id` rather than bytes.
 `InlineQueryResultCachedVideoNote`, and substituting a plain video would change
 what was saved. They stay reachable through `/insert` and `/<name>`.
 
-**Inline mode must be enabled in BotFather** (`/setinline`) or Telegram never
-delivers these updates and the handler is never called. This is a one-time
-operational step that cannot be done from code.
+**Two things gate inline mode, and both fail silently.**
+
+1. `inline_query` must be in `pollingAllowedUpdates`
+   (`internal/telegram/client.go`). Telegram filters getUpdates server-side, so
+   a missing kind means the handler is never called — no log line, no error.
+2. Inline mode must be enabled for the bot in BotFather (`/setinline`). Until
+   it is, Telegram does not offer the bot for inline use at all, so typing
+   `@botname` shows nothing. This is a one-time operational step that cannot be
+   done from code.
 
 ## Names
 
