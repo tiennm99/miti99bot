@@ -94,34 +94,37 @@ func inlineResult(name string, a Alias) models.InlineQueryResult {
 		return &models.InlineQueryResultCachedSticker{ID: name, StickerFileID: a.FileID}
 	case kindPhoto:
 		return &models.InlineQueryResultCachedPhoto{
-			ID: name, PhotoFileID: a.FileID, Title: name, Caption: a.Text,
+			ID: name, PhotoFileID: a.FileID, Title: name, Caption: a.Text, CaptionEntities: a.Entities,
 		}
 	case kindAnimation:
 		return &models.InlineQueryResultCachedGif{
-			ID: name, GifFileID: a.FileID, Title: name, Caption: a.Text,
+			ID: name, GifFileID: a.FileID, Title: name, Caption: a.Text, CaptionEntities: a.Entities,
 		}
 	case kindVideo:
 		return &models.InlineQueryResultCachedVideo{
-			ID: name, VideoFileID: a.FileID, Title: name, Caption: a.Text,
+			ID: name, VideoFileID: a.FileID, Title: name, Caption: a.Text, CaptionEntities: a.Entities,
 		}
 	case kindAudio:
 		return &models.InlineQueryResultCachedAudio{
-			ID: name, AudioFileID: a.FileID, Caption: a.Text,
+			ID: name, AudioFileID: a.FileID, Caption: a.Text, CaptionEntities: a.Entities,
 		}
 	case kindVoice:
 		return &models.InlineQueryResultCachedVoice{
-			ID: name, VoiceFileID: a.FileID, Title: name, Caption: a.Text,
+			ID: name, VoiceFileID: a.FileID, Title: name, Caption: a.Text, CaptionEntities: a.Entities,
 		}
 	case kindDocument:
 		return &models.InlineQueryResultCachedDocument{
-			ID: name, DocumentFileID: a.FileID, Title: name, Caption: a.Text,
+			ID: name, DocumentFileID: a.FileID, Title: name, Caption: a.Text, CaptionEntities: a.Entities,
 		}
 	case kindText:
 		return &models.InlineQueryResultArticle{
-			ID:                  name,
-			Title:               name,
-			Description:         a.Text,
-			InputMessageContent: &models.InputTextMessageContent{MessageText: a.Text},
+			ID:          name,
+			Title:       name,
+			Description: a.Text,
+			InputMessageContent: &models.InputTextMessageContent{
+				MessageText: a.Text,
+				Entities:    a.Entities,
+			},
 		}
 	}
 	return nil

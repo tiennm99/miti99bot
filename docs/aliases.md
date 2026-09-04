@@ -133,20 +133,40 @@ single call, while naming each kind would cost one read per alias — a round tr
 each against MongoDB, on a dispatcher that serves one update at a time. To find
 out what a name holds, `/insert` it.
 
-Names list in their folded (lowercase) form, which is exactly what `/insert`
-takes, and each is wrapped in a `<code>` span so tapping one copies just that
-name.
+One line per alias, showing what the name holds, with the invocation in a
+`<code>` span so tapping it copies a command ready to send:
 
-The list is trimmed to fit Telegram's 4096-character message limit and ends
-with `…and N more.` when it does not fit; the count at the top is always the
-true total. The trim budget counts the markup, not only the names — at 13 bytes
-a pair the tags outweigh a short name.
+```
+3 aliases:
+/cheer — sticker
+/clip — video
+/greeting — text
+```
+
+Names list in their folded (lowercase) form, which is exactly what `/insert`
+takes.
+
+This costs one store read per *listed* alias — `DocStore` has no bulk get and
+the kind lives in the document. The reads stop as soon as the message is full,
+so the cost is bounded by what fits in one reply rather than by how many
+aliases exist. The list is trimmed to Telegram's 4096-character limit and ends
+with `…and N more.`; the count at the top is always the true total.
 
 ## Behaviour worth knowing
 
-**Text loses its formatting.** Bold, links and mentions are stored as plain
-text: re-sending entities means carrying offsets that no longer line up once the
-text is repeated in a different message. A bare URL still auto-links.
+**Formatting survives.** Bold, italic, code, links and mentions are stored as
+entities alongside the text, and captions keep theirs too. This works because
+the text is re-sent byte-identical: entity offsets are relative to that text,
+so they stay valid. They are sent back as entities rather than re-rendered as
+markup, which avoids escaping and re-parsing content the user never wrote as
+markup.
+
+**Another bot's message cannot be saved.** Telegram's own rule: *"Bots will not
+be able to see messages from other bots regardless of mode."* The reply arrives
+with its content stripped, so there is nothing to store and no setting that
+would change it. `/alias` says so specifically rather than implying the format
+was unsupported. Forwarding the message to yourself first and aliasing your own
+copy works.
 
 **A `file_id` can stop working** — the original file was deleted, or Telegram
 rejects it. `/insert` answers with something actionable rather than a generic

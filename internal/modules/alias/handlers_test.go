@@ -100,7 +100,7 @@ func TestAlias_RoundTripsEveryKind(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			rb := installAlias(t)
 			rb.Bot.ProcessUpdate(context.Background(), aliasCmd("thing", tc.replied))
-			rb.AssertSentText(t, "Use /insert thing")
+			rb.AssertSentText(t, "Use <code>/insert thing</code>")
 
 			rb.Reset()
 			rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(7, "/insert thing"))
@@ -320,14 +320,48 @@ func TestAliases_ListsSortedNames(t *testing.T) {
 	if !strings.HasPrefix(got, "3 aliases:") {
 		t.Errorf("reply = %q, want it to open with the count", got)
 	}
-	// Keys are folded, so "Mid" lists as "mid" — which is what /insert takes.
-	// Each name is its own <code> span so tapping one copies just that name.
-	if want := "<code>alpha</code>, <code>mid</code>, <code>zeta</code>"; !strings.Contains(got, want) {
-		t.Errorf("reply = %q, want sorted copyable names %q", got, want)
+	// One line per alias: a copyable command plus what it holds. Keys are
+	// folded, so "Mid" lists as "mid" — which is what /insert takes.
+	want := "\n<code>/alpha</code> — text" +
+		"\n<code>/mid</code> — text" +
+		"\n<code>/zeta</code> — text"
+	if !strings.Contains(got, want) {
+		t.Errorf("reply = %q, want sorted lines %q", got, want)
 	}
 	// The markup is inert without the parse mode.
 	if pm := call.Form["parse_mode"]; pm != "HTML" {
 		t.Errorf("parse_mode = %q, want HTML", pm)
+	}
+}
+
+// Each kind is named in the list, so /aliases says what it will send.
+func TestAliases_ShowsEachKind(t *testing.T) {
+	rb := installAlias(t)
+	cases := map[string]*models.Message{
+		"words": {Text: "hi"},
+		"stick": {Sticker: &models.Sticker{FileID: "s"}},
+		"clip":  {Video: &models.Video{FileID: "v"}},
+		"loop":  {Animation: &models.Animation{FileID: "a"}},
+		"pic":   {Photo: []models.PhotoSize{{FileID: "p", FileSize: 1}}},
+	}
+	for name, replied := range cases {
+		rb.Bot.ProcessUpdate(context.Background(), aliasCmd(name, replied))
+	}
+
+	rb.Reset()
+	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(7, "/aliases"))
+
+	got := rb.LastSent().Text()
+	for _, want := range []string{
+		"<code>/words</code> — text",
+		"<code>/stick</code> — sticker",
+		"<code>/clip</code> — video",
+		"<code>/loop</code> — GIF",
+		"<code>/pic</code> — photo",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("reply missing %q; got %q", want, got)
+		}
 	}
 }
 
@@ -354,4 +388,83 @@ func TestAliases_TrimsToOneMessage(t *testing.T) {
 	if !strings.HasPrefix(got, fmt.Sprintf("%d aliases:", total)) {
 		t.Errorf("reply should still report the true total; got %q", got[:min(60, len(got))])
 	}
+}
+
+// Formatting is part of what was saved: bold, italic, code and links come back
+// as entities, so the text is re-sent looking like the original.
+func TestAlias_PreservesTextFormatting(t *testing.T) {
+	rb := installAlias(t)
+	upd := aliasCmd("styled", &models.Message{
+		Text: "bold code",
+		Entities: []models.MessageEntity{
+			{Type: models.MessageEntityTypeBold, Offset: 0, Length: 4},
+			{Type: models.MessageEntityTypeCode, Offset: 5, Length: 4},
+		},
+	})
+	rb.Bot.ProcessUpdate(context.Background(), upd)
+
+	rb.Reset()
+	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(7, "/insert styled"))
+
+	call, ok := callTo(rb, "sendMessage")
+	if !ok {
+		t.Fatalf("no sendMessage call; got %+v", rb.Sent())
+	}
+	if got := call.Form["text"]; got != "bold code" {
+		t.Errorf("text = %q, want it unchanged so the offsets stay valid", got)
+	}
+	// Entities ride along as JSON; offsets are relative to the text above.
+	ents := call.Form["entities"]
+	for _, want := range []string{`"type":"bold"`, `"type":"code"`, `"offset":5`, `"length":4`} {
+		if !strings.Contains(ents, want) {
+			t.Errorf("entities = %q, missing %s", ents, want)
+		}
+	}
+}
+
+// A caption's formatting survives the same way.
+func TestAlias_PreservesCaptionFormatting(t *testing.T) {
+	rb := installAlias(t)
+	rb.Bot.ProcessUpdate(context.Background(), aliasCmd("pic", &models.Message{
+		Photo:   []models.PhotoSize{{FileID: "photo-id", FileSize: 1}},
+		Caption: "italic",
+		CaptionEntities: []models.MessageEntity{
+			{Type: models.MessageEntityTypeItalic, Offset: 0, Length: 6},
+		},
+	}))
+
+	rb.Reset()
+	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(7, "/insert pic"))
+
+	call, ok := callTo(rb, "sendPhoto")
+	if !ok {
+		t.Fatalf("no sendPhoto call; got %+v", rb.Sent())
+	}
+	if got := call.Form["caption_entities"]; !strings.Contains(got, `"type":"italic"`) {
+		t.Errorf("caption_entities = %q, want the italic run preserved", got)
+	}
+}
+
+// Telegram never delivers another bot's message content, so the refusal has to
+// say that rather than implying the format was unsupported.
+func TestAlias_ExplainsAnotherBotsMessage(t *testing.T) {
+	rb := installAlias(t)
+	// What arrives when the reply points at another bot's message: a sender
+	// that is a bot, and no readable content.
+	rb.Bot.ProcessUpdate(context.Background(), aliasCmd("botmsg", &models.Message{
+		From: &models.User{ID: 555, IsBot: true, FirstName: "OtherBot"},
+	}))
+
+	rb.AssertSentText(t, "does not let bots read other bots")
+}
+
+// A human's unsupported message still gets the format advice, not the bot one.
+func TestAlias_UnsupportedFromHumanKeepsFormatAdvice(t *testing.T) {
+	rb := installAlias(t)
+	rb.Bot.ProcessUpdate(context.Background(), aliasCmd("place", &models.Message{
+		From:     &models.User{ID: 7, FirstName: "Test"},
+		Location: &models.Location{Latitude: 1, Longitude: 2},
+	}))
+
+	rb.AssertSentText(t, "cannot be saved")
 }

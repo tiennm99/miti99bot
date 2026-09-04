@@ -132,7 +132,7 @@ func TestUnalias_DeletesAndThenNameIsFree(t *testing.T) {
 
 	rb.Reset()
 	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(7, "/unalias temp"))
-	rb.AssertSentText(t, `Deleted "temp"`)
+	rb.AssertSentText(t, "Deleted <code>temp</code>")
 
 	// Gone from /insert, from the list, and from the bare-command path.
 	rb.Reset()
