@@ -1,8 +1,8 @@
 # Sticker pack
 
 `/addsticker` appends a sticker to **one shared pack** that every user of the
-bot contributes to. It lives in the `util` module — there is no `sticker`
-module any more, and no per-user packs.
+bot contributes to. It is the whole of the `sticker` module — one command, no
+storage, and no per-user packs.
 
 | Command | Parameters | Reply to | What it does |
 |---|---|---|---|

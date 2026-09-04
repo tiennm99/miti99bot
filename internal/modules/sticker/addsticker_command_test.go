@@ -1,4 +1,4 @@
-package util_test
+package sticker_test
 
 import (
 	"context"
@@ -7,8 +7,26 @@ import (
 
 	"github.com/go-telegram/bot/models"
 
+	"github.com/tiennm99/miti99bot/internal/modules"
+	"github.com/tiennm99/miti99bot/internal/modules/sticker"
+	"github.com/tiennm99/miti99bot/internal/storage"
 	"github.com/tiennm99/miti99bot/internal/testutil"
 )
+
+// installSticker builds a registry holding only the sticker module. /addsticker
+// is public, so no auth is needed for it to dispatch.
+func installSticker(t *testing.T) *testutil.RecordingBot {
+	t.Helper()
+	rb := testutil.NewRecordingBot(t)
+	reg, err := modules.Build([]string{"sticker"},
+		map[string]modules.Factory{"sticker": sticker.New},
+		storage.NewMemoryProvider(), modules.BuildOptions{})
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	modules.Install(rb.Bot, reg, modules.Auth{})
+	return rb
+}
 
 // installAddSticker builds the util module with the shared pack configured and
 // getMe stubbed.
@@ -21,7 +39,7 @@ func installAddSticker(t *testing.T, packName, botUsername string) *testutil.Rec
 	t.Helper()
 	t.Setenv("OWNER_ID", "999")
 	t.Setenv("STICKER_PACK_NAME", packName)
-	rb := installUtil(t, 999)
+	rb := installSticker(t)
 	rb.StubMethod("getMe", `{"id":1,"is_bot":true,"username":"`+botUsername+`"}`)
 	return rb
 }

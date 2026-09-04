@@ -39,6 +39,77 @@ type Registry struct {
 	cronDeps     map[string]Deps // cron name → owning module's prefixed Deps
 	callbacks    map[string]Callback
 	commandHooks []func(ctx context.Context, name string, update *models.Update)
+	fallback     *CommandFallback // at most one; owner tracked in Build
+	inline       *InlineQuery     // at most one; owner tracked in Build
+}
+
+// Fallback returns the single command fallback, or nil when no module declares
+// one.
+func (r *Registry) Fallback() *CommandFallback { return r.fallback }
+
+// Inline returns the single inline-query handler, or nil when no module
+// declares one.
+func (r *Registry) Inline() *InlineQuery { return r.inline }
+
+// addCommands validates and indexes one module's commands.
+//
+// Mirrors addCallbacks: the per-item validation, the cross-module uniqueness
+// check, and the fan-out into the visibility indexes all belong to the item,
+// not to Build's module loop.
+func (r *Registry) addCommands(name string, cmds []Command, owners map[string]string) error {
+	for _, cmd := range cmds {
+		if err := validateCommand(cmd); err != nil {
+			return fmt.Errorf("module %q: %w", name, err)
+		}
+		if prev, dup := owners[cmd.Name]; dup {
+			return fmt.Errorf("command conflict: /%s defined in %q and %q", cmd.Name, prev, name)
+		}
+		owners[cmd.Name] = name
+		r.AllCommands[cmd.Name] = cmd
+		switch cmd.Visibility {
+		case VisibilityPublic:
+			r.publicCmds[cmd.Name] = cmd
+		case VisibilityProtected:
+			r.protected[cmd.Name] = cmd
+		case VisibilityPrivate:
+			r.private[cmd.Name] = cmd
+		}
+	}
+	return nil
+}
+
+// addSingletons claims the at-most-one Fallback and Inline slots.
+//
+// Two modules answering the same un-registered command, or the same inline
+// query, is a configuration bug worth catching here rather than leaving the
+// winner to map iteration order. A declared slot with a nil handler is rejected
+// for the same reason: it would panic at dispatch instead of at startup.
+//
+// Extracted from Build rather than inlined so Build stays under the project's
+// cyclomatic cap; the owner strings are threaded through because they are
+// Build's loop state, not registry state.
+func (r *Registry) addSingletons(name string, mod Module, fallbackOwner, inlineOwner *string) error {
+	if mod.Fallback != nil {
+		if *fallbackOwner != "" {
+			return fmt.Errorf("fallback conflict: defined in %q and %q", *fallbackOwner, name)
+		}
+		if mod.Fallback.Handler == nil {
+			return fmt.Errorf("module %q: fallback has no handler", name)
+		}
+		*fallbackOwner = name
+		r.fallback = mod.Fallback
+	}
+	if mod.Inline != nil {
+		if *inlineOwner != "" {
+			return fmt.Errorf("inline conflict: defined in %q and %q", *inlineOwner, name)
+		}
+		if mod.Inline.Handler == nil {
+			return fmt.Errorf("module %q: inline has no handler", name)
+		}
+		*inlineOwner = name
+		r.inline = mod.Inline
+	}
+	return nil
 }
 
 // PublicCommands returns commands tagged VisibilityPublic, sorted by name.
@@ -129,6 +200,7 @@ func Build(enabled []string, factories map[string]Factory, provider storage.Prov
 	owners := map[string]string{} // command name → module that registered it
 	cronOwners := map[string]string{}
 	callbackOwners := map[string]string{}
+	var fallbackOwner, inlineOwner string
 	seenModule := map[string]bool{}
 	var unknown []string
 
@@ -165,23 +237,8 @@ func Build(enabled []string, factories map[string]Factory, provider storage.Prov
 			reg.commandHooks = append(reg.commandHooks, mod.CommandHook)
 		}
 
-		for _, cmd := range mod.Commands {
-			if err := validateCommand(cmd); err != nil {
-				return nil, fmt.Errorf("module %q: %w", name, err)
-			}
-			if prev, dup := owners[cmd.Name]; dup {
-				return nil, fmt.Errorf("command conflict: /%s defined in %q and %q", cmd.Name, prev, name)
-			}
-			owners[cmd.Name] = name
-			reg.AllCommands[cmd.Name] = cmd
-			switch cmd.Visibility {
-			case VisibilityPublic:
-				reg.publicCmds[cmd.Name] = cmd
-			case VisibilityProtected:
-				reg.protected[cmd.Name] = cmd
-			case VisibilityPrivate:
-				reg.private[cmd.Name] = cmd
-			}
+		if err := reg.addCommands(name, mod.Commands, owners); err != nil {
+			return nil, err
 		}
 
 		for _, cron := range mod.Crons {
@@ -197,6 +254,10 @@ func Build(enabled []string, factories map[string]Factory, provider storage.Prov
 		}
 
 		if err := reg.addCallbacks(name, mod.Callbacks, callbackOwners); err != nil {
+			return nil, err
+		}
+
+		if err := reg.addSingletons(name, mod, &fallbackOwner, &inlineOwner); err != nil {
 			return nil, err
 		}
 

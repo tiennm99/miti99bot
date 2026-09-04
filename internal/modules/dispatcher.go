@@ -37,6 +37,8 @@ func (a Auth) Permits(v Visibility, update *models.Update) bool {
 		senderID = update.Message.From.ID
 	} else if update.CallbackQuery != nil {
 		senderID = update.CallbackQuery.From.ID
+	} else if update.InlineQuery != nil {
+		senderID = update.InlineQuery.From.ID
 	}
 	if senderID == 0 {
 		return false
@@ -119,6 +121,78 @@ func Install(b *bot.Bot, reg *Registry, auth Auth) {
 				}
 			})
 	}
+
+	// Registered LAST, and that placement is load-bearing: the bot library
+	// returns the first handler whose matcher accepts an update, so every
+	// Command above out-ranks the fallback. A name defined in code therefore
+	// always beats one resolved at runtime — including an alias that shadows a
+	// command added in a later build.
+	if fb := reg.Fallback(); fb != nil {
+		fbCopy := *fb
+		b.RegisterHandlerMatchFunc(
+			func(update *models.Update) bool { return commandName(update) != "" },
+			func(ctx context.Context, b *bot.Bot, update *models.Update) {
+				name := commandName(update)
+				defer recoverHandler("fallback", name, nil)
+				if !auth.Permits(fbCopy.Visibility, update) {
+					return // silent — same rule the command path follows
+				}
+				// Deliberately not counted in metrics.IncCommand or the command
+				// hooks: an un-registered name is not a command, and feeding
+				// arbitrary user text to the stats module would let anyone mint
+				// unbounded metric labels.
+				if err := fbCopy.Handler(ctx, b, name, update); err != nil {
+					metrics.IncError("fallback-handler-error")
+					log.Error("fallback", "name", name, "err", err)
+				}
+			},
+		)
+	}
+
+	if inline := reg.Inline(); inline != nil {
+		inlineCopy := *inline
+		b.RegisterHandlerMatchFunc(
+			func(update *models.Update) bool { return update != nil && update.InlineQuery != nil },
+			func(ctx context.Context, b *bot.Bot, update *models.Update) {
+				defer recoverHandler("inline", "inline_query", nil)
+				if !auth.Permits(inlineCopy.Visibility, update) {
+					return
+				}
+				if err := inlineCopy.Handler(ctx, b, update); err != nil {
+					metrics.IncError("inline-handler-error")
+					log.Error("inline", "err", err)
+				}
+			},
+		)
+	}
+}
+
+// commandName returns the normalised bot_command in update, or "" when the
+// update carries none.
+//
+// Shares matchCommand's parsing rules — leading slash dropped, @botname suffix
+// stripped, case folded — so a fallback sees exactly the name a registered
+// command would have matched on.
+func commandName(update *models.Update) string {
+	if update == nil || update.Message == nil {
+		return ""
+	}
+	text := update.Message.Text
+	for _, e := range update.Message.Entities {
+		if e.Type != models.MessageEntityTypeBotCommand {
+			continue
+		}
+		end := e.Offset + e.Length
+		if e.Offset < 0 || end > len(text) || e.Length < 1 {
+			continue
+		}
+		tok := text[e.Offset+1 : end]
+		if i := strings.IndexByte(tok, '@'); i >= 0 {
+			tok = tok[:i]
+		}
+		return strings.ToLower(tok)
+	}
+	return ""
 }
 
 // recoverHandler contains a panic raised by a module handler. The bot runs with
