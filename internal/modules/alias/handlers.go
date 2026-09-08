@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"html"
 	"regexp"
-	"sort"
 	"strings"
 	"time"
 
@@ -263,52 +262,39 @@ func (s *state) handleAliases(ctx context.Context, b *bot.Bot, update *models.Up
 		return nil
 	}
 
-	names, err := s.store.List(ctx, "")
+	// Scan, not List plus a read per name: the kind lives in the document, so a
+	// name-only listing would cost a round trip per alias to label each line.
+	// Scan also returns key order, which is what makes the same command twice
+	// produce the same list.
+	docs, err := s.store.Scan(ctx, "")
 	if err != nil {
 		log.Error("alias_list", "err", err)
 		return chathelper.Reply(ctx, b, msg, genericFailure)
 	}
-	if len(names) == 0 {
+	if len(docs) == 0 {
 		return chathelper.Reply(ctx, b, msg,
 			"No aliases saved yet. Reply to a message with /alias <name> to save one.")
 	}
-
-	// List gives no ordering guarantee, and an unstable list is unreadable when
-	// it is the same command run twice.
-	sort.Strings(names)
-	return chathelper.ReplyHTML(ctx, b, msg, s.renderNames(ctx, names))
+	return chathelper.ReplyHTML(ctx, b, msg, renderNames(docs))
 }
 
 // renderNames formats the list as Telegram HTML, trimmed to fit one message.
 //
 // One line per alias, each showing what the name holds, with the invocation
 // wrapped in <code> so tapping it copies a command ready to send.
-//
-// This costs one store read per *listed* alias: DocStore has no bulk get and
-// the kind lives in the document. The reads stop as soon as the message is
-// full, so the cost is bounded by what fits in one reply rather than by how
-// many aliases exist.
-func (s *state) renderNames(ctx context.Context, names []string) string {
+func renderNames(docs []storage.Doc[Alias]) string {
 	var sb strings.Builder
-	fmt.Fprintf(&sb, "%d aliases:", len(names))
+	fmt.Fprintf(&sb, "%d aliases:", len(docs))
 
-	for i, name := range names {
-		entry, found, err := s.get(ctx, name)
-		if err != nil {
-			// One unreadable record must not blank the whole list.
-			log.Error("alias_list_get", "name", name, "err", err)
-		} else if !found {
-			continue // deleted between the List above and this read
-		}
-
+	for i, doc := range docs {
 		// Escaped despite parseName restricting names to [a-zA-Z0-9_]: the
 		// validation and the rendering are far apart, and a later relaxation of
 		// the name rules must not silently become an HTML injection.
-		line := "\n<code>/" + html.EscapeString(name) + "</code> — " + kindLabel(entry.Kind)
+		line := "\n<code>/" + html.EscapeString(doc.ID) + "</code> — " + kindLabel(doc.Val.Kind)
 		// Reserve room for the "…and N more" tail before committing to a line,
 		// so the trim can never be what pushes the message over the limit.
 		if sb.Len()+len(line) > maxListBytes {
-			fmt.Fprintf(&sb, "\n…and %d more.", len(names)-i)
+			fmt.Fprintf(&sb, "\n…and %d more.", len(docs)-i)
 			return sb.String()
 		}
 		sb.WriteString(line)
@@ -320,7 +306,7 @@ func (s *state) renderNames(ctx context.Context, names []string) string {
 //
 // Differs from describe in exactly one case: text reads as "message" in a
 // sentence ("send that message") but as "text" in a column of kinds, next to
-// sticker and video. An empty kind means the read above failed.
+// sticker and video. An empty kind means a stored document without one.
 func kindLabel(kind string) string {
 	switch kind {
 	case kindText:

@@ -129,3 +129,59 @@ func TestCheckReservedFields(t *testing.T) {
 		t.Fatalf("string payload flagged: %v", err)
 	}
 }
+
+// Scan is the batched read: keys and values together, in key order, so a
+// caller never follows List with a Get per key.
+func TestMemoryDocStore_ScanReturnsValuesInKeyOrder(t *testing.T) {
+	ctx := context.Background()
+	s := memStore("alias")
+	_ = s.Put(ctx, "cheese", testPayload{Name: "second", Count: 2})
+	_ = s.Put(ctx, "boo", testPayload{Name: "first", Count: 1})
+	_ = s.Put(ctx, "other", testPayload{Name: "third", Count: 3})
+
+	docs, err := s.Scan(ctx, "")
+	if err != nil {
+		t.Fatalf("Scan: %v", err)
+	}
+	want := []Doc[testPayload]{
+		{ID: "boo", Val: testPayload{Name: "first", Count: 1}},
+		{ID: "cheese", Val: testPayload{Name: "second", Count: 2}},
+		{ID: "other", Val: testPayload{Name: "third", Count: 3}},
+	}
+	if len(docs) != len(want) {
+		t.Fatalf("Scan returned %d docs, want %d: %+v", len(docs), len(want), docs)
+	}
+	for i := range want {
+		if docs[i] != want[i] {
+			t.Errorf("docs[%d] = %+v, want %+v", i, docs[i], want[i])
+		}
+	}
+}
+
+func TestMemoryDocStore_ScanPrefix(t *testing.T) {
+	ctx := context.Background()
+	s := memStore("coin")
+	_ = s.Put(ctx, "game:1", testPayload{Name: "a"})
+	_ = s.Put(ctx, "game:2", testPayload{Name: "b"})
+	_ = s.Put(ctx, "stats:1", testPayload{Name: "c"})
+
+	docs, err := s.Scan(ctx, "game:")
+	if err != nil {
+		t.Fatalf("Scan: %v", err)
+	}
+	if len(docs) != 2 || docs[0].ID != "game:1" || docs[1].ID != "game:2" {
+		t.Fatalf("Scan game: = %+v", docs)
+	}
+	if docs[0].Val.Name != "a" || docs[1].Val.Name != "b" {
+		t.Errorf("Scan lost payloads: %+v", docs)
+	}
+}
+
+// An empty collection yields no docs and no error — the picker path answers
+// with nothing rather than treating it as a failure.
+func TestMemoryDocStore_ScanEmpty(t *testing.T) {
+	docs, err := memStore("alias").Scan(context.Background(), "")
+	if err != nil || len(docs) != 0 {
+		t.Fatalf("Scan on empty store = %+v, err %v", docs, err)
+	}
+}

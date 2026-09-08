@@ -140,3 +140,25 @@ func (s *memoryDocStore[T]) List(_ context.Context, prefix string) ([]string, er
 	sort.Strings(keys)
 	return keys, nil
 }
+
+func (s *memoryDocStore[T]) Scan(_ context.Context, prefix string) ([]Doc[T], error) {
+	if err := validatePrefix(prefix); err != nil {
+		return nil, err
+	}
+	s.c.mu.RLock()
+	defer s.c.mu.RUnlock()
+	docs := make([]Doc[T], 0, len(s.c.rows))
+	for k, row := range s.c.rows {
+		if !strings.HasPrefix(k, prefix) {
+			continue
+		}
+		var val T
+		if err := json.Unmarshal(row.data, &val); err != nil {
+			return nil, err
+		}
+		docs = append(docs, Doc[T]{ID: k, Val: val})
+	}
+	// Sorted for parity with the Mongo store, which sorts on _id in the query.
+	sort.Slice(docs, func(i, j int) bool { return docs[i].ID < docs[j].ID })
+	return docs, nil
+}

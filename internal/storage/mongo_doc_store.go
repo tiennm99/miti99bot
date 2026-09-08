@@ -183,3 +183,36 @@ func (s *mongoDocStore[T]) List(ctx context.Context, prefix string) ([]string, e
 	}
 	return keys, nil
 }
+
+// Scan reads every document under prefix in one Find, sorted by _id so the
+// caller inherits key order from the index instead of sorting afterwards.
+//
+// Unlike List it takes no projection: the payload is the point. The prefix uses
+// the same half-open range as List, so the read stays an index scan.
+func (s *mongoDocStore[T]) Scan(ctx context.Context, prefix string) ([]Doc[T], error) {
+	if err := validatePrefix(prefix); err != nil {
+		return nil, err
+	}
+	filter := bson.M{}
+	if prefix != "" {
+		filter[mongoIDField] = bson.M{"$gte": prefix, "$lt": prefixSuccessor(prefix)}
+	}
+	cur, err := s.coll.Find(ctx, filter, options.Find().SetSort(bson.D{{Key: mongoIDField, Value: 1}}))
+	if err != nil {
+		return nil, fmt.Errorf("mongo scan %s prefix=%q: %w", s.module, prefix, err)
+	}
+	defer func() { _ = cur.Close(ctx) }()
+
+	docs := make([]Doc[T], 0)
+	for cur.Next(ctx) {
+		var out storedDoc[T]
+		if err := cur.Decode(&out); err != nil {
+			return nil, fmt.Errorf("mongo scan %s prefix=%q: decode: %w", s.module, prefix, err)
+		}
+		docs = append(docs, Doc[T]{ID: out.ID, Val: out.Payload})
+	}
+	if err := cur.Err(); err != nil {
+		return nil, fmt.Errorf("mongo scan %s prefix=%q: %w", s.module, prefix, err)
+	}
+	return docs, nil
+}

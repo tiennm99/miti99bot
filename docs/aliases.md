@@ -66,7 +66,30 @@ is the payoff for storing a `file_id` rather than bytes.
 
 **Video-note aliases do not appear inline.** Telegram defines no
 `InlineQueryResultCachedVideoNote`, and substituting a plain video would change
-what was saved. They stay reachable through `/insert` and `/<name>`.
+what was saved. They stay reachable through `/insert` and `/<name>`. The 50-cap
+counts results the picker can show, so a skipped kind does not eat a slot.
+
+**Answering is a race, and losing it is silent.** Telegram expires an inline
+query and then rejects the answer with
+
+> Bad Request: query is too old and response timeout expired or query ID is
+> invalid
+
+Every keystroke opens a *new* query, and the bot dispatches updates one at a
+time, so one slow answer also delays the queries queued behind it — each ageing
+while it waits. One slow read can therefore expire a whole burst of typing.
+Two rules keep that from happening:
+
+- The handler reads the store **once** per query (`Scan`), never a name listing
+  followed by a read per name. An N+1 read costs a round trip per saved alias,
+  on every keystroke.
+- It runs under a 3-second deadline, not the 10 seconds the commands get. An
+  answer that late is rejected anyway; abandoning it frees the worker for the
+  fresher query behind it.
+
+When the rejection does appear, the log line carries how long the answer took —
+`answer 4 results after 12.4s: ...` — which separates a slow handler from a
+query that was already stale on arrival.
 
 **Two things gate inline mode, and both fail silently.**
 
@@ -146,11 +169,10 @@ One line per alias, showing what the name holds, with the invocation in a
 Names list in their folded (lowercase) form, which is exactly what `/insert`
 takes.
 
-This costs one store read per *listed* alias — `DocStore` has no bulk get and
-the kind lives in the document. The reads stop as soon as the message is full,
-so the cost is bounded by what fits in one reply rather than by how many
-aliases exist. The list is trimmed to Telegram's 4096-character limit and ends
-with `…and N more.`; the count at the top is always the true total.
+This is one store read total — `DocStore.Scan` returns the names with their
+documents, and the kind that labels each line lives in the document. The list is
+trimmed to Telegram's 4096-character limit and ends with `…and N more.`; the
+count at the top is always the true total.
 
 ## Behaviour worth knowing
 
@@ -197,5 +219,6 @@ It reports **shape, never content**: field names, lengths and counts, but no
 message text. The line lands in stdout and whatever ships it, so aliased
 messages must not travel with it; a test asserts nothing leaks.
 
-Both handlers run under a 10-second deadline. The bot processes updates one at a
-time, so that bound is what keeps a slow store from stalling other users.
+Both command handlers run under a 10-second deadline; the inline handler under
+3. The bot processes updates one at a time, so those bounds are what keep a slow
+store from stalling other users.

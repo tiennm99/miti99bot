@@ -198,3 +198,40 @@ func TestMongoDocStore_WrappedScalarAndArray(t *testing.T) {
 		t.Errorf("array root field subscribers = %T, want bson.A", doc["subscribers"])
 	}
 }
+
+// Scan reads a whole prefix in one query, sorted by _id, with the payload
+// fields decoded from the document root.
+func TestMongoDocStore_ScanReturnsPayloadsInKeyOrder(t *testing.T) {
+	store, _, cleanup := mongoStore[portfolioLike](t, "coin")
+	defer cleanup()
+	ctx := context.Background()
+
+	if err := store.Put(ctx, "user:2", portfolioLike{USD: 2}); err != nil {
+		t.Fatalf("Put user:2: %v", err)
+	}
+	if err := store.Put(ctx, "user:1", portfolioLike{USD: 1}); err != nil {
+		t.Fatalf("Put user:1: %v", err)
+	}
+	if err := store.Put(ctx, "other", portfolioLike{USD: 9}); err != nil {
+		t.Fatalf("Put other: %v", err)
+	}
+
+	docs, err := store.Scan(ctx, "user:")
+	if err != nil {
+		t.Fatalf("Scan: %v", err)
+	}
+	if len(docs) != 2 {
+		t.Fatalf("Scan user: returned %d docs, want 2: %+v", len(docs), docs)
+	}
+	if docs[0].ID != "user:1" || docs[1].ID != "user:2" {
+		t.Errorf("Scan out of key order: %s, %s", docs[0].ID, docs[1].ID)
+	}
+	if docs[0].Val.USD != 1 || docs[1].Val.USD != 2 {
+		t.Errorf("Scan lost hoisted payload fields: %+v", docs)
+	}
+
+	all, err := store.Scan(ctx, "")
+	if err != nil || len(all) != 3 {
+		t.Fatalf("Scan all = %d docs, err %v", len(all), err)
+	}
+}

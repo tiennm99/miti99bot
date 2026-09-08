@@ -35,12 +35,32 @@ var ErrInvalidModuleName = errors.New("storage: invalid module name")
 //   - PutVersioned writes only if the stored version equals expectedVersion,
 //     then bumps it. expectedVersion == 0 means "create (or adopt a not-yet-
 //     versioned key)". A mismatch returns ErrConflict.
+//   - List returns the keys under a prefix; Scan returns those keys with their
+//     values, ordered by key ascending.
 type DocStore[T any] interface {
 	Get(ctx context.Context, id string) (val T, version int64, err error)
 	Put(ctx context.Context, id string, val T) error
 	PutVersioned(ctx context.Context, id string, expectedVersion int64, val T) error
 	Delete(ctx context.Context, id string) error
 	List(ctx context.Context, prefix string) ([]string, error)
+
+	// Scan reads every document under prefix in one round trip, ordered by key
+	// ascending. An empty prefix reads the whole collection.
+	//
+	// It exists so a caller that needs the values — not just the names — never
+	// has to follow List with a Get per key. That N+1 shape costs one network
+	// round trip per document, and handlers run inline on the bot's single
+	// update worker: a read that scales with the document count turns ordinary
+	// store latency into requests that expire before they are answered.
+	Scan(ctx context.Context, prefix string) ([]Doc[T], error)
+}
+
+// Doc is one key paired with its value, as returned by Scan. The version is
+// deliberately absent: a caller that intends to write back should re-read the
+// key with Get so the version it locks on is the one it just observed.
+type Doc[T any] struct {
+	ID  string
+	Val T
 }
 
 // Provider yields a per-module Collection handle. Implementations decide how
@@ -153,4 +173,7 @@ func (s invalidDocStore[T]) PutVersioned(context.Context, string, int64, T) erro
 func (s invalidDocStore[T]) Delete(context.Context, string) error { return s.err("Delete") }
 func (s invalidDocStore[T]) List(context.Context, string) ([]string, error) {
 	return nil, s.err("List")
+}
+func (s invalidDocStore[T]) Scan(context.Context, string) ([]Doc[T], error) {
+	return nil, s.err("Scan")
 }
