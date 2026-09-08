@@ -85,6 +85,13 @@ func (s *state) handleAlias(ctx context.Context, b *bot.Bot, update *models.Upda
 		return nil
 	}
 
+	// Capture first, only so the debug line below can report what arrived even
+	// on the early returns. It is a pure read of the update — no store, no API
+	// — so running it before the name checks costs nothing and changes nothing
+	// about which reply the caller sees.
+	entry, ok := capture(msg.ReplyToMessage)
+	log.Debug("alias_capture", replyShape(msg.ReplyToMessage, entry, ok)...)
+
 	display, key, err := parseName(chathelper.ArgAfterCommand(msg.Text))
 	if err != nil {
 		return chathelper.Reply(ctx, b, msg, usageAlias)
@@ -105,7 +112,6 @@ func (s *state) handleAlias(ctx context.Context, b *bot.Bot, update *models.Upda
 		}
 	}
 
-	entry, ok := capture(msg.ReplyToMessage)
 	if !ok {
 		if fromAnotherBot(msg.ReplyToMessage) {
 			return chathelper.Reply(ctx, b, msg, otherBotRefusal)
