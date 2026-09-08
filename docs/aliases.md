@@ -178,5 +178,24 @@ failure:
 the reason `chathelper.Reply` documents: without it Telegram routes the message
 to a supergroup's General topic instead of the topic the command was typed in.
 
+## Debugging a capture
+
+Set `LOG_LEVEL=debug` and every `/alias` logs one `alias_capture` line
+describing what Telegram actually delivered:
+
+```
+alias_capture reply=present reply_id=9 fields=none text_len=0 caption_len=0
+              entities=0 captured=false from_id=555 from_bot=true
+```
+
+`fields=none captured=false from_bot=true` is the signature of another bot's
+message arriving stripped. `reply=absent` means Telegram delivered the command
+with no reply attached at all — indistinguishable from the caller forgetting to
+reply, which is why the line exists.
+
+It reports **shape, never content**: field names, lengths and counts, but no
+message text. The line lands in stdout and whatever ships it, so aliased
+messages must not travel with it; a test asserts nothing leaks.
+
 Both handlers run under a 10-second deadline. The bot processes updates one at a
 time, so that bound is what keeps a slow store from stalling other users.
