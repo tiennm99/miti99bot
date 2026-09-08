@@ -246,13 +246,6 @@ func TestAlias_RejectsUnsupportedMessage(t *testing.T) {
 	rb.AssertSentText(t, "cannot be saved")
 }
 
-func TestAlias_NoReplyShowsUsage(t *testing.T) {
-	rb := installAlias(t)
-	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(7, "/alias solo"))
-
-	rb.AssertSentText(t, "Reply to a message")
-}
-
 func TestInsert_UnknownNameExplainsHowToSaveOne(t *testing.T) {
 	rb := installAlias(t)
 	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(7, "/insert nothing"))
@@ -467,4 +460,40 @@ func TestAlias_UnsupportedFromHumanKeepsFormatAdvice(t *testing.T) {
 	}))
 
 	rb.AssertSentText(t, "cannot be saved")
+}
+
+// A reply Telegram delivered empty must not be blamed on the message format:
+// the caller gets the one action that recovers it.
+func TestAlias_StrippedReplySuggestsForwarding(t *testing.T) {
+	rb := installAlias(t)
+	// A message id and a human sender, but no content field at all — what
+	// arrives when Telegram passes the reply along without its payload.
+	rb.Bot.ProcessUpdate(context.Background(), aliasCmd("gone", &models.Message{
+		ID:   9,
+		From: &models.User{ID: 7, FirstName: "Test"},
+	}))
+
+	rb.AssertSentText(t, "no content")
+	rb.AssertSentText(t, "Forward it into this chat")
+}
+
+// /alias with no reply attached covers both readings: a caller who forgot to
+// reply, and a reply Telegram dropped on the way.
+func TestAlias_NoReplySuggestsForwarding(t *testing.T) {
+	rb := installAlias(t)
+	rb.Bot.ProcessUpdate(context.Background(), aliasCmd("gone", nil))
+
+	rb.AssertSentText(t, "Reply to the message you want to save")
+	rb.AssertSentText(t, "Forward it into this chat")
+}
+
+// The other-bot refusal carries the same advice, so every unreadable reply
+// ends with an action rather than only a reason.
+func TestAlias_OtherBotRefusalSuggestsForwarding(t *testing.T) {
+	rb := installAlias(t)
+	rb.Bot.ProcessUpdate(context.Background(), aliasCmd("botmsg", &models.Message{
+		From: &models.User{ID: 555, IsBot: true, FirstName: "OtherBot"},
+	}))
+
+	rb.AssertSentText(t, "Forward it into this chat")
 }

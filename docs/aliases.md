@@ -186,9 +186,25 @@ markup.
 **Another bot's message cannot be saved.** Telegram's own rule: *"Bots will not
 be able to see messages from other bots regardless of mode."* The reply arrives
 with its content stripped, so there is nothing to store and no setting that
-would change it. `/alias` says so specifically rather than implying the format
-was unsupported. Forwarding the message to yourself first and aliasing your own
-copy works.
+would change it.
+
+Every refusal for a message that could not be *read* — as opposed to one whose
+kind is unsupported — ends with the same advice, because it is the only thing
+that works: **forward it into the chat and reply to your copy.** A forwarded
+copy is a new message sent by a user, so it arrives intact. Three shapes reach
+that advice, and they are told apart deliberately:
+
+| What arrived | Answer |
+| --- | --- |
+| Reply from a sender marked as a bot | Telegram does not let bots read other bots' messages |
+| Reply with a message id but no content field at all | That message reached me with no content |
+| No reply attached at all | Reply to the message you want to save — and if you did, Telegram did not pass it along |
+
+The middle case exists because the sender is not always marked: an anonymous or
+service-posted message can arrive equally empty. None of the three lists the
+supported kinds, which would blame the format of a message the bot was never
+shown — it may well have been a photo. Only a reply that *did* arrive with
+content of a kind the module refuses (a poll, a location) gets that list.
 
 **A `file_id` can stop working** — the original file was deleted, or Telegram
 rejects it. `/insert` answers with something actionable rather than a generic

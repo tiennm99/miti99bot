@@ -51,37 +51,26 @@ func replyShape(replied *models.Message, entry Alias, ok bool) []any {
 
 // populatedFields names the content fields the replied message actually has.
 //
-// Covers more than capture handles on purpose: the point is to show what
-// arrived, including kinds this module refuses, so "unsupported" can be told
-// apart from "empty".
+// Reads the same contentFields table hasContent tests, so the line always
+// explains the refusal the caller was given. The two provenance markers are
+// appended separately: they say where a message came from, not what it holds,
+// and a reply carrying only those is still empty.
 func populatedFields(m *models.Message) []string {
 	var out []string
-	add := func(present bool, name string) {
-		if present {
-			out = append(out, name)
+	for _, f := range contentFields {
+		if f.present(m) {
+			out = append(out, f.name)
 		}
 	}
-	add(m.Text != "", "text")
-	add(m.Caption != "", "caption")
-	add(m.Sticker != nil, "sticker")
-	add(len(m.Photo) > 0, "photo")
-	add(m.Animation != nil, "animation")
-	add(m.Video != nil, "video")
-	add(m.VideoNote != nil, "video_note")
-	add(m.Audio != nil, "audio")
-	add(m.Voice != nil, "voice")
-	add(m.Document != nil, "document")
-	add(m.Location != nil, "location")
-	add(m.Contact != nil, "contact")
-	add(m.Poll != nil, "poll")
-	add(m.Dice != nil, "dice")
-	add(m.Venue != nil, "venue")
-	add(m.Game != nil, "game")
-	add(m.ViaBot != nil, "via_bot")
-	add(m.ForwardOrigin != nil, "forward_origin")
 	if len(out) == 0 {
 		// The signature of a reply Telegram delivered but emptied.
 		out = append(out, "none")
+	}
+	if m.ViaBot != nil {
+		out = append(out, "via_bot")
+	}
+	if m.ForwardOrigin != nil {
+		out = append(out, "forward_origin")
 	}
 	return out
 }
