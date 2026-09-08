@@ -2,8 +2,9 @@ package alias
 
 import (
 	"context"
-	"sort"
+	"fmt"
 	"strings"
+	"time"
 
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
@@ -19,6 +20,17 @@ const (
 	// query. Kept short because the namespace is shared and writable: a name
 	// saved now should show up in the picker within seconds, not minutes.
 	inlineCacheSeconds = 5
+
+	// inlineTimeout bounds one answer, far tighter than the 10s handlerTimeout
+	// the command handlers use.
+	//
+	// An inline query has a shelf life: Telegram invalidates the id and rejects
+	// the answer as "query is too old". Every keystroke opens a new query, and
+	// updates are dispatched one at a time, so a single slow answer also holds
+	// up the queries queued behind it — which are themselves ageing while they
+	// wait. Giving up early loses one result set; running long loses the whole
+	// burst.
+	inlineTimeout = 3 * time.Second
 )
 
 // handleInline answers "@botname <prefix>" with the matching aliases.
@@ -32,51 +44,52 @@ func (s *state) handleInline(ctx context.Context, b *bot.Bot, update *models.Upd
 		return nil
 	}
 
-	names, err := s.store.List(ctx, "")
+	ctx, cancel := context.WithTimeout(ctx, inlineTimeout)
+	defer cancel()
+	started := time.Now()
+
+	// One round trip for names *and* values. Reading the names and then each
+	// alias would cost a round trip per saved name on every keystroke, which is
+	// exactly the latency an expiring query cannot absorb.
+	docs, err := s.store.Scan(ctx, "")
 	if err != nil {
-		log.Error("alias_inline_list", "err", err)
+		log.Error("alias_inline_scan", "err", err)
 		// Answer with nothing rather than leaving the client spinning. An empty
 		// answer is also what Telegram expects when a query has no matches.
-		return s.answer(ctx, b, query.ID, nil)
+		return s.answer(ctx, b, query.ID, nil, started)
 	}
 
+	// Scan returns key order, so the picker is sorted with no sort here.
 	prefix := strings.ToLower(strings.TrimSpace(query.Query))
-	matches := make([]string, 0, len(names))
-	for _, name := range names {
-		if prefix == "" || strings.HasPrefix(name, prefix) {
-			matches = append(matches, name)
-		}
-	}
-	sort.Strings(matches)
-	if len(matches) > maxInlineResults {
-		matches = matches[:maxInlineResults]
-	}
-
-	results := make([]models.InlineQueryResult, 0, len(matches))
-	for _, name := range matches {
-		entry, found, err := s.get(ctx, name)
-		if err != nil {
-			// One unreadable record must not blank the whole picker.
-			log.Error("alias_inline_get", "name", name, "err", err)
+	results := make([]models.InlineQueryResult, 0, min(len(docs), maxInlineResults))
+	for _, doc := range docs {
+		if prefix != "" && !strings.HasPrefix(doc.ID, prefix) {
 			continue
 		}
-		if !found {
-			continue // deleted between the List and this read
-		}
-		if r := inlineResult(name, entry); r != nil {
+		if r := inlineResult(doc.ID, doc.Val); r != nil {
 			results = append(results, r)
 		}
+		if len(results) == maxInlineResults {
+			break // Telegram's cap; the rest stay reachable by name
+		}
 	}
-	return s.answer(ctx, b, query.ID, results)
+	return s.answer(ctx, b, query.ID, results, started)
 }
 
-func (s *state) answer(ctx context.Context, b *bot.Bot, queryID string, results []models.InlineQueryResult) error {
+func (s *state) answer(ctx context.Context, b *bot.Bot, queryID string, results []models.InlineQueryResult, started time.Time) error {
 	_, err := b.AnswerInlineQuery(ctx, &bot.AnswerInlineQueryParams{
 		InlineQueryID: queryID,
 		Results:       results,
 		CacheTime:     inlineCacheSeconds,
 	})
-	return err
+	if err != nil {
+		// The elapsed time is the whole diagnosis when Telegram rejects the
+		// answer as stale: it separates "this handler was slow" from "the query
+		// was already old when it reached us".
+		return fmt.Errorf("answer %d results after %s: %w",
+			len(results), time.Since(started).Round(time.Millisecond), err)
+	}
+	return nil
 }
 
 // inlineResult maps one alias to the inline result type that carries it, or nil

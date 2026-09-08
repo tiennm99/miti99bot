@@ -181,3 +181,25 @@ func TestInline_CapsAtFiftyResults(t *testing.T) {
 func uniqueName(i int) string {
 	return "n" + strings.Repeat("x", i/10) + string(rune('a'+i%10))
 }
+
+// The cap counts results the picker can actually show. A kind with no cached
+// inline type must not consume a slot, or a handful of video notes would
+// shrink an otherwise full answer.
+func TestInline_VideoNotesDoNotConsumeCapSlots(t *testing.T) {
+	rb := installAlias(t)
+	for i := 0; i < 10; i++ {
+		rb.Bot.ProcessUpdate(context.Background(),
+			aliasCmd(uniqueName(i), &models.Message{VideoNote: &models.VideoNote{FileID: "note-id"}}))
+	}
+	for i := 10; i < 70; i++ {
+		rb.Bot.ProcessUpdate(context.Background(),
+			aliasCmd(uniqueName(i), &models.Message{Text: "x"}))
+	}
+
+	rb.Reset()
+	rb.Bot.ProcessUpdate(context.Background(), inlineQuery(7, ""))
+
+	if got := len(inlineResults(t, rb)); got != 50 {
+		t.Errorf("returned %d results, want the full 50 despite the skipped video notes", got)
+	}
+}
