@@ -96,7 +96,10 @@ func (s *state) handleAlias(ctx context.Context, b *bot.Bot, update *models.Upda
 		return chathelper.Reply(ctx, b, msg, usageAlias)
 	}
 	if msg.ReplyToMessage == nil {
-		return chathelper.Reply(ctx, b, msg, usageAlias)
+		// Not necessarily a caller who forgot to reply: Telegram also delivers
+		// /alias with the reply detached, and the two are indistinguishable
+		// here, so the answer has to cover both.
+		return chathelper.Reply(ctx, b, msg, noReplyRefusal)
 	}
 
 	// A real command always wins at dispatch, so an alias sharing its name
@@ -114,6 +117,12 @@ func (s *state) handleAlias(ctx context.Context, b *bot.Bot, update *models.Upda
 	if !ok {
 		if fromAnotherBot(msg.ReplyToMessage) {
 			return chathelper.Reply(ctx, b, msg, otherBotRefusal)
+		}
+		// Nothing arrived to judge. Listing the supported kinds here would
+		// blame the format of a message this bot was never shown — the reply
+		// may well have been a photo.
+		if !hasContent(msg.ReplyToMessage) {
+			return chathelper.Reply(ctx, b, msg, strippedReplyRefusal)
 		}
 		return chathelper.Reply(ctx, b, msg, unsupportedRefusal)
 	}
