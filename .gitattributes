@@ -1,0 +1,8 @@
+# Golden fixtures are compared byte-for-byte against generated output, which
+# always writes LF. Without this, a Windows checkout (core.autocrlf=true)
+# rewrites them to CRLF and the comparison fails on that machine only — the
+# test passes in CI and fails locally, for a difference nothing prints.
+#
+# Text extensions only: a forced text conversion would corrupt a binary
+# fixture, so new binary testdata must not be matched here.
+**/testdata/**.txt text eol=lf
