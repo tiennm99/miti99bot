@@ -1,0 +1,390 @@
+package blacklist_test
+
+import (
+	"context"
+	"strings"
+	"testing"
+
+	"github.com/go-telegram/bot/models"
+
+	"github.com/tiennm99/miti99bot/internal/modules"
+	"github.com/tiennm99/miti99bot/internal/modules/blacklist"
+	"github.com/tiennm99/miti99bot/internal/storage"
+	"github.com/tiennm99/miti99bot/internal/testutil"
+)
+
+// installBlacklist builds a registry holding only this module. Every command is
+// public, so no auth is needed for them to dispatch.
+func installBlacklist(t *testing.T) *testutil.RecordingBot {
+	t.Helper()
+	rb := testutil.NewRecordingBot(t)
+	reg, err := modules.Build([]string{"blacklist"},
+		map[string]modules.Factory{"blacklist": blacklist.New},
+		storage.NewMemoryProvider(), modules.BuildOptions{})
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	modules.Install(rb.Bot, reg, modules.Auth{})
+	return rb
+}
+
+// inTopic builds a supergroup message inside a forum topic.
+func inTopic(chatID int64, threadID int, text string) *models.Update {
+	upd := testutil.NewSupergroupMessage(chatID, 7, text)
+	upd.Message.MessageThreadID = threadID
+	upd.Message.IsTopicMessage = true
+	return upd
+}
+
+// send dispatches one command and returns the text of the reply it produced.
+func send(t *testing.T, rb *testutil.RecordingBot, upd *models.Update) string {
+	t.Helper()
+	rb.Reset()
+	rb.Bot.ProcessUpdate(context.Background(), upd)
+	sent := rb.Sent()
+	if len(sent) == 0 {
+		t.Fatalf("no reply to %q", upd.Message.Text)
+	}
+	return sent[len(sent)-1].Text()
+}
+
+func TestAdd_StoresAsTypedAndKeysNormalized(t *testing.T) {
+	rb := installBlacklist(t)
+
+	if got := send(t, rb, testutil.NewPrivateMessage(7, "/blacklist_add  Cat  Dog ")); !strings.Contains(got, "Added") {
+		t.Fatalf("add reply = %q", got)
+	}
+
+	// Matching is normalized, so a differently cased and spaced text hits it.
+	if got := send(t, rb, testutil.NewPrivateMessage(7, "/blacklist_check CAT   DOG")); !strings.Contains(got, "🚫") {
+		t.Fatalf("check reply = %q; want blocked", got)
+	}
+
+	// Listing shows what was typed, not the normalized form.
+	if got := send(t, rb, testutil.NewPrivateMessage(7, "/blacklist_rules")); !strings.Contains(got, "<code>Cat  Dog</code>") {
+		t.Fatalf("rules reply = %q; want the text as typed", got)
+	}
+}
+
+func TestThreadsAndChatsAreIsolated(t *testing.T) {
+	rb := installBlacklist(t)
+	send(t, rb, inTopic(-100, 11, "/blacklist_add cat"))
+
+	// A sibling topic of the same forum.
+	if got := send(t, rb, inTopic(-100, 12, "/blacklist_check cat")); strings.Contains(got, "🚫") {
+		t.Fatalf("topic 12 saw topic 11's entry: %q", got)
+	}
+	// A DM, which is its own scope entirely.
+	if got := send(t, rb, testutil.NewPrivateMessage(7, "/blacklist_check cat")); strings.Contains(got, "🚫") {
+		t.Fatalf("DM saw a group entry: %q", got)
+	}
+	// The original topic still has it.
+	if got := send(t, rb, inTopic(-100, 11, "/blacklist_check cat")); !strings.Contains(got, "🚫") {
+		t.Fatalf("topic 11 lost its own entry: %q", got)
+	}
+}
+
+func TestAdd_FromReply(t *testing.T) {
+	rb := installBlacklist(t)
+	upd := testutil.NewPrivateMessage(7, "/blacklist_add")
+	upd.Message.ReplyToMessage = &models.Message{Text: "xin chào"}
+
+	if got := send(t, rb, upd); !strings.Contains(got, "xin chào") {
+		t.Fatalf("add reply = %q; want the replied text", got)
+	}
+	if got := send(t, rb, testutil.NewPrivateMessage(7, "/blacklist_check Xin Chào")); !strings.Contains(got, "🚫") {
+		t.Fatalf("check reply = %q; want blocked", got)
+	}
+}
+
+func TestAdd_FromReplyCaption(t *testing.T) {
+	rb := installBlacklist(t)
+	upd := testutil.NewPrivateMessage(7, "/blacklist_add")
+	upd.Message.ReplyToMessage = &models.Message{Caption: "captioned"}
+
+	if got := send(t, rb, upd); !strings.Contains(got, "captioned") {
+		t.Fatalf("add reply = %q; want the caption stored", got)
+	}
+}
+
+func TestAdd_WithoutTextOrReplyIsUsage(t *testing.T) {
+	rb := installBlacklist(t)
+	got := send(t, rb, testutil.NewPrivateMessage(7, "/blacklist_add"))
+	if !strings.Contains(got, "Usage") || !strings.Contains(got, "reply") {
+		t.Fatalf("reply = %q; want usage mentioning the reply form", got)
+	}
+}
+
+func TestAdd_RefusesTooLongReply(t *testing.T) {
+	rb := installBlacklist(t)
+	upd := testutil.NewPrivateMessage(7, "/blacklist_add")
+	upd.Message.ReplyToMessage = &models.Message{Text: strings.Repeat("a", 4096)}
+
+	got := send(t, rb, upd)
+	if !strings.Contains(got, "too long") {
+		t.Fatalf("reply = %q; want a length refusal", got)
+	}
+	if rules := send(t, rb, testutil.NewPrivateMessage(7, "/blacklist_rules")); strings.Contains(rules, "aaa") {
+		t.Fatal("an over-long entry was stored anyway")
+	}
+}
+
+func TestAdd_DuplicateIsReportedNotDoubled(t *testing.T) {
+	rb := installBlacklist(t)
+	send(t, rb, testutil.NewPrivateMessage(7, "/blacklist_add cat"))
+
+	if got := send(t, rb, testutil.NewPrivateMessage(7, "/blacklist_add CAT")); !strings.Contains(got, "already") {
+		t.Fatalf("reply = %q; want an already-present notice", got)
+	}
+	if got := send(t, rb, testutil.NewPrivateMessage(7, "/blacklist_rules")); !strings.Contains(got, "<b>Blacklist</b> (1)") {
+		t.Fatalf("rules reply = %q; want exactly one entry", got)
+	}
+}
+
+func TestDel_RemovesAndReportsAbsence(t *testing.T) {
+	rb := installBlacklist(t)
+	send(t, rb, testutil.NewPrivateMessage(7, "/blacklist_add cat"))
+
+	if got := send(t, rb, testutil.NewPrivateMessage(7, "/blacklist_del CAT")); !strings.Contains(got, "Removed") {
+		t.Fatalf("reply = %q; want a removal", got)
+	}
+	if got := send(t, rb, testutil.NewPrivateMessage(7, "/blacklist_del cat")); !strings.Contains(got, "is not in") {
+		t.Fatalf("reply = %q; want an absence notice, not a removal", got)
+	}
+}
+
+// _del takes its text as an argument only, so a bare invocation is usage even
+// when it replies to something.
+func TestDel_DoesNotTakeTextFromAReply(t *testing.T) {
+	rb := installBlacklist(t)
+	send(t, rb, testutil.NewPrivateMessage(7, "/blacklist_add cat"))
+
+	upd := testutil.NewPrivateMessage(7, "/blacklist_del")
+	upd.Message.ReplyToMessage = &models.Message{Text: "cat"}
+	if got := send(t, rb, upd); !strings.Contains(got, "Usage") {
+		t.Fatalf("reply = %q; want usage", got)
+	}
+	if got := send(t, rb, testutil.NewPrivateMessage(7, "/blacklist_check cat")); !strings.Contains(got, "🚫") {
+		t.Fatal("the entry was removed via a reply")
+	}
+}
+
+func TestLists_AreSeparate(t *testing.T) {
+	rb := installBlacklist(t)
+	send(t, rb, testutil.NewPrivateMessage(7, "/whitelist_add exception"))
+
+	got := send(t, rb, testutil.NewPrivateMessage(7, "/blacklist_rules"))
+	if !strings.Contains(got, "<b>Blacklist</b> (0)") {
+		t.Fatalf("rules reply = %q; want an empty blacklist", got)
+	}
+	if !strings.Contains(got, "<b>Whitelist</b> (1)") {
+		t.Fatalf("rules reply = %q; want the whitelist entry", got)
+	}
+}
+
+func TestRules_EmptyShowsBothHeadings(t *testing.T) {
+	rb := installBlacklist(t)
+	got := send(t, rb, testutil.NewPrivateMessage(7, "/blacklist_rules"))
+	for _, want := range []string{"<b>Blacklist</b> (0)", "<b>Whitelist</b> (0)", "nothing yet"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("rules reply = %q; missing %q", got, want)
+		}
+	}
+}
+
+func TestRules_EscapesUserText(t *testing.T) {
+	rb := installBlacklist(t)
+	send(t, rb, testutil.NewPrivateMessage(7, "/blacklist_add <b>bold</b>"))
+
+	got := send(t, rb, testutil.NewPrivateMessage(7, "/blacklist_rules"))
+	if strings.Contains(got, "<b>bold</b>") {
+		t.Fatalf("rules reply = %q; user markup was not escaped", got)
+	}
+	if !strings.Contains(got, "&lt;b&gt;bold&lt;/b&gt;") {
+		t.Fatalf("rules reply = %q; want the escaped form", got)
+	}
+}
+
+func TestRules_TrimsToOneMessage(t *testing.T) {
+	rb := installBlacklist(t)
+	const entries = 400
+	for i := range entries {
+		send(t, rb, testutil.NewPrivateMessage(7,
+			"/blacklist_add "+strings.Repeat("x", 30)+string(rune('a'+i%26))+strings.Repeat("y", i%7)))
+	}
+
+	got := send(t, rb, testutil.NewPrivateMessage(7, "/blacklist_rules"))
+	if len([]rune(got)) > 4096 {
+		t.Fatalf("rules reply is %d characters, over Telegram's limit", len([]rune(got)))
+	}
+	if !strings.Contains(got, "more.") {
+		t.Fatalf("rules reply = %q; want a trim notice", got)
+	}
+	// Both headings survive a blacklist long enough to fill the message.
+	if !strings.Contains(got, "<b>Whitelist</b>") {
+		t.Fatal("the whitelist heading was trimmed away entirely")
+	}
+}
+
+// The case the containment rule exists for, end to end through the handlers.
+func TestCheck_WhitelistRescuesOnlyWhatItSpans(t *testing.T) {
+	rb := installBlacklist(t)
+	send(t, rb, testutil.NewPrivateMessage(7, "/blacklist_add ass"))
+	send(t, rb, testutil.NewPrivateMessage(7, "/whitelist_add assassin"))
+
+	tests := []struct {
+		text    string
+		blocked bool
+	}{
+		{text: "assassin", blocked: false},
+		{text: "dumbass", blocked: true},
+		{text: "I met an assassin, dumbass", blocked: true},
+		{text: "nothing here", blocked: false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.text, func(t *testing.T) {
+			got := send(t, rb, testutil.NewPrivateMessage(7, "/blacklist_check "+tc.text))
+			if blocked := strings.Contains(got, "🚫"); blocked != tc.blocked {
+				t.Fatalf("check %q = %q; want blocked=%v", tc.text, got, tc.blocked)
+			}
+		})
+	}
+}
+
+func TestCheck_NamesTheRescuingEntry(t *testing.T) {
+	rb := installBlacklist(t)
+	send(t, rb, testutil.NewPrivateMessage(7, "/blacklist_add ass"))
+	send(t, rb, testutil.NewPrivateMessage(7, "/whitelist_add assassin"))
+
+	got := send(t, rb, testutil.NewPrivateMessage(7, "/blacklist_check assassin"))
+	if !strings.Contains(got, "<code>ass</code>") || !strings.Contains(got, "<code>assassin</code>") {
+		t.Fatalf("check reply = %q; want both entries named", got)
+	}
+}
+
+func TestCheck_EmptyListsAllowEverything(t *testing.T) {
+	rb := installBlacklist(t)
+	if got := send(t, rb, testutil.NewPrivateMessage(7, "/blacklist_check anything")); !strings.Contains(got, "✅") {
+		t.Fatalf("check reply = %q; want allowed", got)
+	}
+}
+
+func TestCheck_WithoutTextIsUsage(t *testing.T) {
+	rb := installBlacklist(t)
+	if got := send(t, rb, testutil.NewPrivateMessage(7, "/blacklist_check")); !strings.Contains(got, "Usage") {
+		t.Fatalf("check reply = %q; want usage", got)
+	}
+}
+
+// Diacritics are significant by design: "ma" and "má" are separate entries.
+func TestCheck_DiacriticsAreSignificant(t *testing.T) {
+	rb := installBlacklist(t)
+	send(t, rb, testutil.NewPrivateMessage(7, "/blacklist_add ma"))
+
+	if got := send(t, rb, testutil.NewPrivateMessage(7, "/blacklist_check má")); strings.Contains(got, "🚫") {
+		t.Fatalf("check reply = %q; \"má\" must not match the entry \"ma\"", got)
+	}
+	if got := send(t, rb, testutil.NewPrivateMessage(7, "/blacklist_check MA")); !strings.Contains(got, "🚫") {
+		t.Fatalf("check reply = %q; case must still fold", got)
+	}
+}
+
+// An entry containing the characters that cannot appear literally in a storage
+// key must survive the round trip through the store.
+func TestEntry_WithKeyHazardsRoundTrips(t *testing.T) {
+	rb := installBlacklist(t)
+	const hazard = "50%2F/off"
+	send(t, rb, testutil.NewPrivateMessage(7, "/blacklist_add "+hazard))
+
+	if got := send(t, rb, testutil.NewPrivateMessage(7, "/blacklist_rules")); !strings.Contains(got, hazard) {
+		t.Fatalf("rules reply = %q; want %q intact", got, hazard)
+	}
+	if got := send(t, rb, testutil.NewPrivateMessage(7, "/blacklist_check "+hazard)); !strings.Contains(got, "🚫") {
+		t.Fatalf("check reply = %q; want blocked", got)
+	}
+	if got := send(t, rb, testutil.NewPrivateMessage(7, "/blacklist_del "+hazard)); !strings.Contains(got, "Removed") {
+		t.Fatalf("del reply = %q; want a removal", got)
+	}
+}
+
+// Replies use parse_mode HTML, so every site that echoes user text must escape
+// it. These pin the three sites outside /blacklist_rules.
+func TestAddAndDel_EscapeUserText(t *testing.T) {
+	rb := installBlacklist(t)
+
+	add := send(t, rb, testutil.NewPrivateMessage(7, "/blacklist_add <b>bold</b>"))
+	if strings.Contains(add, "<b>bold</b>") || !strings.Contains(add, "&lt;b&gt;bold&lt;/b&gt;") {
+		t.Fatalf("add reply = %q; want the markup escaped", add)
+	}
+
+	dup := send(t, rb, testutil.NewPrivateMessage(7, "/blacklist_add <b>bold</b>"))
+	if strings.Contains(dup, "<b>bold</b>") {
+		t.Fatalf("duplicate reply = %q; want the markup escaped", dup)
+	}
+
+	del := send(t, rb, testutil.NewPrivateMessage(7, "/blacklist_del <b>bold</b>"))
+	if strings.Contains(del, "<b>bold</b>") || !strings.Contains(del, "&lt;b&gt;bold&lt;/b&gt;") {
+		t.Fatalf("del reply = %q; want the markup escaped", del)
+	}
+
+	absent := send(t, rb, testutil.NewPrivateMessage(7, "/blacklist_del <b>bold</b>"))
+	if strings.Contains(absent, "<b>bold</b>") {
+		t.Fatalf("absence reply = %q; want the markup escaped", absent)
+	}
+}
+
+func TestCheck_EscapesEntryNames(t *testing.T) {
+	rb := installBlacklist(t)
+	send(t, rb, testutil.NewPrivateMessage(7, "/blacklist_add <b>"))
+
+	blocked := send(t, rb, testutil.NewPrivateMessage(7, "/blacklist_check x<b>y"))
+	if strings.Contains(blocked, "<code><b></code>") || !strings.Contains(blocked, "&lt;b&gt;") {
+		t.Fatalf("blocked verdict = %q; want the entry escaped", blocked)
+	}
+
+	// The rescued branch names two entries; both must be escaped.
+	send(t, rb, testutil.NewPrivateMessage(7, "/whitelist_add x<b>y"))
+	rescued := send(t, rb, testutil.NewPrivateMessage(7, "/blacklist_check x<b>y"))
+	if !strings.Contains(rescued, "✅") {
+		t.Fatalf("verdict = %q; want the rescued branch", rescued)
+	}
+	if strings.Contains(rescued, "<code><b></code>") || strings.Contains(rescued, "<code>x<b>y</code>") {
+		t.Fatalf("rescued verdict = %q; want both entries escaped", rescued)
+	}
+}
+
+// NFKC can expand as easily as it can contract, so the byte cap has to be
+// applied to the normalized text as well as to what the user typed. These ten
+// runes are 30 bytes as sent and 330 once normalized.
+func TestAdd_RefusesTextThatExpandsPastTheCap(t *testing.T) {
+	rb := installBlacklist(t)
+	raw := strings.Repeat("ﷺ", 10)
+
+	if got := send(t, rb, testutil.NewPrivateMessage(7, "/blacklist_add "+raw)); !strings.Contains(got, "too long") {
+		t.Fatalf("reply = %q; want a length refusal", got)
+	}
+	if got := send(t, rb, testutil.NewPrivateMessage(7, "/blacklist_rules")); !strings.Contains(got, "<b>Blacklist</b> (0)") {
+		t.Fatalf("rules reply = %q; the over-long entry was stored anyway", got)
+	}
+}
+
+// Telegram sets a thread id for reply chains in ordinary supergroups too, not
+// only for forum topics. Those must fall back to the chat-wide list, or text
+// added by replying would land somewhere a plain /blacklist_rules cannot read.
+func TestReplyChainThreadIsNotATopic(t *testing.T) {
+	rb := installBlacklist(t)
+
+	// A reply in a non-forum supergroup: thread id set, IsTopicMessage false.
+	add := testutil.NewSupergroupMessage(-100, 7, "/blacklist_add")
+	add.Message.MessageThreadID = 4242
+	add.Message.ReplyToMessage = &models.Message{Text: "cat"}
+	send(t, rb, add)
+
+	// A later command with no thread id at all must still see it.
+	if got := send(t, rb, testutil.NewSupergroupMessage(-100, 7, "/blacklist_check cat")); !strings.Contains(got, "🚫") {
+		t.Fatalf("check reply = %q; a reply-chain add was stored out of reach", got)
+	}
+	if got := send(t, rb, testutil.NewSupergroupMessage(-100, 7, "/blacklist_rules")); !strings.Contains(got, "<code>cat</code>") {
+		t.Fatalf("rules reply = %q; want the entry listed", got)
+	}
+}

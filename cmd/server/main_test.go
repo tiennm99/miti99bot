@@ -128,3 +128,34 @@ func TestFactoriesIncludesExpectedModules(t *testing.T) {
 		}
 	}
 }
+
+func TestFactoriesRegistersBlacklistCommands(t *testing.T) {
+	catalog := factories()
+	if catalog["blacklist"] == nil {
+		t.Fatal("factories missing blacklist")
+	}
+	reg, err := modules.Build([]string{"blacklist"}, catalog, storage.NewMemoryProvider(), modules.BuildOptions{})
+	if err != nil {
+		t.Fatalf("Build blacklist: %v", err)
+	}
+	for _, name := range []string{
+		"blacklist_add", "blacklist_del", "blacklist_rules", "blacklist_check",
+		"whitelist_add", "whitelist_del",
+	} {
+		if _, ok := reg.AllCommands[name]; !ok {
+			t.Fatalf("missing command %s", name)
+		}
+	}
+	if got := len(reg.AllCommands); got != 6 {
+		t.Fatalf("blacklist registered %d commands, want 6", got)
+	}
+}
+
+// An empty MODULES loads every module, so a command name that collides with an
+// existing module surfaces here as a test failure rather than as a startup
+// crash on deploy.
+func TestFactoriesBuildWholeCatalog(t *testing.T) {
+	if _, err := modules.Build(nil, factories(), storage.NewMemoryProvider(), modules.BuildOptions{}); err != nil {
+		t.Fatalf("Build whole catalog: %v", err)
+	}
+}

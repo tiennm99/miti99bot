@@ -19,6 +19,7 @@ Atlas via long polling and an in-process cron scheduler.
 | `stats` | `/stats` (top commands), `/stats users`, `/stats user <username>`, `/stats cmd <command_name>` |
 | `sticker` | `/addsticker` — append a replied sticker, image, video or GIF to one shared pack. See [docs/sticker-packs.md](docs/sticker-packs.md) |
 | `alias` | `/alias <name>` save a replied message under a name, then send it back with `/insert <name>`, bare `/<name>`, or inline `@botname <prefix>`; `/aliases` lists, `/unalias` deletes. See [docs/aliases.md](docs/aliases.md) |
+| `blacklist` | Per-topic text deny-list with whitelist exceptions: `/blacklist_add`, `/blacklist_del`, `/whitelist_add`, `/whitelist_del`, `/blacklist_rules` lists both, `/blacklist_check` judges a text. Passive — the bot never scans chat. See [docs/blacklist.md](docs/blacklist.md) |
 | `monkeyd` | `/monkeyd_crawl <url> [font_size]` export a monkeydd.com novel as a PDF, `/monkeyd_tags <url>` list its tags as hashtags |
 
 Disable modules with the `MODULES` environment variable.
