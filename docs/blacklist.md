@@ -5,14 +5,23 @@ exceptions, then ask whether a given text is blocked.
 
 | Command | Parameters | What it does |
 |---|---|---|
+| `/blacklist` | `[text...]` | Bare, lists both lists; with text, judges it |
 | `/blacklist_add` | `[text...]` | Adds text to the blacklist, or the message you replied to |
 | `/blacklist_del` | `<text...>` | Removes text from the blacklist |
 | `/whitelist_add` | `[text...]` | Adds an exception, or the message you replied to |
 | `/whitelist_del` | `<text...>` | Removes an exception |
 | `/blacklist_rules` | — | Lists both lists in one message |
 | `/blacklist_check` | `<text...>` | Judges a text against both lists |
+| `/whitelist_rnd` | — | Returns one whitelist entry at random |
 
 All are public and single-shot.
+
+`/blacklist` is the short form of the two read commands: on its own it does what
+`/blacklist_rules` does, and given text it does what `/blacklist_check` does. Nothing is
+lost by using it — the long names remain for when the intent should be explicit.
+
+`/whitelist_rnd` returns a single whitelist entry chosen at random, and says so plainly when
+the whitelist is empty rather than answering with nothing.
 
 ## The bot does not police the chat
 
