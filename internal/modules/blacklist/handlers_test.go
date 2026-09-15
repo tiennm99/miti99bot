@@ -2,6 +2,7 @@ package blacklist_test
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -210,7 +211,7 @@ func TestRules_TrimsToOneMessage(t *testing.T) {
 	const entries = 400
 	for i := range entries {
 		send(t, rb, testutil.NewPrivateMessage(7,
-			"/blacklist_add "+strings.Repeat("x", 30)+string(rune('a'+i%26))+strings.Repeat("y", i%7)))
+			fmt.Sprintf("/blacklist_add %s%03d", strings.Repeat("x", 30), i)))
 	}
 
 	got := send(t, rb, testutil.NewPrivateMessage(7, "/blacklist_rules"))
@@ -386,5 +387,75 @@ func TestReplyChainThreadIsNotATopic(t *testing.T) {
 	}
 	if got := send(t, rb, testutil.NewSupergroupMessage(-100, 7, "/blacklist_rules")); !strings.Contains(got, "<code>cat</code>") {
 		t.Fatalf("rules reply = %q; want the entry listed", got)
+	}
+}
+
+// A mutation answers with the current contents of the list it changed, so the
+// sender never has to follow it with /blacklist_rules.
+func TestAddAndDel_ShowTheChangedList(t *testing.T) {
+	rb := installBlacklist(t)
+
+	first := send(t, rb, testutil.NewPrivateMessage(7, "/blacklist_add cat"))
+	if !strings.Contains(first, "<b>Blacklist</b> (1)") || !strings.Contains(first, "<code>cat</code>") {
+		t.Fatalf("add reply = %q; want the list appended", first)
+	}
+
+	second := send(t, rb, testutil.NewPrivateMessage(7, "/blacklist_add dog"))
+	if !strings.Contains(second, "<b>Blacklist</b> (2)") {
+		t.Fatalf("add reply = %q; want both entries counted", second)
+	}
+	if !strings.Contains(second, "<code>cat</code>") || !strings.Contains(second, "<code>dog</code>") {
+		t.Fatalf("add reply = %q; want the whole list, not just the new entry", second)
+	}
+
+	removed := send(t, rb, testutil.NewPrivateMessage(7, "/blacklist_del cat"))
+	if !strings.Contains(removed, "<b>Blacklist</b> (1)") {
+		t.Fatalf("del reply = %q; want the list after removal", removed)
+	}
+	// Only the listing may be checked for absence: the confirmation line above
+	// it echoes the removed text by design.
+	_, listing, _ := strings.Cut(removed, "<b>Blacklist</b>")
+	if strings.Contains(listing, "<code>cat</code>") {
+		t.Fatalf("del reply = %q; the removed entry is still listed", removed)
+	}
+	if !strings.Contains(listing, "<code>dog</code>") {
+		t.Fatalf("del reply = %q; want the surviving entry listed", removed)
+	}
+
+	empty := send(t, rb, testutil.NewPrivateMessage(7, "/blacklist_del dog"))
+	if !strings.Contains(empty, "<b>Blacklist</b> (0)") || !strings.Contains(empty, "nothing yet") {
+		t.Fatalf("del reply = %q; want an empty list shown", empty)
+	}
+}
+
+// Each list answers with itself: a whitelist change shows the whitelist, not
+// the blacklist.
+func TestWhitelistMutation_ShowsOnlyTheWhitelist(t *testing.T) {
+	rb := installBlacklist(t)
+	send(t, rb, testutil.NewPrivateMessage(7, "/blacklist_add cat"))
+
+	got := send(t, rb, testutil.NewPrivateMessage(7, "/whitelist_add exception"))
+	if !strings.Contains(got, "<b>Whitelist</b> (1)") {
+		t.Fatalf("whitelist add reply = %q; want the whitelist", got)
+	}
+	if strings.Contains(got, "<b>Blacklist</b>") {
+		t.Fatalf("whitelist add reply = %q; want only the changed list", got)
+	}
+}
+
+// The confirmation shares the list's byte budget, so a long list cannot push
+// the combined reply past Telegram's limit.
+func TestAdd_ReplyStaysWithinOneMessage(t *testing.T) {
+	rb := installBlacklist(t)
+	var last string
+	for i := range 400 {
+		last = send(t, rb, testutil.NewPrivateMessage(7,
+			fmt.Sprintf("/blacklist_add %s%03d", strings.Repeat("x", 30), i)))
+	}
+	if n := len([]rune(last)); n > 4096 {
+		t.Fatalf("add reply is %d characters, over Telegram's limit", n)
+	}
+	if !strings.Contains(last, "more.") {
+		t.Fatalf("add reply = %q; want a trim notice", last)
 	}
 }
