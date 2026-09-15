@@ -459,3 +459,95 @@ func TestAdd_ReplyStaysWithinOneMessage(t *testing.T) {
 		t.Fatalf("add reply = %q; want a trim notice", last)
 	}
 }
+
+// /blacklist is the whole module behind one name: bare it lists, with an
+// argument it checks.
+func TestShortCommand_ListsWhenBareAndChecksWithText(t *testing.T) {
+	rb := installBlacklist(t)
+	send(t, rb, testutil.NewPrivateMessage(7, "/blacklist_add cat"))
+
+	bare := send(t, rb, testutil.NewPrivateMessage(7, "/blacklist"))
+	rules := send(t, rb, testutil.NewPrivateMessage(7, "/blacklist_rules"))
+	if bare != rules {
+		t.Fatalf("/blacklist = %q; want the same as /blacklist_rules = %q", bare, rules)
+	}
+
+	hit := send(t, rb, testutil.NewPrivateMessage(7, "/blacklist cat"))
+	check := send(t, rb, testutil.NewPrivateMessage(7, "/blacklist_check cat"))
+	if hit != check {
+		t.Fatalf("/blacklist cat = %q; want the same as /blacklist_check cat = %q", hit, check)
+	}
+	if !strings.Contains(hit, "🚫") {
+		t.Fatalf("/blacklist cat = %q; want blocked", hit)
+	}
+}
+
+// Whitespace alone is not an argument, so it still lists rather than checking.
+func TestShortCommand_BlankArgumentStillLists(t *testing.T) {
+	rb := installBlacklist(t)
+	if got := send(t, rb, testutil.NewPrivateMessage(7, "/blacklist    ")); !strings.Contains(got, "<b>Blacklist</b>") {
+		t.Fatalf("/blacklist with blank argument = %q; want the listing", got)
+	}
+}
+
+func TestWhitelistRandom_RefusesAnEmptyList(t *testing.T) {
+	rb := installBlacklist(t)
+	// A populated blacklist must not make the whitelist look non-empty.
+	send(t, rb, testutil.NewPrivateMessage(7, "/blacklist_add cat"))
+
+	got := send(t, rb, testutil.NewPrivateMessage(7, "/whitelist_rnd"))
+	if !strings.Contains(got, "empty") {
+		t.Fatalf("/whitelist_rnd = %q; want an empty-list message", got)
+	}
+}
+
+func TestWhitelistRandom_PicksFromTheWhitelistOnly(t *testing.T) {
+	rb := installBlacklist(t)
+	send(t, rb, testutil.NewPrivateMessage(7, "/blacklist_add nope"))
+	entries := []string{"alpha", "beta", "gamma"}
+	for _, e := range entries {
+		send(t, rb, testutil.NewPrivateMessage(7, "/whitelist_add "+e))
+	}
+
+	seen := map[string]bool{}
+	for range 30 {
+		got := send(t, rb, testutil.NewPrivateMessage(7, "/whitelist_rnd"))
+		if strings.Contains(got, "nope") {
+			t.Fatalf("/whitelist_rnd = %q; picked from the blacklist", got)
+		}
+		match := ""
+		for _, e := range entries {
+			if strings.Contains(got, "<code>"+e+"</code>") {
+				match = e
+			}
+		}
+		if match == "" {
+			t.Fatalf("/whitelist_rnd = %q; want one of %v", got, entries)
+		}
+		seen[match] = true
+	}
+	// Three entries over thirty draws: landing on one every time would mean the
+	// pick is not random at all.
+	if len(seen) < 2 {
+		t.Fatalf("30 draws returned only %v", seen)
+	}
+}
+
+func TestWhitelistRandom_IsPerTopic(t *testing.T) {
+	rb := installBlacklist(t)
+	send(t, rb, inTopic(-100, 11, "/whitelist_add alpha"))
+
+	if got := send(t, rb, inTopic(-100, 12, "/whitelist_rnd")); !strings.Contains(got, "empty") {
+		t.Fatalf("/whitelist_rnd in a sibling topic = %q; want an empty-list message", got)
+	}
+}
+
+func TestWhitelistRandom_EscapesUserText(t *testing.T) {
+	rb := installBlacklist(t)
+	send(t, rb, testutil.NewPrivateMessage(7, "/whitelist_add <b>bold</b>"))
+
+	got := send(t, rb, testutil.NewPrivateMessage(7, "/whitelist_rnd"))
+	if strings.Contains(got, "<b>bold</b>") || !strings.Contains(got, "&lt;b&gt;bold&lt;/b&gt;") {
+		t.Fatalf("/whitelist_rnd = %q; want the markup escaped", got)
+	}
+}

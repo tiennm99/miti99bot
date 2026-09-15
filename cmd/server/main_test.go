@@ -139,15 +139,15 @@ func TestFactoriesRegistersBlacklistCommands(t *testing.T) {
 		t.Fatalf("Build blacklist: %v", err)
 	}
 	for _, name := range []string{
-		"blacklist_add", "blacklist_del", "blacklist_rules", "blacklist_check",
-		"whitelist_add", "whitelist_del",
+		"blacklist", "blacklist_add", "blacklist_del", "blacklist_rules",
+		"blacklist_check", "whitelist_add", "whitelist_del", "whitelist_rnd",
 	} {
 		if _, ok := reg.AllCommands[name]; !ok {
 			t.Fatalf("missing command %s", name)
 		}
 	}
-	if got := len(reg.AllCommands); got != 6 {
-		t.Fatalf("blacklist registered %d commands, want 6", got)
+	if got := len(reg.AllCommands); got != 8 {
+		t.Fatalf("blacklist registered %d commands, want 8", got)
 	}
 }
 

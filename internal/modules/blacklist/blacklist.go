@@ -46,45 +46,60 @@ func New(deps modules.Deps) modules.Module {
 	return modules.Module{
 		Commands: []modules.Command{
 			{
+				// The whole module behind one short name: bare it lists, with
+				// an argument it checks.
+				Name:        "blacklist",
+				Visibility:  modules.VisibilityPublic,
+				Description: "Check a text, or list both",
+				Parameters:  "[text...]",
+				Handler:     s.handleShort,
+			},
+			{
 				Name:        "blacklist_add",
 				Visibility:  modules.VisibilityPublic,
-				Description: "Blacklist a text, or a message you reply to",
+				Description: "Blacklist a text or a reply",
 				Parameters:  "[text...]",
 				Handler:     s.handleAdd(listBlack),
 			},
 			{
 				Name:        "blacklist_del",
 				Visibility:  modules.VisibilityPublic,
-				Description: "Remove a text from the blacklist",
+				Description: "Remove from the blacklist",
 				Parameters:  "<text...>",
 				Handler:     s.handleDel(listBlack),
 			},
 			{
 				Name:        "whitelist_add",
 				Visibility:  modules.VisibilityPublic,
-				Description: "Whitelist a text, or a message you reply to",
+				Description: "Whitelist a text or a reply",
 				Parameters:  "[text...]",
 				Handler:     s.handleAdd(listWhite),
 			},
 			{
 				Name:        "whitelist_del",
 				Visibility:  modules.VisibilityPublic,
-				Description: "Remove a text from the whitelist",
+				Description: "Remove from the whitelist",
 				Parameters:  "<text...>",
 				Handler:     s.handleDel(listWhite),
 			},
 			{
 				Name:        "blacklist_rules",
 				Visibility:  modules.VisibilityPublic,
-				Description: "List both lists for this topic",
+				Description: "List both lists here",
 				Handler:     s.handleRules,
 			},
 			{
 				Name:        "blacklist_check",
 				Visibility:  modules.VisibilityPublic,
-				Description: "Check if a text is blacklisted here",
+				Description: "Check if a text is blacklisted",
 				Parameters:  "<text...>",
 				Handler:     s.handleCheck,
+			},
+			{
+				Name:        "whitelist_rnd",
+				Visibility:  modules.VisibilityPublic,
+				Description: "Random whitelist entry",
+				Handler:     s.handleWhitelistRandom,
 			},
 		},
 	}

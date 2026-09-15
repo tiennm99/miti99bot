@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"html"
+	"math/rand/v2"
 	"sort"
 	"strings"
 	"time"
@@ -291,9 +292,6 @@ func (s *state) entriesFor(ctx context.Context, chatID int64, threadID int, list
 }
 
 // handleCheck judges a text against this thread's rules.
-//
-// Unlike the mutation commands this applies no length cap: judging a long
-// message is the point, and nothing here becomes a storage key.
 func (s *state) handleCheck(ctx context.Context, b *bot.Bot, update *models.Update) error {
 	ctx, cancel := context.WithTimeout(ctx, handlerTimeout)
 	defer cancel()
@@ -307,7 +305,36 @@ func (s *state) handleCheck(ctx context.Context, b *bot.Bot, update *models.Upda
 	if !ok {
 		return chathelper.Reply(ctx, b, msg, "Usage: /blacklist_check <text...>")
 	}
+	return s.checkText(ctx, b, msg, normText)
+}
 
+// handleShort is /blacklist: the whole module behind one short name. Bare it
+// lists both lists, with an argument it judges that text.
+//
+// The two behaviours are the two questions someone actually has — "what is set
+// up here?" and "is this blocked?" — and neither needs its own long name once
+// the argument distinguishes them.
+func (s *state) handleShort(ctx context.Context, b *bot.Bot, update *models.Update) error {
+	ctx, cancel := context.WithTimeout(ctx, handlerTimeout)
+	defer cancel()
+
+	msg := update.Message
+	if msg == nil {
+		return nil
+	}
+
+	normText, ok := Normalize(chathelper.ArgAfterCommand(msg.Text))
+	if !ok {
+		return s.showRules(ctx, b, msg)
+	}
+	return s.checkText(ctx, b, msg, normText)
+}
+
+// checkText answers the verdict for already-normalized text.
+//
+// Unlike the mutation commands this applies no length cap: judging a long
+// message is the point, and nothing here becomes a storage key.
+func (s *state) checkText(ctx context.Context, b *bot.Bot, msg *models.Message, normText string) error {
 	chatID, threadID := threadOf(msg)
 	black, err := s.entriesFor(ctx, chatID, threadID, listBlack)
 	if err != nil {
@@ -350,7 +377,11 @@ func (s *state) handleRules(ctx context.Context, b *bot.Bot, update *models.Upda
 	if msg == nil {
 		return nil
 	}
+	return s.showRules(ctx, b, msg)
+}
 
+// showRules renders both lists for the message's thread.
+func (s *state) showRules(ctx context.Context, b *bot.Bot, msg *models.Message) error {
 	chatID, threadID := threadOf(msg)
 	blackPrefix := scopePrefix(chatID, threadID, listBlack)
 	whitePrefix := scopePrefix(chatID, threadID, listWhite)
@@ -412,4 +443,36 @@ func renderSection(sb *strings.Builder, list, prefix string, docs []storage.Doc[
 		}
 		sb.WriteString(line)
 	}
+}
+
+// handleWhitelistRandom picks one whitelist entry at random.
+func (s *state) handleWhitelistRandom(ctx context.Context, b *bot.Bot, update *models.Update) error {
+	ctx, cancel := context.WithTimeout(ctx, handlerTimeout)
+	defer cancel()
+
+	msg := update.Message
+	if msg == nil {
+		return nil
+	}
+
+	chatID, threadID := threadOf(msg)
+	prefix := scopePrefix(chatID, threadID, listWhite)
+	docs, err := s.store.Scan(ctx, prefix)
+	if err != nil {
+		log.Error("blacklist_rnd_scan", "list", listWhite, "err", err)
+		return chathelper.Reply(ctx, b, msg, genericFailure)
+	}
+	if len(docs) == 0 {
+		return chathelper.Reply(ctx, b, msg,
+			"This topic's whitelist is empty. Add something with /whitelist_add first.")
+	}
+
+	pick := docs[rand.IntN(len(docs))]
+	// The record carries what the adder typed; the key carries only the
+	// normalized form, which is the fallback if a record ever lacks text.
+	text := pick.Val.Text
+	if text == "" {
+		text = decodeKeyText(strings.TrimPrefix(pick.ID, prefix))
+	}
+	return chathelper.ReplyHTML(ctx, b, msg, "<code>"+html.EscapeString(text)+"</code>")
 }
