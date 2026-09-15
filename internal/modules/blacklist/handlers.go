@@ -147,6 +147,33 @@ func (s *state) get(ctx context.Context, key string) (Entry, bool, error) {
 	return entry, true, nil
 }
 
+// replyWithList answers an add or a remove with its confirmation followed by
+// the current contents of the list, so the sender sees the result of what they
+// just did without running /blacklist_rules.
+//
+// Every outcome of those four commands ends here, including the two that change
+// nothing: "already present" and "not there" are exactly when someone wants to
+// see what the list actually holds, and "every add and remove shows the list"
+// is a simpler rule to rely on than one conditional on whether a write landed.
+//
+// The confirmation goes into the builder first, so renderSection's byte budget
+// already accounts for it and the combined message still fits one reply.
+//
+// A failed read here is logged but not reported: the change itself succeeded,
+// and answering a completed write with a generic failure would be a lie.
+func (s *state) replyWithList(ctx context.Context, b *bot.Bot, msg *models.Message, list, prefix, confirmation string) error {
+	var sb strings.Builder
+	sb.WriteString(confirmation)
+
+	docs, err := s.store.Scan(ctx, prefix)
+	if err != nil {
+		log.Error("blacklist_mutation_scan", "list", list, "err", err)
+		return chathelper.ReplyHTML(ctx, b, msg, sb.String())
+	}
+	renderSection(&sb, list, prefix, docs)
+	return chathelper.ReplyHTML(ctx, b, msg, sb.String())
+}
+
 // handleAdd stores text in one of the thread's two lists.
 func (s *state) handleAdd(list string) modules.CommandHandler {
 	command := listName(list) + "_add"
@@ -165,6 +192,7 @@ func (s *state) handleAdd(list string) modules.CommandHandler {
 		}
 
 		chatID, threadID := threadOf(msg)
+		prefix := scopePrefix(chatID, threadID, list)
 		key := entryKey(chatID, threadID, list, normText)
 
 		// Read before writing purely to word the reply. The write is
@@ -176,7 +204,7 @@ func (s *state) handleAdd(list string) modules.CommandHandler {
 			return chathelper.Reply(ctx, b, msg, genericFailure)
 		}
 		if found {
-			return chathelper.ReplyHTML(ctx, b, msg, fmt.Sprintf(
+			return s.replyWithList(ctx, b, msg, list, prefix, fmt.Sprintf(
 				"<code>%s</code> is already in this topic's %s.",
 				html.EscapeString(existing.Text), listName(list)))
 		}
@@ -189,7 +217,7 @@ func (s *state) handleAdd(list string) modules.CommandHandler {
 			log.Error("blacklist_add", "list", list, "err", err)
 			return chathelper.Reply(ctx, b, msg, genericFailure)
 		}
-		return chathelper.ReplyHTML(ctx, b, msg, fmt.Sprintf(
+		return s.replyWithList(ctx, b, msg, list, prefix, fmt.Sprintf(
 			"Added <code>%s</code> to this topic's %s.",
 			html.EscapeString(raw), listName(list)))
 	}
@@ -217,6 +245,7 @@ func (s *state) handleDel(list string) modules.CommandHandler {
 		}
 
 		chatID, threadID := threadOf(msg)
+		prefix := scopePrefix(chatID, threadID, list)
 		key := entryKey(chatID, threadID, list, normText)
 
 		// Read first so absent text is reported as such. Delete on a missing
@@ -227,7 +256,7 @@ func (s *state) handleDel(list string) modules.CommandHandler {
 			log.Error("blacklist_del_lookup", "list", list, "err", err)
 			return chathelper.Reply(ctx, b, msg, genericFailure)
 		} else if !found {
-			return chathelper.ReplyHTML(ctx, b, msg, fmt.Sprintf(
+			return s.replyWithList(ctx, b, msg, list, prefix, fmt.Sprintf(
 				"<code>%s</code> is not in this topic's %s.",
 				html.EscapeString(raw), listName(list)))
 		}
@@ -236,7 +265,7 @@ func (s *state) handleDel(list string) modules.CommandHandler {
 			log.Error("blacklist_del", "list", list, "err", err)
 			return chathelper.Reply(ctx, b, msg, genericFailure)
 		}
-		return chathelper.ReplyHTML(ctx, b, msg, fmt.Sprintf(
+		return s.replyWithList(ctx, b, msg, list, prefix, fmt.Sprintf(
 			"Removed <code>%s</code> from this topic's %s.",
 			html.EscapeString(raw), listName(list)))
 	}

@@ -77,6 +77,13 @@ Matching is by substring, after the text is normalized:
 
 ## Listing
 
+Every `/blacklist_add`, `/blacklist_del`, `/whitelist_add` and `/whitelist_del` answers with
+the current contents of the list it touched, so you see the result without running anything
+else. That includes the two outcomes that change nothing — text already present, or text that
+was not there to remove — since those are exactly the moments you want to see what the list
+actually holds. A whitelist command shows the whitelist; a blacklist command shows the
+blacklist.
+
 `/blacklist_rules` prints both lists in one message, each with its entry count,
 showing entries as they were typed rather than in the normalized form. Each
 entry is tappable to copy, ready to paste into a `_del` command.
