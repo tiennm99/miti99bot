@@ -20,6 +20,7 @@ import (
 	"github.com/tiennm99/miti99bot/internal/modules"
 	"github.com/tiennm99/miti99bot/internal/modules/alias"
 	"github.com/tiennm99/miti99bot/internal/modules/amlich"
+	"github.com/tiennm99/miti99bot/internal/modules/blacklist"
 	"github.com/tiennm99/miti99bot/internal/modules/coin"
 	"github.com/tiennm99/miti99bot/internal/modules/gold"
 	"github.com/tiennm99/miti99bot/internal/modules/lol"
@@ -95,6 +96,7 @@ func factories() map[string]modules.Factory {
 		"stats":                stats.New,
 		sticker.CollectionName: sticker.New,
 		"alias":                alias.New,
+		"blacklist":            blacklist.New,
 	}
 }
 
