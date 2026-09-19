@@ -10,8 +10,10 @@ services:
       RENDER_TIMEOUT_MS: "${RENDER_TIMEOUT_MS:-15000}"
       MAX_OPTIONS: "${MAX_OPTIONS:-32}"
       MAX_OPTION_CHARS: "${MAX_OPTION_CHARS:-40}"
-    ports:
-      - "${PORT:-3000}:${PORT:-3000}"
+    # Coolify routes to the container port over its proxy network, so the host
+    # port stays unpublished there. Uncomment for a standalone `docker compose up`.
+    # ports:
+    #   - "${PORT:-3000}:${PORT:-3000}"
     healthcheck:
       test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:${PORT:-3000}/api/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
       interval: 30s
