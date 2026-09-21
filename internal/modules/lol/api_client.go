@@ -77,8 +77,6 @@ var leagueSlugMap = map[string]string{
 	"league-of-legends-first-stand":         "first_stand",
 	"league-of-legends-esports-world-cup":   "ewc_lol",
 	"league-of-legends-lcp":                 "lcp",
-	"league-of-legends-cblol-brazil":        "cblol-brazil",
-	"league-of-legends-emea-masters":        "emea_masters",
 }
 
 // canonicalLeagueSlug maps a PandaScore slug to the module's canonical slug,

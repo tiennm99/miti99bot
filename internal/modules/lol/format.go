@@ -20,25 +20,21 @@ var leagueOrder = []string{
 	"lec",
 	"lcs",
 	"lcp",
-	"cblol-brazil",
-	"emea_masters",
 }
 
 // majorLeagueSlugs filters the upstream schedule down to the headline
 // tournaments most viewers care about. Without this filter the API
 // returns 135+ events/week and replies blow past Telegram's 4096-char limit.
 var majorLeagueSlugs = map[string]bool{
-	"lck":          true,
-	"lpl":          true,
-	"lec":          true,
-	"lcs":          true,
-	"worlds":       true,
-	"msi":          true,
-	"first_stand":  true,
-	"ewc_lol":      true,
-	"lcp":          true,
-	"cblol-brazil": true,
-	"emea_masters": true,
+	"lck":         true,
+	"lpl":         true,
+	"lec":         true,
+	"lcs":         true,
+	"worlds":      true,
+	"msi":         true,
+	"first_stand": true,
+	"ewc_lol":     true,
+	"lcp":         true,
 }
 
 // FilterMajor keeps only events whose league slug is in the major-league
