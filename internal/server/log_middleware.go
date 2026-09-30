@@ -21,7 +21,16 @@ func (r *statusRecorder) WriteHeader(code int) {
 	r.ResponseWriter.WriteHeader(code)
 }
 
-// status returns the recorded status code, defaulting to 200 when no
+// Write records the implicit 200 net/http sends on a first body write, so a
+// zero status means nothing has reached the client yet.
+func (r *statusRecorder) Write(b []byte) (int, error) {
+	if r.status == 0 {
+		r.status = http.StatusOK
+	}
+	return r.ResponseWriter.Write(b)
+}
+
+// effectiveStatus returns the recorded status code, defaulting to 200 when no
 // explicit WriteHeader was called (Go's net/http implicitly writes 200 on
 // the first body write).
 func (r *statusRecorder) effectiveStatus() int {
@@ -46,7 +55,13 @@ func LogRequests(next http.Handler) http.Handler {
 		start := time.Now()
 		rec := &statusRecorder{ResponseWriter: w}
 		defer func() {
-			rec.status = recoverPanicStatus(recover(), rec.status)
+			p := recover()
+			if p != nil && rec.status == 0 {
+				// Nothing was written yet, so the client can still get a real 500
+				// instead of net/http's implicit empty 200.
+				http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+			}
+			rec.status = recoverPanicStatus(p, rec.status)
 			log.Info("req",
 				"method", r.Method,
 				"path", r.URL.Path,
@@ -63,9 +78,8 @@ func LogRequests(next http.Handler) http.Handler {
 // untouched. The panic is logged with its stack and absorbed, not re-raised,
 // so the deferred req line always runs.
 //
-// Re-panicking would lose the deferred log line in some recover-order edge
-// cases; absorbing the panic here matches the webhook handler's posture of
-// "log the failure, keep the goroutine clean".
+// It writes no response itself; LogRequests sends the 500 when the handler
+// panicked before writing anything.
 func recoverPanicStatus(rec any, currentStatus int) int {
 	if rec == nil {
 		return currentStatus

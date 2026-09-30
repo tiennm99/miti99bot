@@ -101,3 +101,21 @@ func TestLogRequests_PreservesInnerBehavior(t *testing.T) {
 		t.Errorf("body = %q, want 'brewing'", rec.Body.String())
 	}
 }
+
+func TestLogRequests_PanicBeforeWriteReturns500(t *testing.T) {
+	buf, restore := captureLogger(t)
+	defer restore()
+
+	inner := http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		panic("boom")
+	})
+	rec := httptest.NewRecorder()
+	LogRequests(inner).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Errorf("client status = %d, want 500", rec.Code)
+	}
+	if got := decodeReqLine(t, buf); got["status"].(float64) != float64(http.StatusInternalServerError) {
+		t.Errorf("logged status = %v, want 500", got["status"])
+	}
+}
