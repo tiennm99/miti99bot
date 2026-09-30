@@ -40,8 +40,9 @@ var ErrInvalidModuleName = errors.New("storage: invalid module name")
 //   - PutVersioned writes only if the stored version equals expectedVersion,
 //     then bumps it. expectedVersion == 0 means "create (or adopt a not-yet-
 //     versioned key)". A mismatch returns ErrConflict.
-//   - List returns the keys under a prefix; Scan returns those keys with their
-//     values, ordered by key ascending.
+//   - List returns the keys under a prefix, ordered by key ascending.
+//   - Scan returns the keys under a prefix with their values, ordered by key
+//     ascending.
 type DocStore[T any] interface {
 	Get(ctx context.Context, id string) (val T, version int64, err error)
 	Put(ctx context.Context, id string, val T) error

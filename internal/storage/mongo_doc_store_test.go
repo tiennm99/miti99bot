@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -233,5 +234,27 @@ func TestMongoDocStore_ScanReturnsPayloadsInKeyOrder(t *testing.T) {
 	all, err := store.Scan(ctx, "")
 	if err != nil || len(all) != 3 {
 		t.Fatalf("Scan all = %d docs, err %v", len(all), err)
+	}
+}
+
+// List returns keys in key order, like the memory store, so callers behave the
+// same on both backends. Insertion order is deliberately reversed here.
+func TestMongoDocStore_ListReturnsKeysInKeyOrder(t *testing.T) {
+	store, _, cleanup := mongoStore[portfolioLike](t, "coin")
+	defer cleanup()
+	ctx := context.Background()
+
+	for _, key := range []string{"user:3", "user:1", "other", "user:2"} {
+		if err := store.Put(ctx, key, portfolioLike{}); err != nil {
+			t.Fatalf("Put %s: %v", key, err)
+		}
+	}
+
+	keys, err := store.List(ctx, "user:")
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if want := []string{"user:1", "user:2", "user:3"}; !slices.Equal(keys, want) {
+		t.Errorf("List = %v, want %v", keys, want)
 	}
 }

@@ -153,7 +153,8 @@ func (s *mongoDocStore[T]) Delete(ctx context.Context, id string) error {
 
 // List returns all document IDs whose key starts with prefix, via a half-open
 // range scan on _id (reusing prefixSuccessor) so it uses the _id index and
-// avoids regex injection. Empty prefix returns the whole collection.
+// avoids regex injection. Keys come back sorted by _id, matching the memory
+// store. Empty prefix returns the whole collection.
 func (s *mongoDocStore[T]) List(ctx context.Context, prefix string) ([]string, error) {
 	if err := validatePrefix(prefix); err != nil {
 		return nil, err
@@ -162,7 +163,9 @@ func (s *mongoDocStore[T]) List(ctx context.Context, prefix string) ([]string, e
 	if prefix != "" {
 		filter[mongoIDField] = bson.M{"$gte": prefix, "$lt": prefixSuccessor(prefix)}
 	}
-	cur, err := s.coll.Find(ctx, filter, options.Find().SetProjection(bson.M{mongoIDField: 1}))
+	cur, err := s.coll.Find(ctx, filter, options.Find().
+		SetProjection(bson.M{mongoIDField: 1}).
+		SetSort(bson.D{{Key: mongoIDField, Value: 1}}))
 	if err != nil {
 		return nil, fmt.Errorf("mongo list %s prefix=%q: %w", s.module, prefix, err)
 	}
