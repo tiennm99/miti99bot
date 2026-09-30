@@ -66,10 +66,9 @@ func TestFormatEventLine_Completed_BoldsWinner(t *testing.T) {
 	}
 }
 
-// Upstream flips state to "completed" when the broadcast window closes, but
-// fills gameWins/outcome from a separate per-game ingestion path. In the gap it
-// sends {"outcome": null, "gameWins": 0} for both teams — a shape that must not
-// be reported as a real 0–0 draw.
+// Upstream can mark a series finished before committing a winner. In that gap
+// both teams carry a Result with no outcome and zero gameWins — a shape that
+// must not be reported as a real 0–0 draw.
 func TestFormatEventLine_CompletedWithoutResults_OmitsScore(t *testing.T) {
 	pending := &TeamResult{} // json `{"outcome": null, "gameWins": 0}`
 	e := ScheduleEvent{

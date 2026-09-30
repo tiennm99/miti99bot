@@ -6,6 +6,8 @@ import (
 	"strings"
 )
 
+// FormatUSD renders n as "$1,234.56" (a leading "-" for negatives), or
+// "invalid USD" for NaN and infinities.
 func FormatUSD(n float64) string {
 	if math.IsNaN(n) || math.IsInf(n, 0) {
 		return "invalid USD"
@@ -59,6 +61,8 @@ func formatCompactUSD(n float64) string {
 	return sign + amount + suffixes[suffixIndex]
 }
 
+// FormatCoinQty renders a coin quantity with up to eight decimals and no
+// trailing zeros.
 func FormatCoinQty(n float64) string {
 	s := strconv.FormatFloat(n, 'f', 8, 64)
 	s = strings.TrimRight(s, "0")
@@ -69,6 +73,9 @@ func FormatCoinQty(n float64) string {
 	return s
 }
 
+// FormatPnLUSD renders the gain of currentValue over invested as a signed
+// amount plus percentage, e.g. "+$12.00 (+1.20%)". The percentage is 0 when
+// nothing was invested.
 func FormatPnLUSD(currentValue, invested float64) string {
 	return formatPnLUSD(currentValue, invested, FormatUSD)
 }

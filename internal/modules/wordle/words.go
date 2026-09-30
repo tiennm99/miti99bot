@@ -12,8 +12,8 @@ import (
 var rawWords string
 
 // loadWords parses the embedded list into a slice plus a membership set. Both
-// outputs share the same backing strings, so memory is roughly the dict size
-// (≈90 KiB) — well under the binary-size budget.
+// outputs share the same backing strings, so the word bytes (≈90 KiB) are
+// held once rather than duplicated.
 //
 // Words are validated to be exactly WordLength a-z; any malformed line panics
 // at startup so a bad regen of the data file is caught immediately, not on

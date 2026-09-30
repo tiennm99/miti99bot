@@ -1,7 +1,6 @@
-// Package chathelper consolidates per-module Telegram helpers (SubjectFor,
-// ArgAfterCommand, NowMillis, Reply, ReplyHTML, WinRate) that would
-// otherwise be duplicated across every module. Single source here; modules
-// import.
+// Package chathelper holds the small Telegram helpers shared by every module:
+// state scoping (SubjectFor), argument parsing, topic-preserving replies and
+// edits, fetch-deadline budgeting, and text formatting.
 package chathelper
 
 import (
@@ -91,19 +90,22 @@ func ArgAfterCommand(text string) string {
 // NowMillis returns current UTC ms-since-epoch.
 func NowMillis() int64 { return time.Now().UTC().UnixMilli() }
 
-// replyReserve is the slice of the handler's deadline kept aside for delivering
-// the Telegram reply. The whole update handler runs under one bounded context
-// (see internal/telegram/webhook.go); if upstream price fetches consume all of
-// it, the final SendMessage fails with "context deadline exceeded" and the user
-// sees no response. Reserving a fixed tail guarantees delivery headroom.
+// replyReserve is the slice of a caller's deadline kept aside for delivering
+// the Telegram reply. When the context carries a deadline (for example a
+// cron's per-fire timeout) and upstream fetches consume all of it, the final
+// SendMessage fails with "context deadline exceeded" and the user sees no
+// response; reserving a fixed tail keeps delivery headroom. Update handlers
+// under long polling currently receive a context with no deadline, so there
+// is nothing to reserve on that path.
 const replyReserve = 3 * time.Second
 
 // FetchContext derives a child of ctx for upstream data fetches, leaving
 // replyReserve of the parent's deadline for the subsequent Reply (which must be
-// called with the original ctx, not this child). If ctx has no deadline, or
-// less than replyReserve remains, the child gets a small positive floor so a
-// fetch still attempts rather than failing instantly. Callers must call the
-// returned cancel.
+// called with the original ctx, not this child). If ctx has no deadline, the
+// child is a plain cancelable context with no deadline of its own — the usual
+// case for update handlers today. If less than replyReserve (plus a second)
+// remains, the child gets a one-second floor so a fetch still attempts rather
+// than failing instantly. Callers must call the returned cancel.
 func FetchContext(ctx context.Context) (context.Context, context.CancelFunc) {
 	dl, ok := ctx.Deadline()
 	if !ok {

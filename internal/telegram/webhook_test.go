@@ -27,7 +27,7 @@ func TestDeleteWebhookAt_OK(t *testing.T) {
 
 func TestDeleteWebhookAt_EmptyBody(t *testing.T) {
 	// Reproduces the failing environment: 200 with an empty body. Must surface
-	// as an error so the caller retries / warns rather than assuming success.
+	// as an error so the caller warns rather than assuming success.
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK) // no body
 	}))

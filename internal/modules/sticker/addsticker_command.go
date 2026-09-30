@@ -50,8 +50,7 @@ type stickerSource struct {
 // Every caller writes to the same shared pack, named by STICKER_PACK_NAME. The
 // caller's own identity is not used anywhere: AddStickerToSet takes the *set
 // owner's* user ID, so there is nothing per-user to store, key, or lock, and
-// no ownership to check. That is what lets this live in util as one stateless
-// command rather than as a module.
+// no ownership to check. That is what keeps the command stateless.
 //
 // The resolver is built here and captured by the handler so the bot's username
 // is fetched at most once per process rather than once per invocation.

@@ -1,3 +1,6 @@
+// Package gold is an SJC gold paper-trading module: users top up a virtual VND
+// balance and buy or sell gold by the lượng at live SJC quotes from VNAppMob,
+// buying at the SJC sell price and selling at the SJC buy price.
 package gold
 
 import (
@@ -5,7 +8,7 @@ import (
 )
 
 // New is the gold paper-trading module factory. It keeps its portfolio state
-// separate from the stock module.
+// separate from the stock and coin modules.
 func New(deps modules.Deps) modules.Module {
 	s := newState(deps.Store)
 	return modules.Module{

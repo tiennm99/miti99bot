@@ -1,3 +1,14 @@
+// Package stock is a paper-trading module for Vietnamese stocks. Each Telegram
+// user gets a virtual VND account: /stock_topup adds cash, /stock_buy and
+// /stock_sell trade at the current market price, and /stock_portfolio shows
+// positions with P&L. Prices come from KBS, then VCI, then SSI iBoard (see
+// PriceClient); /stock_info and /stock_events read SSI directly.
+//
+// Each portfolio is one document keyed "user:<id>" in the module's collection
+// (MongoDB or in-memory). It also retains recent SSI dividend events:
+// /stock_portfolio syncs them for held tickers and offers each one that is due
+// behind an inline "Apply dividend" button, while /stock_cash_dividend and
+// /stock_share_dividend record a dividend manually.
 package stock
 
 import (
@@ -5,7 +16,8 @@ import (
 	"github.com/tiennm99/miti99bot/internal/storage"
 )
 
-// New is the stock module Factory. Nine user-facing commands.
+// New is the stock module Factory. It registers nine public commands plus the
+// callback handler behind the "Apply dividend" button.
 func New(deps modules.Deps) modules.Module {
 	s := newState(
 		storage.Typed[Portfolio](deps.Store),

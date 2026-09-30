@@ -10,18 +10,26 @@ import (
 	"github.com/tiennm99/miti99bot/internal/storage"
 )
 
+// goldDustEpsilon is the tolerance below which balances and quantities are
+// treated as zero, absorbing float rounding left over by trades.
 const goldDustEpsilon = 1e-9
+
+// portfolioUpdateAttempts bounds optimistic-write retries in UpdatePortfolio.
 const portfolioUpdateAttempts = 5
 
 // PortfolioStore is the gold module's typed portfolio store.
 type PortfolioStore = storage.DocStore[Portfolio]
 
+// Portfolio is one user's gold account: a VND cash balance and gold held in
+// lượng.
 type Portfolio struct {
 	VND   float64       `json:"vnd" bson:"vnd"`
 	Luong float64       `json:"luong" bson:"luong"`
 	Meta  PortfolioMeta `json:"meta" bson:"meta"`
 }
 
+// PortfolioMeta holds account-level totals: Invested is the sum of all VND
+// top-ups and CreatedAt is ms since epoch.
 type PortfolioMeta struct {
 	Invested  float64 `json:"invested" bson:"invested"`
 	CreatedAt int64   `json:"createdAt" bson:"createdAt"`
@@ -51,6 +59,9 @@ func SavePortfolio(ctx context.Context, store PortfolioStore, userID int64, p Po
 	return nil
 }
 
+// UpdatePortfolio loads the user's portfolio, applies mutate, and writes it
+// back with a versioned put, retrying on write conflicts. An error returned by
+// mutate aborts without saving and is passed through unwrapped.
 func UpdatePortfolio(ctx context.Context, store PortfolioStore, userID int64, now int64, mutate func(*Portfolio) error) (Portfolio, error) {
 	key := portfolioKey(userID)
 	for attempt := 0; attempt < portfolioUpdateAttempts; attempt++ {

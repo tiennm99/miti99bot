@@ -135,7 +135,7 @@ func TestGetEventsWithFallback_StaleFallback(t *testing.T) {
 	staleEvents := []ScheduleEvent{
 		{StartTime: "2026-05-09T05:00:00Z", League: League{Slug: "lck", Name: "LCK"}},
 	}
-	// 10 minutes ago — past the 120s fresh window but well inside 60-min stale.
+	// 10 minutes ago — well inside the 60-minute stale window.
 	staleTs := time.Now().UTC().Add(-10 * time.Minute).UnixMilli()
 	if err := cache.Put(context.Background(), cacheKey(from, to), cacheRecord{Ts: staleTs, Events: staleEvents}); err != nil {
 		t.Fatal(err)

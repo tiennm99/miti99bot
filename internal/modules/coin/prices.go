@@ -21,8 +21,10 @@ const (
 	coinPriceCacheTTL = 30 * time.Second
 )
 
+// ErrNoCoinPrice reports that no provider returned a usable price.
 var ErrNoCoinPrice = errors.New("coin: no price available")
 
+// CoinPrice is a USD quote for Symbol and the provider name it came from.
 type CoinPrice struct {
 	Symbol string
 	USD    float64
@@ -33,6 +35,8 @@ type PriceProvider interface {
 	FetchUSD(ctx context.Context, coin CoinSymbol) (CoinPrice, error)
 }
 
+// PriceClient tries each provider in order and returns the first positive
+// quote, caching it per symbol for CacheTTL (no caching when CacheTTL <= 0).
 type PriceClient struct {
 	Providers []PriceProvider
 	CacheTTL  time.Duration
@@ -47,6 +51,8 @@ type cachedPrice struct {
 	expiry time.Time
 }
 
+// NewPriceClient builds the production client: Binance, then Coinbase, then
+// CoinGecko, sharing one HTTP client and a 30-second cache.
 func NewPriceClient() *PriceClient {
 	httpClient := &http.Client{Timeout: coinHTTPTimeout}
 	return &PriceClient{

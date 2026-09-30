@@ -42,7 +42,7 @@ func TestParseEmoji(t *testing.T) {
 	}
 }
 
-// A stray word must fail loudly. With no pack argument left on /addsticker,
+// A stray word must fail loudly. /addsticker takes no argument but emoji, so
 // there is nothing else an argument could have meant.
 func TestParseEmoji_RejectsPlainText(t *testing.T) {
 	for _, arg := range []string{"mypack", "hello 😂", "a"} {
@@ -74,9 +74,10 @@ func TestParseEmoji_RefusalIsUserFacing(t *testing.T) {
 }
 
 // TestParseEmoji_ClusterEdgeCases pins the emoji-clustering rules that a
-// hand-rolled segmenter gets wrong. Every case here failed before the
-// clustering fix: the first group was refused outright, the second silently
-// produced an emoji_list Telegram rejects.
+// hand-rolled segmenter gets wrong. Most cases broke an earlier version: it
+// refused or mis-split the accepted group, and let the refused group through
+// as an emoji_list Telegram rejects. Sequences that already worked sit
+// alongside so a fix cannot regress them.
 func TestParseEmoji_ClusterEdgeCases(t *testing.T) {
 	accepted := []struct {
 		name string

@@ -23,8 +23,8 @@ const testNovelURL = "https://monkeydd.com/tro-lai-nam-thang-cu.html"
 // behind the registered command, so tests can substitute its exporter and run
 // the export synchronously instead of on a detached goroutine.
 //
-// ownerID is permitted, which /monkeyd_crawl requires: the command is
-// Protected, and the dispatcher drops unauthorized calls silently.
+// ownerID becomes the bot owner. Both commands are public, so it grants no
+// extra access; the public-access tests below rely on a non-owner sender.
 func install(t *testing.T, ownerID int64) (*testutil.RecordingBot, *runner) {
 	t.Helper()
 	return installWith(t, ownerID, func(context.Context, string) ([]string, error) {

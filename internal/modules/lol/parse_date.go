@@ -59,8 +59,8 @@ func addDays(date time.Time, days int) time.Time {
 }
 
 // splitParts breaks the trimmed input into [dd, mm?, yyyy?] string parts.
-// Accepts dash- or slash-separated values, or a 1/2/4/8-digit unbroken
-// run (today, this-month, this-year, full ddmmyyyy).
+// Accepts dash- or slash-separated values, or an unbroken digit run: 1-2
+// digits (dd, current month), 4 (ddmm, current year), or 8 (ddmmyyyy).
 func splitParts(trimmed string) ([]string, string) {
 	if strings.ContainsAny(trimmed, "-/") {
 		// Replace both delimiters with a single one, then split.

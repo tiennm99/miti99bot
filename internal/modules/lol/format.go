@@ -23,8 +23,8 @@ var leagueOrder = []string{
 }
 
 // majorLeagueSlugs filters the upstream schedule down to the headline
-// tournaments most viewers care about. Without this filter the API
-// returns 135+ events/week and replies blow past Telegram's 4096-char limit.
+// tournaments most viewers care about. Without this filter PandaScore returns
+// ~270 matches/week and replies blow past Telegram's 4096-char limit.
 var majorLeagueSlugs = map[string]bool{
 	"lck":         true,
 	"lpl":         true,
@@ -81,9 +81,9 @@ func teamLabel(t Team) string {
 }
 
 // declaredOutcome returns a team's upstream-declared series outcome ("win" or
-// "loss"), or "" when upstream has not published one. Two distinct upstream
-// shapes collapse to "": a missing `result` object, and the far more common
-// `{"outcome": null, "gameWins": 0}`.
+// "loss"), or "" when upstream has not published one. Two shapes collapse to
+// "": a nil Result, and the far more common Result with no Outcome that
+// toScheduleEvent builds until PandaScore commits a winner.
 func declaredOutcome(t Team) string {
 	if t.Result == nil {
 		return ""

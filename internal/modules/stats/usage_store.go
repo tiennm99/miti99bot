@@ -48,6 +48,8 @@ func newUsageStore(coll storage.Collection) usageStore {
 	return &docUsageStore{docs: storage.Typed[usageEntry](coll)}
 }
 
+// usageKey names a usage row: the bare command for the anonymous bucket (a
+// sender without a public username), or "<cmd>:<userID>" for a per-user row.
 func usageKey(cmd string, userID int64) string {
 	if userID == 0 {
 		return cmd
@@ -55,6 +57,11 @@ func usageKey(cmd string, userID int64) string {
 	return cmd + ":" + strconv.FormatInt(userID, 10)
 }
 
+// docUsageStore implements usageStore over a plain DocStore, for the in-memory
+// provider. Every aggregate reads the whole collection, which is fine at the
+// sizes that backend sees. mu serialises the read-modify-write in Increment,
+// since Put is unconditional and two concurrent increments would otherwise
+// lose one.
 type docUsageStore struct {
 	mu   sync.Mutex
 	docs storage.DocStore[usageEntry]
@@ -242,6 +249,8 @@ func (s *docUsageStore) loadEntriesLocked(ctx context.Context) ([]usageEntry, er
 	return entries, nil
 }
 
+// mongoUsageStore implements usageStore with native MongoDB updates and
+// aggregations, backed by the indexes ensureUsageIndexes creates.
 type mongoUsageStore struct {
 	coll *mongo.Collection
 }
@@ -337,6 +346,8 @@ func (s *mongoUsageStore) TopUsers(ctx context.Context, limit int) ([]row, error
 			bsonField("user", bson.D{bsonField("$type", "string"), bsonField("$ne", "")}),
 			bsonField("deleted", bson.D{bsonField("$ne", true)}),
 		})},
+		// Newest row first, so $first labels each user with their most recent
+		// username.
 		bson.D{bsonField("$sort", bson.D{bsonField("updatedAt", -1)})},
 		bson.D{bsonField("$group", bson.D{
 			bsonField("_id", "$uid"),
@@ -464,6 +475,9 @@ func (s *mongoUsageStore) userIDByUsername(ctx context.Context, username string)
 	return doc.UserID, true, nil
 }
 
+// isRetiredCommand reports whether cmd has been removed from the bot. Its rows
+// are never incremented or shown, even ones written before the migration
+// marked them deleted.
 func isRetiredCommand(cmd string) bool {
 	return cmd == deletedStockDividendCommand
 }

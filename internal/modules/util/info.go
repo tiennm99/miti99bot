@@ -20,7 +20,7 @@ func infoCommand() modules.Command {
 		// routing IDs — chat id, thread id, sender id. Useful for admins
 		// debugging group/topic routing; not something every group member
 		// should be able to enumerate. Non-admins see no response at all
-		// (Visibility denies are silent — see dispatcher.go:31).
+		// (Visibility denies are silent — see modules.Auth.Permits).
 		Visibility:  modules.VisibilityProtected,
 		Description: "Show chat id, thread id, and sender id (debug helper)",
 		Handler: func(ctx context.Context, b *bot.Bot, update *models.Update) error {

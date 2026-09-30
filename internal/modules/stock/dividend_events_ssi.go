@@ -32,8 +32,8 @@ var ssiProviderIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
 // public endpoint. It is isolated behind DividendEventProvider because SSI does
 // not publish a compatibility or availability guarantee for this endpoint.
 type SSIDividendProvider struct {
-	HTTP    *http.Client
-	BaseURL string
+	HTTP    *http.Client // Optional; nil uses a shared client with ssiDividendTimeout.
+	BaseURL string       // Optional SSI iBoard API base override.
 
 	defaultOnce   sync.Once
 	defaultClient *http.Client
@@ -108,8 +108,9 @@ func (p *SSIDividendProvider) endpoint() string {
 }
 
 // FetchDividendEvents returns only validated cash dividends and explicitly
-// described share dividends. SSI is queried with a one-calendar-day overlap in
-// Asia/Saigon, then results are filtered by publication time to (after, through].
+// described share dividends, sorted by publication time. SSI filters by
+// calendar day, so the query and the result both keep a one-day overlap before
+// after (from the start of the previous Asia/Saigon day) and end at through.
 func (p *SSIDividendProvider) FetchDividendEvents(ctx context.Context, symbol string, after, through time.Time) ([]DividendEvent, error) {
 	symbol, from, to, err := prepareSSIEventFetch(
 		symbol,
@@ -251,6 +252,9 @@ func (p *SSIDividendProvider) copyStockEvent(raw ssiDividendEvent, requestedSymb
 	}, true
 }
 
+// ssiStockEventCursor picks the timestamp /stock_events filters and sorts by:
+// publicDate when present, otherwise the first parseable ex-right, record, or
+// issue date.
 func ssiStockEventCursor(raw ssiDividendEvent) (time.Time, bool) {
 	if strings.TrimSpace(raw.PublicDate) != "" {
 		return parseSSIDate(raw.PublicDate)
@@ -340,9 +344,10 @@ func (p *SSIDividendProvider) normalizeEvent(raw ssiDividendEvent, requestedSymb
 	return event, true
 }
 
-// SSI normally supplies publicDate, the correct cursor timestamp. Older rows
-// can omit it, so ex-right, record, then issue/payment date are used as a
-// deterministic fallback. Any supplied but malformed date invalidates the row.
+// parseSSIDividendDates parses an SSI row's dates. SSI normally supplies
+// publicDate, which becomes PublishedAt. Older rows can omit it, so ex-right,
+// record, then issue/payment date are used as a deterministic fallback. Any
+// supplied but malformed date invalidates the row.
 func parseSSIDividendDates(raw ssiDividendEvent) (publishedAt, exDate, recordDate, paymentDate time.Time, ok bool) {
 	var valid bool
 	if exDate, valid = parseSSIOptionalDate(raw.ExrightDate); !valid {
@@ -397,6 +402,8 @@ func positiveWholeNumber(value string) (int64, bool) {
 	return ratio.Num().Int64(), true
 }
 
+// exactShareRatio reads SSI's ratio as new shares per owned share and returns
+// it as an exact owned:new pair in lowest terms, e.g. "0.13" -> 100:13.
 func exactShareRatio(value string) (owned, newShares int64, ok bool) {
 	ratio, parsed := new(big.Rat).SetString(strings.TrimSpace(value))
 	if !parsed || ratio.Sign() <= 0 || !ratio.Num().IsInt64() || !ratio.Denom().IsInt64() {

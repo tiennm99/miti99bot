@@ -290,8 +290,8 @@ func TestCheck_DiacriticsAreSignificant(t *testing.T) {
 	}
 }
 
-// An entry containing the characters that cannot appear literally in a storage
-// key must survive the round trip through the store.
+// An entry containing '/' (which cannot appear literally in a storage key) and
+// '%' (the escape marker) must survive the round trip through the store.
 func TestEntry_WithKeyHazardsRoundTrips(t *testing.T) {
 	rb := installBlacklist(t)
 	const hazard = "50%2F/off"
@@ -309,7 +309,8 @@ func TestEntry_WithKeyHazardsRoundTrips(t *testing.T) {
 }
 
 // Replies use parse_mode HTML, so every site that echoes user text must escape
-// it. These pin the three sites outside /blacklist_rules.
+// it. These pin the four add and remove confirmations: added, already present,
+// removed, and not there.
 func TestAddAndDel_EscapeUserText(t *testing.T) {
 	rb := installBlacklist(t)
 

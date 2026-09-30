@@ -14,8 +14,8 @@ const (
 	attrYear  AttrType = "year"
 )
 
-// Result categories. handlers/render rely on these literals via the marker
-// maps, so renaming a constant requires updating those maps in lockstep.
+// Result categories stored in AttributeRow.Result. render.go's markerFor
+// maps each one to its on-screen marker; an unknown value renders as wrong.
 const (
 	ResultCorrect = "correct"
 	ResultPartial = "partial"
@@ -24,8 +24,8 @@ const (
 
 // AttributeRow describes one attribute's comparison output as one row of
 // the render board: key/label identify the row, type drives the comparison
-// algorithm, result is the rendered marker, direction is set only for
-// wrong year-type rows ("up"/"down").
+// algorithm, result is the category that render maps to a marker, direction
+// is set only for wrong year-type rows ("up"/"down").
 type AttributeRow struct {
 	Key         string
 	Label       string
@@ -206,13 +206,12 @@ func yearOrPlaceholder(y int) string {
 	if y == 0 {
 		return "?"
 	}
-	// strconv would pull in another import; for a 4-digit positive int the
-	// Sprintf path is fine and zero-allocs after warmup.
 	return fmtYear(y)
 }
 
+// fmtYear renders y as exactly four digits, zero-padded. Manual base-10
+// keeps strconv out of this file; parseYear never yields more than 4 digits.
 func fmtYear(y int) string {
-	// Manual base-10 to avoid strconv import; year is always 4 digits here.
 	return string([]byte{
 		byte('0' + (y/1000)%10),
 		byte('0' + (y/100)%10),

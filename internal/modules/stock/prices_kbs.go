@@ -21,6 +21,8 @@ type kbsQuote struct {
 	Price  float64 `json:"CP"`
 }
 
+// kbsFallbackEnabled reports whether FetchPrice and FetchPrices try KBS: always
+// in the default order, and only with an explicit KBSURL once SSI goes first.
 func (c *PriceClient) kbsFallbackEnabled() bool {
 	return strings.TrimSpace(c.KBSURL) != "" || !c.ssiFirst()
 }

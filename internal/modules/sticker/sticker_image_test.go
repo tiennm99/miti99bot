@@ -66,7 +66,7 @@ func TestToStickerPNG_Geometry(t *testing.T) {
 // An extreme aspect ratio must not round the short edge down to zero, which
 // would produce an invalid image rather than an error.
 //
-// 1x4000 rather than the plan's 1x5000: 5000 is past maxDecodeDimension, so
+// 1x4000 rather than 1x5000: 5000 is past maxDecodeDimension, so
 // that case never reaches the scaler at all — it is rejected by the guard
 // below. The clamp still needs exercising, and this is the most extreme ratio
 // that actually gets there (512/4000 rounds to 0 before clamping).

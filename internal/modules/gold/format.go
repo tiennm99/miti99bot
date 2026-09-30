@@ -6,6 +6,9 @@ import (
 	"strings"
 )
 
+// FormatVND rounds n to whole dong and renders it with dot thousands
+// separators, e.g. "1.234.567 VND", or "invalid VND" when n is not finite or
+// does not fit an int64.
 func FormatVND(n float64) string {
 	if math.IsNaN(n) || math.IsInf(n, 0) || n > float64(math.MaxInt64) || n < float64(math.MinInt64) {
 		return "invalid VND"
@@ -26,6 +29,8 @@ func FormatVND(n float64) string {
 	return sb.String()
 }
 
+// FormatLuong renders a lượng quantity with up to four decimals and no
+// trailing zeros.
 func FormatLuong(n float64) string {
 	s := strconv.FormatFloat(n, 'f', 4, 64)
 	s = strings.TrimRight(s, "0")
@@ -36,6 +41,8 @@ func FormatLuong(n float64) string {
 	return s
 }
 
+// FormatPnL renders the gain of currentValue over invested as a signed VND
+// amount plus percentage. The percentage is 0 when nothing was invested.
 func FormatPnL(currentValue, invested float64) string {
 	diff := currentValue - invested
 	pct := 0.0

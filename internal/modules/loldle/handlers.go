@@ -37,9 +37,10 @@ func (s *state) findByName(name string) *Champion {
 }
 
 // rehydrateGuesses recomputes board rows from the stored championNames.
-// Champions removed from champions.json since the round started are skipped
-// (returns the surviving prefix) so a data refresh never breaks an active
-// round.
+// Guesses naming champions removed from champions.json since the round
+// started are skipped, so a data refresh never breaks an active round. A
+// missing target yields an empty board; handleLoldle clears that round on
+// the next guess.
 func (s *state) rehydrateGuesses(g *gameState) []boardEntry {
 	target := s.findByName(g.Target)
 	if target == nil {
@@ -273,8 +274,9 @@ func (s *state) handleStats(ctx context.Context, b *bot.Bot, update *models.Upda
 		scope, st.Played, st.Wins, chathelper.WinRate(st.Wins, st.Played), st.Streak, st.BestStreak))
 }
 
-// handleSetMax is /loldle_setmax <n> — private command, sets the per-subject
-// MaxGuesses override (1..MaxGuessesCap). Takes effect on the next round.
+// handleSetMax is /loldle_setmax <n> — owner-only (VisibilityPrivate), sets
+// the per-subject MaxGuesses override (1..MaxGuessesCap). Takes effect on the
+// next round because an active round keeps its frozen MaxGuesses.
 func (s *state) handleSetMax(ctx context.Context, b *bot.Bot, update *models.Update) error {
 	msg := update.Message
 	if msg == nil {

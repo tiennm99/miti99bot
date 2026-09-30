@@ -33,7 +33,7 @@ type apiKeyCache struct {
 
 // VNAppMobClient fetches Vietnam SJC gold prices from api.vnappmob.com.
 // It self-manages a free JWT API key, caching it in the typed store and
-// refreshing it before expiry or when the SJC endpoint returns 403.
+// refreshing it before expiry or when the SJC endpoint returns 401 or 403.
 type VNAppMobClient struct {
 	HTTP    *http.Client
 	BaseURL string                        // explicit test override; production uses https://api.vnappmob.com
@@ -76,7 +76,7 @@ func (c *VNAppMobClient) httpClient() *http.Client {
 }
 
 // FetchSJCPrice returns the VNAppMob SJC buy/sell price per lượng in VND.
-// On 403 it refreshes the API key once and retries.
+// On 401 or 403 it refreshes the API key once and retries.
 func (c *VNAppMobClient) FetchSJCPrice(ctx context.Context) (buy, sell float64, err error) {
 	key, err := c.getKey(ctx)
 	if err != nil {

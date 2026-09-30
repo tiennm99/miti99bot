@@ -1,5 +1,7 @@
-// Package alias implements /alias and /insert: a shared, bot-wide dictionary
-// mapping a short name to any Telegram message the bot has seen.
+// Package alias implements /alias, /insert, /aliases and /unalias: a shared,
+// bot-wide dictionary mapping a short name to any Telegram message the bot has
+// seen. A saved name is also invocable directly as /name (through the command
+// fallback) and from inline mode as "@botname <prefix>".
 //
 // The namespace is global on purpose — a name assigned in any chat works in
 // every chat, for everyone, the same way the sticker pack /addsticker writes to

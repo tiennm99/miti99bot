@@ -1,3 +1,6 @@
+// Package server is the bot's HTTP surface: a single health route for the
+// container monitor, wrapped in structured request logging. Telegram updates
+// and crons never arrive over HTTP.
 package server
 
 import "net/http"

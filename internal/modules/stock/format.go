@@ -1,5 +1,3 @@
-// Package stock is a paper-stock module for VN stocks. It keeps a per-user
-// live portfolio in KV and prices positions at the current market price.
 package stock
 
 import (

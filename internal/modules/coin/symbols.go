@@ -6,8 +6,11 @@ import (
 	"unicode"
 )
 
+// ErrUnsupportedCoin reports a ticker that fails validation.
 var ErrUnsupportedCoin = errors.New("coin: unsupported coin")
 
+// CoinSymbol is a validated upper-case ticker plus its CoinGecko ID when the
+// ticker is in knownCoinGeckoIDs.
 type CoinSymbol struct {
 	Symbol      string
 	CoinGeckoID string
@@ -15,6 +18,8 @@ type CoinSymbol struct {
 
 const maxCoinSymbolLength = 20
 
+// knownCoinGeckoIDs pins major tickers to their CoinGecko IDs, since
+// CoinGecko IDs are names ("bitcoin"), not tickers.
 var knownCoinGeckoIDs = map[string]string{
 	"BTC":  "bitcoin",
 	"ETH":  "ethereum",
@@ -26,6 +31,9 @@ var knownCoinGeckoIDs = map[string]string{
 	"TON":  "the-open-network",
 }
 
+// ResolveCoinSymbol normalizes input to an upper-case ticker of 1-20 ASCII
+// letters and digits with at least one letter. It does not check that the
+// coin exists; providers decide that.
 func ResolveCoinSymbol(input string) (CoinSymbol, error) {
 	symbol := strings.ToUpper(strings.TrimSpace(input))
 	if !validCoinSymbol(symbol) {

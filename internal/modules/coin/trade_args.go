@@ -9,6 +9,9 @@ type coinValueArgs struct {
 	value float64
 }
 
+// parseCoinValueArgs accepts "<coin> <value>" or "<value> <coin>". When
+// neither order parses, it returns ErrUnsupportedCoin if the second argument
+// is a number (the coin was the bad part) and invalidValueErr otherwise.
 func parseCoinValueArgs(args []string, validValue func(float64) bool, invalidValueErr error) (coinValueArgs, error) {
 	if len(args) != 2 {
 		return coinValueArgs{}, invalidValueErr

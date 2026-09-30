@@ -286,7 +286,7 @@ func seedFixture(t *testing.T, c *counter) {
 	ctx := context.Background()
 	// alice (id=1): /ping x3, /wordle x1
 	// bob   (id=2): /ping x1, /wordle x2
-	// carol (id=3): /ping x1                        (username later cleared to test skip)
+	// carol (id=3): /ping x1
 	for i := 0; i < 3; i++ {
 		c.Inc(ctx, "ping", updateFrom(1, "alice"))
 	}
@@ -356,10 +356,9 @@ func TestRenderStats_UserCommands(t *testing.T) {
 	}
 }
 
-// Pins the leading-colon disambiguation in viewUserCommands: a user ID
-// suffix like ":2" must not falsely match a pair key for a different user
-// whose ID happens to end in "2" (e.g. 12, 22, 42, 142). Both reviewers
-// flagged this as a potential bug; this test proves the absence of the bug.
+// A user's view is resolved by the stored user ID, not by matching the ":<id>"
+// key suffix, so user 2's view must not pick up rows belonging to a user whose
+// ID merely ends in "2" (e.g. 12, 22, 42, 142).
 func TestRenderStats_UserCommands_IDSuffixDoesNotFalseMatch(t *testing.T) {
 	ctx := context.Background()
 	c := newStatsCounter()

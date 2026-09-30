@@ -70,8 +70,8 @@ func NewChannelMessage(chatID int64, text string) *models.Update {
 }
 
 // botCommandEntity is what Telegram attaches when a message starts with `/`.
-// The dispatcher's MatchTypeCommand uses it to extract the command name, so
-// every fixture command-bearing message must include one.
+// The dispatcher's matchCommand reads the command name from it, so every
+// fixture command-bearing message must include one.
 func botCommandEntity(text string) models.MessageEntity {
 	if len(text) == 0 || text[0] != '/' {
 		return models.MessageEntity{Type: models.MessageEntityTypeBotCommand}

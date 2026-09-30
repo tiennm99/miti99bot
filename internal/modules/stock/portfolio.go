@@ -10,8 +10,11 @@ import (
 	"github.com/tiennm99/miti99bot/internal/storage"
 )
 
+// Store is the typed view of the module collection that holds portfolios.
 type Store = storage.DocStore[Portfolio]
 
+// CollectionName is the storage collection shared by portfolios and pending
+// dividend actions; the two are told apart by key prefix.
 const CollectionName = "stock"
 
 // AssetPosition keeps the complete persisted state for one open stock ticker.
@@ -42,6 +45,9 @@ type DividendRecord struct {
 	Processed bool `json:"processed" bson:"processed"`
 }
 
+// Portfolio is one user's persisted paper account. Assets holds only open
+// positions, and Dividends maps ticker to SSI event ID to retained history,
+// which outlives a closed position until it ages out.
 type Portfolio struct {
 	VND       float64                              `json:"vnd" bson:"vnd"`
 	Assets    map[string]AssetPosition             `json:"assets" bson:"assets"`
@@ -49,11 +55,14 @@ type Portfolio struct {
 	Meta      PortfolioMeta                        `json:"meta" bson:"meta"`
 }
 
+// PortfolioMeta tracks account-level totals. Invested is the sum of all
+// top-ups and is the baseline for the account-wide P&L.
 type PortfolioMeta struct {
 	Invested  float64 `json:"invested" bson:"invested"`
 	CreatedAt int64   `json:"createdAt" bson:"createdAt"`
 }
 
+// NewPortfolio returns an empty portfolio created at now (Unix milliseconds).
 func NewPortfolio(now int64) Portfolio {
 	return Portfolio{
 		Assets:    map[string]AssetPosition{},
@@ -66,6 +75,9 @@ func portfolioKey(userID int64) string {
 	return "user:" + strconv.FormatInt(userID, 10)
 }
 
+// LoadPortfolio reads userID's portfolio, returning a fresh one when none is
+// stored. Nil maps and a missing CreatedAt are filled in before validation, so
+// callers can mutate the result directly.
 func LoadPortfolio(ctx context.Context, store Store, userID int64, now int64) (Portfolio, error) {
 	p, _, err := store.Get(ctx, portfolioKey(userID))
 	switch {
@@ -90,6 +102,9 @@ func LoadPortfolio(ctx context.Context, store Store, userID int64, now int64) (P
 	}
 }
 
+// SavePortfolio validates p and overwrites userID's stored portfolio. The write
+// is unversioned; handlers serialize read-modify-write cycles with the per-user
+// lock instead.
 func SavePortfolio(ctx context.Context, store Store, userID int64, p Portfolio) error {
 	if err := p.Validate(); err != nil {
 		return fmt.Errorf("stock: save portfolio %d: %w", userID, err)
@@ -100,6 +115,9 @@ func SavePortfolio(ctx context.Context, store Store, userID int64, p Portfolio) 
 	return nil
 }
 
+// Validate rejects a portfolio that must never be persisted: a negative or
+// non-finite balance, non-canonical tickers, empty or corrupt positions, and
+// malformed dividend records.
 func (p Portfolio) Validate() error {
 	if math.IsNaN(p.VND) || math.IsInf(p.VND, 0) || p.VND < 0 {
 		return fmt.Errorf("stock: invalid VND balance")
@@ -131,6 +149,8 @@ func (p *Portfolio) AddVND(amount float64) {
 	p.VND += amount
 }
 
+// DeductVND debits amount when the balance covers it. On failure the balance
+// is left unchanged and returned so the caller can report the shortfall.
 func (p *Portfolio) DeductVND(amount float64) (ok bool, balance float64) {
 	if p.VND < amount {
 		return false, p.VND

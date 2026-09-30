@@ -1,3 +1,7 @@
+// Package coin is a crypto paper-trading module: users top up a virtual USD
+// balance, buy and sell coins at live prices, and review a portfolio with
+// unrealized and account P&L. Prices come from Binance, then Coinbase, then
+// CoinGecko, with a short in-process cache (see PriceClient).
 package coin
 
 import (
@@ -5,8 +9,9 @@ import (
 	"github.com/tiennm99/miti99bot/internal/storage"
 )
 
-// New is the coin paper-trading module factory. It is opt-in through MODULES
-// and keeps its portfolio state separate from stock and gold modules.
+// New is the coin paper-trading module factory. Like every module it is
+// selected through MODULES, and it keeps its portfolio state separate from the
+// stock and gold modules.
 func New(deps modules.Deps) modules.Module {
 	s := newState(storage.Typed[Portfolio](deps.Store))
 	return modules.Module{

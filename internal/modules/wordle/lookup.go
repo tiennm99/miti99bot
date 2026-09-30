@@ -15,9 +15,8 @@ func normalizeWord(input string) string {
 	return string(out)
 }
 
-// rejectReason classifies why validateGuess returned not-ok. The user-facing
-// reply mapping in handlers branches on these values, so renaming a constant
-// here requires updating that mapping.
+// rejectReason classifies why validateGuess returned not-ok. rejectMessage in
+// handlers.go maps each reason to its user-facing reply.
 type rejectReason string
 
 const (

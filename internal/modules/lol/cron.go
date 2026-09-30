@@ -77,16 +77,16 @@ func classifyTerminal(err error) terminalKind {
 	return terminalNone
 }
 
-// dailyPushCronName is the cron route segment + in-process scheduler key.
-// Must match the regex in internal/server/router.go (^[a-z0-9_]{1,32}$).
+// dailyPushCronName is the cron's registry and in-process scheduler key; it
+// must be unique across all modules' crons.
 const dailyPushCronName = "lol_daily_push"
 
 // dailyPushSchedule drives the in-process scheduler (internal/cron). Cron
 // expression is UTC; 01:00 UTC == 08:00 ICT.
 const dailyPushSchedule = "0 1 * * *"
 
-// lastPushDateKey records the ICT date (YYYY-MM-DD) of the most recent
-// completed daily push. The handler claims this key before fanning out and
+// lastPushDateKey records the ICT date (YYYY-MM-DD) of the most recently
+// claimed daily push. The handler claims this key before fanning out and
 // no-ops if it is already today's schedule day, making the push idempotent per
 // ICT date. This defends against double-fire windows from rolling deploys that
 // briefly run two containers or operator misconfiguration.
@@ -116,7 +116,8 @@ type lastPushDoc struct {
 // PushDateStore is the typed store for last-push date documents.
 type PushDateStore = storage.DocStore[lastPushDoc]
 
-// dailyPushCron returns the cron registration. Schedule is documentation only.
+// dailyPushCron returns the cron registration; the in-process scheduler fires
+// the handler on Schedule.
 func (s *state) dailyPushCron() modules.Cron {
 	return modules.Cron{
 		Name:     dailyPushCronName,
@@ -238,9 +239,8 @@ func runDailyPush(ctx context.Context, s *state, sender messageSender) error {
 		sent++
 	}
 
-	// Best-effort prune. Failure here just leaves the dead chats in the list
-	// for tomorrow's push — same behaviour as before this code existed, so
-	// strictly an improvement even when the writes fail.
+	// Best-effort prune. A failed write just leaves the dead chats in the list,
+	// and tomorrow's push fails on them again and retries the prune.
 	pruned := pruneDeadSubscribers(ctx, s, deadChats, deadTopics)
 
 	log.Info("lol daily push complete",

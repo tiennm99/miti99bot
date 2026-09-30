@@ -7,8 +7,8 @@ import (
 	"github.com/tiennm99/miti99bot/internal/modules"
 )
 
-// New is the module Factory. Closes over Deps so each handler has access to
-// the registry (for /help) and to the bot framework (for sending replies).
+// New is the module Factory. /help closes over deps.Registry so it renders
+// the fully built registry at call time; the other handlers need no Deps.
 func New(deps modules.Deps) modules.Module {
 	return modules.Module{
 		Commands: []modules.Command{

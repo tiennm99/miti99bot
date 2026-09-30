@@ -33,15 +33,14 @@ func (r *statusRecorder) effectiveStatus() int {
 
 // LogRequests wraps an http.Handler with a request log line:
 //
-//	{"msg":"req","method":"POST","path":"/webhook","status":200,"ms":12}
+//	{"msg":"req","method":"GET","path":"/","status":200,"ms":0}
 //
-// CloudWatch Logs filters on `jsonPayload.msg=req AND jsonPayload.status>=500`
-// for 5xx-rate alerting — keep the field names stable or the alarm goes dark.
+// Keep the field names stable: log-based dashboards and alerts may filter on
+// msg=req and status>=500.
 //
 // The req line is emitted from a deferred closure so a panic in a downstream
-// handler still produces an observable log entry — without this, a cron
-// panic would disappear silently (http.Server does its own recover but never
-// runs middleware again on the way out).
+// handler still produces an observable log entry — http.Server's own recover
+// only logs to stderr and never runs middleware again on the way out.
 func LogRequests(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
@@ -59,10 +58,10 @@ func LogRequests(next http.Handler) http.Handler {
 	})
 }
 
-// recoverPanicStatus folds a recovered panic into the status to log: returns
-// 500 if a panic was recovered (and re-panics nothing — http.Server will
-// terminate the connection cleanly while the deferred req log still runs),
-// otherwise returns the original status untouched.
+// recoverPanicStatus folds a recovered panic into the status to log: it
+// returns 500 if a panic was recovered, otherwise the original status
+// untouched. The panic is logged with its stack and absorbed, not re-raised,
+// so the deferred req line always runs.
 //
 // Re-panicking would lose the deferred log line in some recover-order edge
 // cases; absorbing the panic here matches the webhook handler's posture of

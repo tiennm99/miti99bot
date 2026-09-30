@@ -23,9 +23,9 @@ func (s *state) handlePrice(ctx context.Context, b *bot.Bot, update *models.Upda
 	if len(args) != 0 {
 		return chathelper.Reply(ctx, b, update.Message, "Usage: /gold_price")
 	}
-	// Fetch under a reply-reserved sub-context (the composite fetcher may try
-	// providers sequentially); reply on the original ctx so delivery keeps its
-	// budget headroom.
+	// Fetch under a reply-reserved sub-context (VNAppMob may refresh its API
+	// key and retry, costing several round trips); reply on the original ctx so
+	// delivery keeps its budget headroom.
 	fetchCtx, cancel := chathelper.FetchContext(ctx)
 	defer cancel()
 	p, err := s.prices.FetchPrice(fetchCtx)

@@ -1,7 +1,9 @@
 // Package monkeyd exports a monkeydd.com novel as a PDF and sends it back as a
-// Telegram document. The crawling and rendering live in the monkeyd-crawler
-// submodule (third_party/monkeyd-crawler); this module is the Telegram surface
-// around it: argument validation, one-at-a-time scheduling, and delivery.
+// Telegram document (/monkeyd_crawl), and reports a novel's genre tags as a
+// copyable hashtag line (/monkeyd_tags). The crawling and rendering live in the
+// monkeyd-crawler submodule (third_party/monkeyd-crawler); this module is the
+// Telegram surface around it: argument validation, one-at-a-time scheduling,
+// and delivery.
 package monkeyd
 
 import (
@@ -19,7 +21,7 @@ import (
 	"github.com/tiennm99/miti99bot/internal/modules/util/chathelper"
 )
 
-// commandName is the single command this module exposes.
+// commandName is the PDF export command; tagsCommandName is the other one.
 const commandName = "monkeyd_crawl"
 
 // parameters is the display syntax shared by the command menu, /help, and the

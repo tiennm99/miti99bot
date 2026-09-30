@@ -31,6 +31,9 @@ func findChampion(pool []Champion, input string) *Champion {
 	return champion
 }
 
+// findChampionMatch implements findChampion and additionally reports whether
+// a nil result came from an ambiguous prefix, so handlers can ask for the
+// full name instead of saying "not found".
 func findChampionMatch(pool []Champion, input string) (*Champion, bool) {
 	q := normalizeName(input)
 	if q == "" {

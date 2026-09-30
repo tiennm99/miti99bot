@@ -22,9 +22,10 @@ const (
 )
 
 // CommandHandler runs in response to a Telegram command. Returning an error
-// causes the dispatcher to log the failure. Telegram retries are governed by
-// the webhook HTTP status (200), not handler errors — so the error return is
-// purely for logging/metrics, not flow control.
+// causes the dispatcher to log the failure and count it in metrics. Updates
+// arrive by long polling and are consumed either way — Telegram never
+// redelivers on a handler error — so the error return is purely for
+// logging/metrics, not flow control.
 type CommandHandler func(ctx context.Context, b *bot.Bot, update *models.Update) error
 
 // CallbackHandler runs in response to inline-keyboard callback data. Callback
@@ -39,11 +40,9 @@ type Callback struct {
 	Handler    CallbackHandler
 }
 
-// CronHandler runs when a cron fires — driven by the in-process scheduler
-// (internal/cron) on self-host, or by a POST to /cron/{name} for manual
-// triggers. Crons receive the per-module-prefixed Deps via the registry;
-// handlers should not capture the base Deps from the factory closure or KV
-// writes will collide across modules.
+// CronHandler runs when a cron fires, driven by the in-process scheduler
+// (internal/cron). The handler receives the owning module's Deps — the same
+// bundle its Factory got, including its own storage Collection.
 type CronHandler func(ctx context.Context, deps Deps) error
 
 // Command is a single Telegram bot command exposed by a module.
@@ -74,8 +73,8 @@ type Module struct {
 	Callbacks   []Callback
 	Crons       []Cron
 	CommandHook func(ctx context.Context, name string, update *models.Update) // optional; called by dispatcher after each authorized command invocation. update carries the originating Telegram update so hooks can attribute usage to a user.
-	Fallback    *CommandFallback                                             // optional; handles a /command no module registered. At most one across all modules.
-	Inline      *InlineQuery                                                 // optional; handles inline-mode queries. At most one across all modules.
+	Fallback    *CommandFallback                                              // optional; handles a /command no module registered. At most one across all modules.
+	Inline      *InlineQuery                                                  // optional; handles inline-mode queries. At most one across all modules.
 }
 
 // CommandFallback handles a /command that no module registered.

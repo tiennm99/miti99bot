@@ -20,6 +20,8 @@ import (
 )
 
 const (
+	// dividendFetchTimeout bounds all provider fetches for one /stock_portfolio
+	// run, independent of the SSI client's per-request timeout.
 	dividendFetchTimeout = 12 * time.Second
 	dividendFetchWorkers = 4
 )
@@ -29,6 +31,10 @@ type dividendRef struct {
 	eventID string
 }
 
+// dividendFetchJob is one provider query. A recent job discovers every event
+// in the discovery window for a held ticker; a historical job re-fetches one
+// Asia/Saigon publication day to refresh only targetIDs: unprocessed events
+// published before that window whose Record date is unknown or already reached.
 type dividendFetchJob struct {
 	symbol    string
 	after     time.Time
@@ -43,6 +49,8 @@ type dividendCheckResult struct {
 	err    error
 }
 
+// includes drops events outside the job's own range, including the provider's
+// day-granularity overlap, and restricts historical jobs to their targets.
 func (job dividendFetchJob) includes(event DividendEvent) bool {
 	if event.Symbol != job.symbol || event.PublishedAt.Before(job.after) || event.PublishedAt.After(job.through) {
 		return false
@@ -54,6 +62,10 @@ func (job dividendFetchJob) includes(event DividendEvent) bool {
 	return wanted
 }
 
+// notifyDividendEvents syncs dividend history, then posts one message per
+// unprocessed event on a held ticker: a notice before Record date, or an
+// "Apply dividend" suggestion once it is due. Failed tickers are summarized in
+// a single reply instead of failing the portfolio command.
 func (s *state) notifyDividendEvents(ctx context.Context, b *bot.Bot, msg *models.Message, userID int64, snapshot Portfolio, checkedThrough time.Time) error {
 	if s.pending != nil {
 		s.cleanupExpiredDividends(ctx, checkedThrough.UnixMilli())
@@ -103,6 +115,10 @@ func (s *state) notifyDividendEvents(ctx context.Context, b *bot.Bot, msg *model
 	return nil
 }
 
+// syncDividendHistory fetches events without the user lock, then reloads the
+// portfolio under it to prune expired history and merge the results, so a
+// concurrent trade is never overwritten by the pre-fetch snapshot. It returns
+// the tickers whose fetch failed.
 func (s *state) syncDividendHistory(ctx context.Context, userID int64, snapshot Portfolio, now time.Time) ([]string, error) {
 	jobs := dividendFetchJobs(snapshot, now)
 	results := s.fetchDividendJobs(ctx, jobs)
@@ -247,6 +263,10 @@ func sortedDividendRefs(p Portfolio) []dividendRef {
 	return refs
 }
 
+// sendFutureDividendNotice posts a non-actionable notice for an event whose
+// Record date has not arrived. Like sendDividendSuggestion, it re-checks the
+// event and position under the user lock; expectedOpenedAt skips a position
+// that was closed and reopened since the history sync.
 func (s *state) sendFutureDividendNotice(ctx context.Context, b *bot.Bot, msg *models.Message, userID, expectedOpenedAt int64, ref dividendRef) error {
 	defer s.locks.Acquire(strconv.FormatInt(userID, 10))()
 
@@ -274,6 +294,8 @@ func (s *state) sendFutureDividendNotice(ctx context.Context, b *bot.Bot, msg *m
 	return nil
 }
 
+// sendDividendSuggestion posts the actionable message and then binds its
+// pending action to the sent message ID, so only that message's button works.
 func (s *state) sendDividendSuggestion(ctx context.Context, b *bot.Bot, msg *models.Message, userID, expectedOpenedAt int64, ref dividendRef) error {
 	defer s.locks.Acquire(strconv.FormatInt(userID, 10))()
 

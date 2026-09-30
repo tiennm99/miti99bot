@@ -13,7 +13,7 @@ import (
 	"github.com/tiennm99/miti99bot/internal/testutil"
 )
 
-// The headline of path B: a saved name becomes its own command.
+// The headline of the fallback: a saved name becomes its own command.
 func TestFallback_SavedNameWorksAsItsOwnCommand(t *testing.T) {
 	rb := installAlias(t)
 	rb.Bot.ProcessUpdate(context.Background(),

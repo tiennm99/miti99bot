@@ -129,7 +129,7 @@ func (rb *RecordingBot) StubMethod(method string, resultJSON string) {
 // (bot.ErrorBadRequest for 400, bot.ErrorForbidden for 403, and so on).
 //
 // This is the difference from FailMethod: the library switches on the
-// error_code *in the response body* (raw_request.go:103-125), not the HTTP
+// error_code *in the response body* (raw_request.go), not the HTTP
 // status, so a codeless failure never takes a sentinel shape. Handlers that
 // classify errors with errors.Is must be tested through this method.
 //
@@ -172,15 +172,6 @@ func (rb *RecordingBot) FailMethod(method string, status int, body string) {
 func (rb *RecordingBot) handle(w http.ResponseWriter, r *http.Request) {
 	method := apiMethodFromPath(r.URL.Path)
 
-	// Parameterless methods (getMe) send no body at all, so a parse failure is
-	// not an error there — it just means there are no form fields to record.
-	// Failing the request would make those methods untestable no matter what
-	// the test registered.
-	//
-	// That tolerance is scoped to requests that carry no multipart body. A
-	// request that claims to be multipart and then fails to parse is a real
-	// fault, and answering it 200 with an empty Form would quietly satisfy
-	// every test that asserts a field is *absent*.
 	// Read the body before parsing, because an empty body and a corrupt one are
 	// otherwise indistinguishable: multipart reports both as "no parts".
 	//
@@ -261,8 +252,8 @@ func apiMethodFromPath(p string) string {
 }
 
 // okResponseFor returns a minimal `{ok:true, result:...}` payload that the
-// bot library will accept for the named API method. SendMessage / SendSticker
-// expect a Message; most others accept a bool.
+// bot library will accept for the named API method. Message-producing methods
+// (see isMessageProducingMethod) expect a Message; most others accept a bool.
 func okResponseFor(method string, messageID int) string {
 	if isMessageProducingMethod(method) {
 		// Minimal shape: id, date, chat. Bot library decodes via json so

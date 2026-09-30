@@ -21,8 +21,9 @@
 // on (lck, lpl, …) via leagueSlugMap; unmapped leagues pass through and the
 // major-league filter drops them naturally.
 //
-// Cache strategy: live-first fetches with a KV-backed 60-minute stale
-// fallback for current schedule windows.
+// Cache strategy: live-first fetches with a document-store-backed 60-minute
+// stale fallback for current schedule windows (today, tomorrow, this and next
+// week, and the daily push). Explicit-date /lol lookups are always live.
 package lol
 
 import (
@@ -63,7 +64,7 @@ const (
 
 // leagueSlugMap canonicalizes PandaScore league slugs to the slugs the
 // formatters were built on (format.go's majorLeagueSlugs / leagueOrder).
-// Discovered live from /lol/leagues — see the plan's phase-01 findings.
+// The PandaScore slugs were taken from the live /lol/leagues listing.
 // lta-north also maps to lcs: it is the LTA-era NA top flight; only the
 // slug is canonicalized, the display name still passes through.
 var leagueSlugMap = map[string]string{
@@ -408,7 +409,7 @@ func (c *Client) GetEventsWithFallback(ctx context.Context, cache CacheStore, fr
 // <= maxLen, appending "..." if cut. Keeps log output bounded — upstream
 // error pages can be large, and team names mix in Korean/Chinese characters
 // that a raw byte slice would split mid-codepoint (producing replacement
-// glyphs in CloudWatch).
+// glyphs in the logs).
 func truncate(s string, maxLen int) string {
 	if len(s) <= maxLen {
 		return s

@@ -1,10 +1,10 @@
-// Package misc is a small stub module that proves the framework end-to-end:
-// /ping (public, exercises KV write), /ping_stats (protected, exercises KV
-// read), /random (public random picker), /wheelofnames (public wheel picker
-// with optional GIF), /ff (protected give-up-on-T1 rant), /xlt1 (public
+// Package misc is a small module that proves the framework end-to-end:
+// /ping (public, exercises a store write), /ping_stats (protected, exercises a
+// store read), /random (public random picker), /wheelofnames (public wheel
+// picker with optional GIF), /ff (protected give-up-on-T1 rant), /xlt1 (public
 // apologise-to-T1 petition, the sequel to /ff), /giaxang (public Petrolimex
-// retail fuel prices), /the_answer (private easter egg), and small public
-// disclaimer commands.
+// retail fuel prices), /the_answer (private easter egg), and the public
+// disclaimer commands /trongtruonghop, /tth, /trongtruonghopvng, and /tthvng.
 package misc
 
 import (
@@ -31,17 +31,17 @@ const lastPingKey = "last_ping"
 // commands. Three %s slots: target (escaped), sender mention, sender mention.
 const trongTruongHopTemplate = "Trong trường hợp nhóm này bị điều tra bởi %s, %s khẳng định không liên quan tới nhóm hoặc những cá nhân khác trong nhóm này. %s không rõ tại sao lại có mặt ở đây vào thời điểm này, có lẽ tài khoản đã được thêm bởi một bên thứ ba."
 
-// defaultTarget is the substituted "investigator" name when /trongtruonghop is
-// invoked without an argument. The command keeps a custom-arg override.
+// defaultTarget is the substituted "investigator" name when /trongtruonghop or
+// /tth is invoked without an argument. Both accept a custom target.
 const defaultTarget = "các cơ quan trực thuộc Bộ CA hoặc các tổ chức chính trị tương tự phục vụ cho nhà nước CHXHCNVN"
 
 // vngTarget is the fixed substituted "investigator" name for
-// /trongtruonghopvng. That command intentionally ignores custom args.
+// /trongtruonghopvng and /tthvng. Both intentionally ignore custom args.
 const vngTarget = "công ty cổ phần tập đoàn VNG nói chung và công ty 2morebits nói riêng"
 
 // lastPing is the value stored at the `last_ping` key: { at: <ms-since-epoch> }.
 // int64 ms-epoch (not time.Time → RFC3339) keeps the on-disk shape compact
-// and consistent with every other timestamp field in the bot's KV.
+// and consistent with every other timestamp field the bot stores.
 type lastPing struct {
 	At int64 `json:"at" bson:"at"`
 }
@@ -131,6 +131,8 @@ func senderMention(u *models.User) string {
 	return fmt.Sprintf(`<a href="tg://user?id=%d">%s</a>`, u.ID, html.EscapeString(name))
 }
 
+// disclaimerCommand builds one disclaimer command. With allowCustomTarget the
+// command argument, when present, replaces defaultTarget.
 func disclaimerCommand(name, description, defaultTarget string, allowCustomTarget bool) modules.Command {
 	parameters := ""
 	if allowCustomTarget {

@@ -14,7 +14,10 @@ import (
 	"github.com/tiennm99/miti99bot/internal/modules/util/chathelper"
 )
 
-const telegramMaxLen = 4000 // leave margin below Telegram's 4096-byte hard limit
+// telegramMaxLen leaves margin below Telegram's 4096-character message limit.
+// It is compared against the byte length, which is never shorter than the
+// character count, so the check errs on the safe side.
+const telegramMaxLen = 4000
 
 const statsUsage = `Usage:
 /stats
@@ -22,6 +25,8 @@ const statsUsage = `Usage:
 /stats user <username>
 /stats cmd <command_name>`
 
+// row is one rendered line of a /stats view: a "/command" or "@username"
+// label and its count.
 type row struct {
 	display string
 	n       int64

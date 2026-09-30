@@ -25,7 +25,7 @@ type GuessRecord struct {
 
 // GameState is the per-subject record for an in-progress (or finished) round.
 //
-// `giveup` is always emitted (initialized to false on /wordle_new). Do NOT
+// `giveup` is always emitted (initialized to false on every fresh round). Do NOT
 // add omitempty — the field is part of the stored document's shape, so
 // emitting it unconditionally keeps already-saved games self-describing
 // when inspected via raw dumps.
@@ -34,7 +34,7 @@ type GameState struct {
 	Guesses   []GuessRecord `json:"guesses" bson:"guesses"`
 	Solved    bool          `json:"solved" bson:"solved"`
 	Giveup    bool          `json:"giveup" bson:"giveup"`
-	StartedAt int64         `json:"startedAt" bson:"startedAt"` // ms-since-epoch (Date.now())
+	StartedAt int64         `json:"startedAt" bson:"startedAt"` // ms-since-epoch (chathelper.NowMillis)
 }
 
 // Stats is the lifetime score record. lastResultAt is *int64 so an unplayed

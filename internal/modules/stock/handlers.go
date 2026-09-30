@@ -17,9 +17,10 @@ import (
 	"github.com/tiennm99/miti99bot/internal/modules/util/chathelper"
 )
 
-// state is the per-module runtime. store is module-scoped (the framework
-// prefixes/partitions). PriceClient is reused across calls; nowFn allows
-// tests to inject a deterministic clock for portfolio CreatedAt.
+// state is the per-module runtime. store and pending are typed views of the
+// module's own collection. prices is reused across calls so its HTTP
+// connection pool survives; locks serializes each user's portfolio
+// read-modify-write; nowFn lets tests inject a deterministic clock.
 type state struct {
 	store     Store
 	pending   PendingDividendStore
@@ -389,9 +390,10 @@ func (s *state) handleShareDividend(ctx context.Context, b *bot.Bot, update *mod
 			"\nHolding: "+formatShareQuantity(held)+" → "+formatShareQuantity(finalHolding))
 }
 
-// handleStats renders the portfolio first, then synchronizes dividend history
-// for each held ticker. Network calls never hold the user lock, while history
-// merging and notification state updates reload under it.
+// handleStats serves /stock_portfolio. It renders the portfolio first, then
+// synchronizes dividend history for each held ticker. Price and SSI dividend
+// fetches never hold the user lock; history merging and each dividend message
+// reload the portfolio under it.
 func (s *state) handleStats(ctx context.Context, b *bot.Bot, update *models.Update) error {
 	userID, ok := senderInfo(update)
 	if !ok {
@@ -410,7 +412,8 @@ func (s *state) handleStats(ctx context.Context, b *bot.Bot, update *models.Upda
 	totalBasis := 0.0
 	missingPrice := false
 
-	// Filter out zero-balance assets (DeductAsset removes them, but defensive).
+	// Skip zero-quantity positions. SellTicker deletes a fully sold position and
+	// Validate rejects them on load, so this is only a defensive guard.
 	type held struct {
 		symbol string
 		qty    int64

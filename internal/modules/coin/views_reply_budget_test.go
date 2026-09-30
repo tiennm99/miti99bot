@@ -22,7 +22,7 @@ func (blockingPriceFetcher) FetchUSD(ctx context.Context, _ CoinSymbol) (CoinPri
 
 // TestHandleStatsDeliversReplyWhenUpstreamHangs proves the reply-reserve fix:
 // even when the price upstream hangs for the entire fetch budget, handleStats
-// still delivers a summary (with a "price unavailable" line) on the original
+// still delivers a summary (with "N/A" price cells) on the original
 // context instead of failing the whole reply with "context deadline exceeded".
 func TestHandleStatsDeliversReplyWhenUpstreamHangs(t *testing.T) {
 	// Seed a holding using a fast fetcher, then swap in the hanging upstream.

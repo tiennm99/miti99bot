@@ -30,7 +30,7 @@ const tagsParameters = "<url>"
 const tagsUsage = "Usage: /" + tagsCommandName + " " + tagsParameters
 
 const (
-	// tagsFetchTimeout bounds the whole command. Unlike an export this is one
+	// tagsFetchTimeout bounds the tag fetch. Unlike an export this is one
 	// request and runs inline, and handlers are dispatched one at a time, so a
 	// stalled fetch would hold up every other command until it gives up.
 	tagsFetchTimeout = 30 * time.Second
@@ -40,8 +40,9 @@ const (
 	tagsRetries = 1
 )
 
-// tagsFetcher returns a novel's tags. A field on the module rather than a
-// direct call so tests can exercise the command without network access.
+// tagsFetcher returns a novel's tags. It is injected through newModule rather
+// than called directly so tests can exercise the command without network
+// access.
 type tagsFetcher func(ctx context.Context, novelURL string) ([]string, error)
 
 func tagsCommand(fetch tagsFetcher) modules.Command {

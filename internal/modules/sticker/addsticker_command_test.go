@@ -28,7 +28,7 @@ func installSticker(t *testing.T) *testutil.RecordingBot {
 	return rb
 }
 
-// installAddSticker builds the util module with the shared pack configured and
+// installAddSticker builds the sticker module with the shared pack configured and
 // getMe stubbed.
 //
 // getMe must be stubbed explicitly: the bot runs with WithSkipGetMe(), and

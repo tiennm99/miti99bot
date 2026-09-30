@@ -13,16 +13,22 @@ import (
 
 var errProviderRateLimited = errors.New("coin: provider rate limited")
 
+// BinanceProvider quotes the coin's USDT pair, then its USD pair. URL
+// overrides the public market-data endpoint for tests.
 type BinanceProvider struct {
 	HTTP *http.Client
 	URL  string
 }
 
+// CoinbaseProvider reads the coin's USD rate from Coinbase exchange rates.
 type CoinbaseProvider struct {
 	HTTP *http.Client
 	URL  string
 }
 
+// CoinGeckoProvider looks up the coin by its known CoinGecko ID or, failing
+// that, by the lower-case ticker and then the best market-cap match from
+// CoinGecko search.
 type CoinGeckoProvider struct {
 	HTTP      *http.Client
 	URL       string
@@ -55,6 +61,8 @@ type coinGeckoSearchCoin struct {
 	MarketCapRank *int   `json:"market_cap_rank"`
 }
 
+// FetchUSD stops at the first rate-limit response instead of trying the USD
+// pair, so the caller can move on to the next provider.
 func (p *BinanceProvider) FetchUSD(ctx context.Context, coin CoinSymbol) (CoinPrice, error) {
 	for _, quote := range []string{"USDT", "USD"} {
 		price, err := p.fetchPair(ctx, coin.Symbol, quote)

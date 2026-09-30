@@ -10,11 +10,11 @@
 // Usage:
 //
 //	log.Info("server starting", "port", 8080)
-//	log.Error("kv write failed", "module", "misc", "command", "ping", "err", err)
+//	log.Error("store write failed", "module", "misc", "command", "ping", "err", err)
 //	log.Fatal("missing required env", "key", "TELEGRAM_BOT_TOKEN")
 //
-// slog escapes newlines and quotes in field values, which closes the
-// log-injection class (J3 in the 2026-05-09 review).
+// slog escapes newlines and quotes in field values, so user-controlled text in
+// a field cannot forge an extra log record.
 package log
 
 import (

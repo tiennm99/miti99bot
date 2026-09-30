@@ -22,7 +22,7 @@ const (
 // and lose that distinction.
 //
 // Guesses is just championNames; comparison rows are recomputed at render
-// time against current champions.json so a weekly data refresh updates
+// time against current champions.json so a data refresh updates
 // historical board displays without migrating saved rounds.
 type gameState struct {
 	Target     string   `json:"target" bson:"target"`

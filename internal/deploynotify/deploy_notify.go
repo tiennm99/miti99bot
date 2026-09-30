@@ -68,8 +68,8 @@ func skipReason(cfg Config) string {
 	return ""
 }
 
-// renderMessage is exposed for tests; keep the format stable enough that the
-// owner can grep their Telegram history by SHA.
+// renderMessage builds the DM text. Keep the format stable so the owner can
+// search their Telegram history by SHA.
 func renderMessage(sha string) string {
 	return fmt.Sprintf("🚀 miti99bot deployed: %s", sha)
 }

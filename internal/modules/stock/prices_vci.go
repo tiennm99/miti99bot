@@ -25,6 +25,8 @@ type vciQuote struct {
 	} `json:"matchPrice"`
 }
 
+// vciFallbackEnabled reports whether FetchPrice and FetchPrices try VCI: always
+// in the default order, and only with an explicit VCIURL once SSI goes first.
 func (c *PriceClient) vciFallbackEnabled() bool {
 	return strings.TrimSpace(c.VCIURL) != "" || !c.ssiFirst()
 }

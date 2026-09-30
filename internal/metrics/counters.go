@@ -51,14 +51,15 @@ var Default = New()
 func (r *Registry) IncCommand(name string) { r.inc(r.commandsMap(), name) }
 
 // IncError bumps the counter for an error category — small, stable kinds
-// like "ai-429", "kv-unavailable", "telegram-403".
+// like "handler-error" or "handler-panic".
 func (r *Registry) IncError(kind string) { r.inc(r.errorsMap(), kind) }
 
 func (r *Registry) commandsMap() map[string]*atomic.Int64 { return r.commands }
 func (r *Registry) errorsMap() map[string]*atomic.Int64   { return r.errors }
 
-// inc bumps the counter for name in m, allocating on first use. Allocates
-// only when the name is new, so steady-state increments are mutex-free.
+// inc bumps the counter for name in m, allocating on first use. Only a new
+// name takes the write lock; steady-state increments share the read lock and
+// bump the atomic.
 func (r *Registry) inc(m map[string]*atomic.Int64, name string) {
 	r.mu.RLock()
 	c, ok := m[name]
@@ -116,7 +117,7 @@ func drain(m map[string]*atomic.Int64) map[string]int64 {
 //
 //	{"msg":"metrics","commands":{"wordle":3,"loldle":1},"errors":{"handler-error":1}}
 //
-// CloudWatch Logs filters on `jsonPayload.msg=metrics` for dashboards.
+// Keep msg=metrics stable; log-based dashboards filter on it.
 // Empty categories appear as null (slog's default for nil maps).
 func (r *Registry) Flush() {
 	cmds, errs := r.snapshot()
@@ -130,10 +131,10 @@ func (r *Registry) Flush() {
 	log.Info("metrics", "commands", cmds, "errors", errs)
 }
 
-// Run starts a goroutine that flushes counters every DefaultFlushInterval
-// until ctx is cancelled. It does one final Flush on exit so a SIGTERM
-// shutdown captures the trailing window. Returns immediately; the
-// goroutine runs in the background.
+// Run flushes counters every DefaultFlushInterval until ctx is cancelled,
+// then does one final Flush so a SIGTERM shutdown captures the trailing
+// window. It blocks until ctx is done, so callers run it in its own
+// goroutine.
 //
 // Idiomatic usage:
 //

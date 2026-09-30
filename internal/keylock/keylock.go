@@ -1,11 +1,11 @@
 // Package keylock serialises compound operations that target the same key
 // (typically a chat / user / subject identifier) across goroutines.
 //
-// Why a separate package: every game module needs a per-subject mutex to
-// turn the store's single-op atomicity into safe Get→mutate→Put. The bot
-// dispatcher runs each Telegram update in its own goroutine, so without
-// explicit per-subject serialisation two updates to the same game could
-// race and drop one write.
+// Why a separate package: several modules need a per-subject mutex to turn
+// the store's single-op atomicity into safe Get→mutate→Put. Telegram updates
+// are handled one at a time, but crons fire on scheduler goroutines alongside
+// them, so without explicit per-subject serialisation a cron and a handler
+// writing the same subject could race and drop a write.
 //
 // Trade-off: the underlying sync.Map grows unboundedly with distinct keys
 // (~32 B each). At the current bot scale, that is acceptable; add eviction if
@@ -23,8 +23,8 @@ type Map struct {
 // Acquire locks the per-key mutex and returns its Unlock as a func so the
 // caller can `defer m.Acquire(key)()` at the top of a critical section.
 //
-// Distinct keys never block each other; same-key callers run serially in the
-// order Acquire was called.
+// Distinct keys never block each other; same-key callers run one at a time.
+// Like sync.Mutex, it does not guarantee FIFO order among waiters.
 func (m *Map) Acquire(key string) func() {
 	v, _ := m.m.LoadOrStore(key, &sync.Mutex{})
 	mu := v.(*sync.Mutex)

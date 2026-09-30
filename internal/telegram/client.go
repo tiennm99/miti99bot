@@ -1,3 +1,6 @@
+// Package telegram constructs the go-telegram bot client used for long
+// polling and holds the few raw Bot API calls the library does not make
+// reliably (see DeleteWebhook).
 package telegram
 
 import (
@@ -20,10 +23,11 @@ var pollingAllowedUpdates = bot.AllowedUpdates{"message", "callback_query", "inl
 //
 //   - WithSkipGetMe: avoid a blocking GetMe call at startup. Token validity
 //     surfaces on the first outgoing API call instead.
-//   - WithNotAsyncHandlers: handlers run synchronously inside the dispatch
-//     goroutine. Module handlers take their own ctx (not r.Context()), so this
-//     is safe; it also bounds in-flight work to one update at a time, which
-//     suits the single-replica polling deployment.
+//   - WithNotAsyncHandlers: handlers run synchronously on the library's single
+//     update worker instead of one goroutine per update. That bounds in-flight
+//     work to one update at a time, which suits the single-replica polling
+//     deployment; the cost is that a slow handler delays every update queued
+//     behind it.
 //   - WithAllowedUpdates: only request the update kinds the bot handles.
 //
 // Callers may pass extra options that override these defaults.

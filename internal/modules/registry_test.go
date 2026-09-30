@@ -161,7 +161,7 @@ func TestBuild_RejectsInvalidCallback(t *testing.T) {
 func TestBuild_RequiresProvider(t *testing.T) {
 	_, err := Build(nil, map[string]Factory{}, nil, BuildOptions{})
 	if err == nil {
-		t.Error("expected error when KVProvider is nil")
+		t.Error("expected error when the storage provider is nil")
 	}
 }
 
@@ -256,8 +256,9 @@ func TestDispatchScheduled_PassesScopedDeps(t *testing.T) {
 
 func TestBuild_RejectsInvalidModuleName(t *testing.T) {
 	// `-` is intentionally allowed so modules can carry hyphenated names. `:`
-	// must stay rejected — it's the storage prefix delimiter and a
-	// hyphen-allowing regex must not let it through.
+	// must stay rejected — the module alphabet mirrors storage's
+	// collection-name alphabet, and loosening one without the other would
+	// hand a module an always-failing store.
 	for _, name := range []string{"BadName", "a:b", "", "with space", "with.dot", "with/slash"} {
 		t.Run(name, func(t *testing.T) {
 			_, err := Build([]string{name}, map[string]Factory{}, newProvider(), BuildOptions{})

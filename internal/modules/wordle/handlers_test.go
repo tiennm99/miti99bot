@@ -166,7 +166,7 @@ func TestWordleStats_AfterWin(t *testing.T) {
 	}
 }
 
-// Group chats key by chat id, so two private users both writing /wordle
+// Group chats key by chat id, so two different users both writing /wordle
 // in the same group must mutate the same game.
 func TestWordle_GroupSubjectIsChatID(t *testing.T) {
 	rb, games := installWordle(t, 0, "-100", "crane")

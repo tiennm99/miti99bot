@@ -1,3 +1,8 @@
+// Package storage is the bot's document store. Each module gets its own
+// Collection from a Provider — one MongoDB collection per module in
+// production, or an in-process map for tests and local runs — and builds typed
+// DocStore views over it with Typed. Values are stored as native documents
+// with an optimistic-locking version per key.
 package storage
 
 import (
@@ -86,8 +91,8 @@ type Collection interface {
 // point that binds a Collection to its backend's typed store.
 //
 // It panics if T is a struct whose BSON field names collide with a reserved root
-// field (_id, version, updatedAt) — a programmer error caught at startup, in the
-// same spirit as Prefixed panicking on an empty prefix.
+// field (_id, version, updatedAt) — a programmer error, so it fails loudly at
+// startup rather than producing duplicate document keys at write time.
 func Typed[T any](c Collection) DocStore[T] {
 	if err := checkReservedFields[T](); err != nil {
 		panic(err)

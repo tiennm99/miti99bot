@@ -14,13 +14,13 @@ import (
 )
 
 // moduleNameRe is intentionally looser than commandNameRe — it allows hyphen
-// so module names can carry hyphenated suffixes (e.g. "loldle-classic"). The
-// crucial constraint is "no `:`" so the storage Prefixed wrapper's `:`
-// delimiter cannot be subverted; everything else is style.
+// because a module name is only a catalog key and a collection name, never a
+// Telegram command. It must stay identical to storage's collectionNameRe: the
+// providers re-validate the name and hand back an always-failing store for
+// anything outside that alphabet.
 //
 // Telegram command names still need the stricter [a-z0-9_]{1,32} alphabet
-// (commandNameRe in validate.go). Cron route segments use their own regex in
-// internal/server/router.go and stay strict for log-injection safety.
+// (commandNameRe in validate.go).
 var moduleNameRe = regexp.MustCompile(`^[a-z0-9_-]{1,32}$`)
 
 // Registry holds the resolved set of modules selected by the MODULES env var.
@@ -36,7 +36,7 @@ type Registry struct {
 	protected    map[string]Command
 	private      map[string]Command
 	crons        map[string]Cron // name → Cron, unique across modules
-	cronDeps     map[string]Deps // cron name → owning module's prefixed Deps
+	cronDeps     map[string]Deps // cron name → owning module's Deps
 	callbacks    map[string]Callback
 	commandHooks []func(ctx context.Context, name string, update *models.Update)
 	fallback     *CommandFallback // at most one; owner tracked in Build
@@ -127,8 +127,8 @@ func (r *Registry) Cron(name string) (Cron, bool) {
 	return c, ok
 }
 
-// CronDeps returns the per-module-prefixed Deps the cron's owning module
-// received. The cron dispatcher uses this to pass scoped Deps to the handler.
+// CronDeps returns the Deps the cron's owning module received from Build.
+// The cron dispatcher passes them to the handler.
 func (r *Registry) CronDeps(name string) (Deps, bool) {
 	d, ok := r.cronDeps[name]
 	return d, ok
@@ -155,6 +155,13 @@ func (r *Registry) Crons() []Cron {
 	return out
 }
 
+// BuildOptions bundles the optional dependencies threaded into every Module
+// Factory's Deps. Adding new optional deps here keeps Build's signature
+// stable as the dep list grows.
+type BuildOptions struct {
+	Bot *bot.Bot
+}
+
 // Build constructs a Registry from the requested module names. The Provider
 // supplies a per-module-isolated Collection (one MongoDB collection per module;
 // MemoryProvider keeps one map per module). Build validates every command/cron
@@ -163,13 +170,6 @@ func (r *Registry) Crons() []Cron {
 // Names not present in factories are reported as a single error so a typo in
 // MODULES does not silently load a smaller bot than intended. Duplicate names
 // in MODULES are also a hard error to keep startup deterministic.
-// BuildOptions bundles the optional dependencies threaded into every Module
-// Factory's Deps. Adding new optional deps here keeps Build's signature
-// stable as the dep list grows.
-type BuildOptions struct {
-	Bot *bot.Bot
-}
-
 func Build(enabled []string, factories map[string]Factory, provider storage.Provider, opts BuildOptions) (*Registry, error) {
 	if provider == nil {
 		return nil, fmt.Errorf("modules: storage Provider is required")

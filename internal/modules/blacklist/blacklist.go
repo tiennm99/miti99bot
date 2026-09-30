@@ -3,7 +3,7 @@
 //
 // The module is passive on purpose. It never reads ordinary chat messages and
 // never deletes, warns or restricts anyone: the lists are inert until
-// /blacklist_check asks about a specific text. Enforcement would need a
+// /blacklist_check (or /blacklist with an argument) asks about a specific text. Enforcement would need a
 // message-level hook the dispatcher does not have, privacy mode disabled in
 // BotFather, and group-admin delete rights — all deliberately out of scope.
 // Check is a pure function, so a future hook could call it unchanged.

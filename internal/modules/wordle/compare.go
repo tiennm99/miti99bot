@@ -6,17 +6,17 @@ package wordle
 // without magic numbers.
 const WordLength = 5
 
-// LetterResult labels a single guessed letter's state. Values are part of
-// the stored game's JSON shape: "correct" | "partial" | "wrong".
+// Letter result categories stored in LetterScore.Result. The values are part
+// of the stored game document's shape, so changing one orphans saved rounds.
 const (
 	ResultCorrect = "correct"
 	ResultPartial = "partial"
 	ResultWrong   = "wrong"
 )
 
-// LetterScore is the shape stored per guess (nested in GameState). bson tags
-// mirror the json names so migrated docs (which keep the original JSON keys)
-// read back verbatim.
+// LetterScore is one scored letter, stored per guess (nested in GameState).
+// bson tags mirror the json names so the document's field names are the same
+// in either encoding.
 type LetterScore struct {
 	Letter string `json:"letter" bson:"letter"`
 	Result string `json:"result" bson:"result"`

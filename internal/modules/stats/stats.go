@@ -1,5 +1,11 @@
 // Package stats tracks command usage and exposes /stats subcommands sorted by
 // popularity.
+//
+// Counts are recorded through a CommandHook, so every authorized command
+// invocation of every module is counted without the modules knowing. Storage
+// goes through Mongo aggregations when the collection is MongoDB-backed and
+// falls back to reading the whole collection through the document store
+// otherwise (the in-memory provider).
 package stats
 
 import (
@@ -12,6 +18,7 @@ import (
 	"github.com/tiennm99/miti99bot/internal/storage"
 )
 
+// topK caps the rows every /stats view shows.
 const topK = 20
 
 // counter owns the stats repository used by the command hook and render views.

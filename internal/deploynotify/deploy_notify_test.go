@@ -42,7 +42,7 @@ func TestRun_SendsOnStartup(t *testing.T) {
 }
 
 func TestRun_SendsEveryStartupNoDedup(t *testing.T) {
-	// Unlike the old dedup behaviour, the same SHA must notify on every boot.
+	// No dedup: the same SHA must notify on every boot.
 	for i := 0; i < 2; i++ {
 		rec := &recorder{}
 		Run(context.Background(), Config{OwnerID: 42, GitSHA: "abc123", Sender: rec.send})

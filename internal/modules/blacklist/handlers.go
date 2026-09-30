@@ -26,9 +26,10 @@ const (
 	// only touch storage, so the budget is generous.
 	handlerTimeout = 10 * time.Second
 
-	// maxListBytes keeps /blacklist_rules inside Telegram's 4096-character
-	// sendMessage limit, with room for the second heading and a trim notice
-	// after the budget is spent.
+	// maxListBytes keeps every list reply — /blacklist_rules, a bare
+	// /blacklist, and the listing appended to each add and remove — inside
+	// Telegram's 4096-character sendMessage limit, with room for the second
+	// heading and a trim notice after the budget is spent.
 	//
 	// The budget counts the <code> markup, not only the entries: Telegram
 	// measures the message it is sent, and at 13 bytes a pair the tags outweigh

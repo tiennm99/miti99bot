@@ -1,3 +1,7 @@
+// Command server runs miti99bot: it loads configuration from the environment,
+// opens the storage backend, builds the module registry, and then serves
+// Telegram updates by long polling while an in-process scheduler fires module
+// crons. A small HTTP server answers the container health check.
 package main
 
 import (
@@ -43,6 +47,8 @@ import (
 // (resolveCommitSHA prefers it).
 var gitSHA = buildCommitSHA()
 
+// buildCommitSHA returns the short vcs.revision embedded by go build, or ""
+// when the binary carries no VCS metadata.
 func buildCommitSHA() string {
 	info, ok := debug.ReadBuildInfo()
 	if !ok {
@@ -176,7 +182,7 @@ func main() {
 	defer stopCron()
 
 	if cfg.BotOwnerID == 0 {
-		log.Warn("OWNER_ID unset; all Private + Protected commands will be denied")
+		log.Warn("OWNER_ID unset; Private (owner-only) commands will be denied; Protected commands still work for ADMIN_IDS")
 	}
 
 	// Clear any existing webhook at startup before the owner DM and before
@@ -202,7 +208,7 @@ func main() {
 		Handler:           handler,
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       30 * time.Second,
-		// The only route is GET / (health). It responds instantly, so a tight
+		// The only route is GET / (health). It responds instantly, so this
 		// write deadline is ample and bounds any slow-loris write.
 		WriteTimeout: 30 * time.Second,
 		IdleTimeout:  120 * time.Second,
@@ -296,7 +302,7 @@ func buildProvider(ctx context.Context, cfg config) (storage.Provider, func(), e
 
 	switch backend {
 	case "memory":
-		log.Warn("KV backend: in-memory (data lost on restart)")
+		log.Warn("storage backend: in-memory (data lost on restart)")
 		return storage.NewMemoryProvider(), func() {}, nil
 
 	case "mongodb":
@@ -331,6 +337,7 @@ func buildProvider(ctx context.Context, cfg config) (storage.Provider, func(), e
 	}
 }
 
+// config is the process configuration read from the environment by loadConfig.
 type config struct {
 	Port             string
 	TelegramBotToken string
@@ -343,6 +350,9 @@ type config struct {
 	MongoDatabase    string // required when KVProvider=mongodb
 }
 
+// loadConfig reads config from the environment. PORT defaults to 8080 and an
+// invalid PORT is fatal; malformed OWNER_ID / ADMIN_IDS entries are logged and
+// ignored.
 func loadConfig() config {
 	envMap := make(map[string]string, len(os.Environ()))
 	for _, kv := range os.Environ() {
@@ -354,9 +364,9 @@ func loadConfig() config {
 	if port == "" {
 		port = "8080"
 	}
-	// PORT must be numeric — http.Server constructs ":<port>" verbatim, so a
-	// junk value would surface only at ListenAndServe time. Fail fast here
-	// instead. Range check is delegated to http.Server (it handles 0/65535).
+	// PORT must be a number in 0..65535. http.Server uses ":<port>" verbatim,
+	// so a junk value would otherwise surface only at ListenAndServe time;
+	// fail fast here instead.
 	if n, err := strconv.Atoi(port); err != nil || n < 0 || n > 65535 {
 		log.Fatal("invalid PORT", "value", port)
 	}
@@ -373,6 +383,7 @@ func loadConfig() config {
 	}
 }
 
+// splitCSV splits a comma-separated list, trimming entries and dropping empty ones.
 func splitCSV(s string) []string {
 	if s == "" {
 		return nil

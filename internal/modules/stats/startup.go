@@ -14,6 +14,9 @@ import (
 	"github.com/tiennm99/miti99bot/internal/systemstate"
 )
 
+// The retired stock_dividend command's usage rows are soft-deleted (marked
+// deleted: true) rather than removed, and the run is recorded under
+// deletedStockDividendMarkerKey in the system collection.
 const (
 	statsCommandUsersIndexName     = "stats_cmd_n_user"
 	statsUserCommandsIndexName     = "stats_uid_n_cmd"
@@ -24,7 +27,8 @@ const (
 )
 
 // InitStore performs stats collection startup maintenance. MongoDB index
-// creation and the legacy-command migration are both safe to run every boot.
+// creation and the retired-command migration are both idempotent and run on
+// every boot.
 func InitStore(ctx context.Context, statsColl, systemColl storage.Collection) error {
 	if mongoColl, ok := storage.MongoCollection(statsColl); ok {
 		if err := ensureUsageIndexes(ctx, mongoColl); err != nil {
@@ -34,6 +38,14 @@ func InitStore(ctx context.Context, statsColl, systemColl storage.Collection) er
 	return markDeletedCommand(ctx, statsColl, systemColl, deletedStockDividendCommand, deletedStockDividendMarkerKey)
 }
 
+// markDeletedCommand soft-deletes every usage row of a retired command and
+// records the outcome in the system-state marker under markerKey.
+//
+// It runs on every boot rather than stopping once the marker exists: an older
+// build still running alongside this one (during a rolling deploy, say) can
+// write fresh rows for the command after the first run, and each later boot
+// sweeps those up. CompletedAt keeps the first run's time; Count and UpdatedAt
+// reflect the latest one.
 func markDeletedCommand(ctx context.Context, statsColl, systemColl storage.Collection, command, markerKey string) error {
 	system := systemstate.New(systemColl)
 	marker, exists, err := system.Get(ctx, markerKey)
@@ -103,6 +115,10 @@ func markDocUsageEntriesDeleted(ctx context.Context, docs storage.DocStore[usage
 	return matched, nil
 }
 
+// markUsageEntryDeleted flags one row as deleted with a versioned write,
+// retrying on conflict so a concurrent writer's update is never overwritten. It
+// reports whether the row belongs to command at all, since the key prefix
+// alone also matches longer command names.
 func markUsageEntryDeleted(ctx context.Context, docs storage.DocStore[usageEntry], key, command string) (bool, error) {
 	for attempt := 0; attempt < deletedCommandMigrationRetries; attempt++ {
 		entry, version, err := docs.Get(ctx, key)

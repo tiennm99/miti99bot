@@ -17,6 +17,8 @@ const (
 	maxDividendCallbackBytes = 64
 )
 
+// PendingDividendStore is the typed view of the module collection that holds
+// pending dividend actions under pendingDividendPrefix keys.
 type PendingDividendStore = storage.DocStore[PendingDividendAction]
 
 // PendingDividendAction is the server-side half of an inline button. Financial
@@ -77,6 +79,9 @@ func parseDividendCallback(data string) (int64, string, bool) {
 	return ownerID, eventID, true
 }
 
+// cleanupExpiredDividends deletes pending actions past ExpiresAt. It is
+// best-effort: list and delete failures are ignored because every button press
+// re-checks expiry anyway.
 func (s *state) cleanupExpiredDividends(ctx context.Context, now int64) {
 	if s.pending == nil {
 		return

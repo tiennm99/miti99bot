@@ -1,8 +1,10 @@
-package modules
-
-// This file used to hold a static `Factories` catalog. With concrete modules
-// now living in subpackages (internal/modules/util, /misc, …), keeping the
-// catalog here would create an import cycle (modules → util → modules).
+// Package modules is the bot's module framework: the Module, Command, Callback
+// and Cron types a feature package declares, the Registry that Build assembles
+// from the MODULES selection, and the dispatcher that Install wires into the
+// Telegram bot with visibility-based authorization.
 //
-// The composition root in cmd/server owns the catalog instead. Tests pass
-// their own catalog into Build, exercising only the modules they care about.
+// The module catalog (name → Factory) does not live here. Concrete modules are
+// subpackages (internal/modules/util, /misc, …) that import this package, so
+// keeping the catalog here would create an import cycle. The composition root
+// in cmd/server owns it instead, and tests pass their own catalog into Build.
+package modules

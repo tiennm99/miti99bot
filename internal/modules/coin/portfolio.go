@@ -10,23 +10,35 @@ import (
 	"github.com/tiennm99/miti99bot/internal/storage"
 )
 
+// coinDustEpsilon is the tolerance below which balances and quantities are
+// treated as zero, absorbing float rounding left over by trades.
 const coinDustEpsilon = 1e-9
+
+// portfolioUpdateAttempts bounds optimistic-write retries in UpdatePortfolio.
 const portfolioUpdateAttempts = 5
+
+// CollectionName is the module name and store collection for coin portfolios.
 const CollectionName = "coin"
 
+// Store is the coin module's typed portfolio store.
 type Store = storage.DocStore[Portfolio]
 
+// AssetPosition is one held coin: Quantity in coin units and Base, the USD
+// cost basis still attributed to that quantity.
 type AssetPosition struct {
 	Quantity float64 `json:"quantity" bson:"quantity"`
 	Base     float64 `json:"base" bson:"base"`
 }
 
+// Portfolio is one user's coin account, keyed by upper-case ticker in Assets.
 type Portfolio struct {
 	USD    float64                  `json:"usd" bson:"usd"`
 	Assets map[string]AssetPosition `json:"assets" bson:"assets"`
 	Meta   PortfolioMeta            `json:"meta" bson:"meta"`
 }
 
+// PortfolioMeta holds account-level totals: Invested is the sum of all USD
+// top-ups and CreatedAt is ms since epoch.
 type PortfolioMeta struct {
 	Invested  float64 `json:"invested" bson:"invested"`
 	CreatedAt int64   `json:"createdAt" bson:"createdAt"`
@@ -57,6 +69,9 @@ func SavePortfolio(ctx context.Context, store Store, userID int64, p Portfolio) 
 	return nil
 }
 
+// UpdatePortfolio loads the user's portfolio, applies mutate, validates it, and
+// writes it back with a versioned put, retrying on write conflicts. An error
+// returned by mutate aborts without saving and is passed through unwrapped.
 func UpdatePortfolio(ctx context.Context, store Store, userID int64, now int64, mutate func(*Portfolio) error) (Portfolio, error) {
 	key := portfolioKey(userID)
 	for attempt := 0; attempt < portfolioUpdateAttempts; attempt++ {
@@ -101,6 +116,8 @@ func loadPortfolioForUpdate(ctx context.Context, store Store, key string, now in
 	}
 }
 
+// Validate rejects a negative or non-finite USD balance and any position whose
+// key is not a canonical ticker or whose quantity or basis is not positive.
 func (p Portfolio) Validate() error {
 	if math.IsNaN(p.USD) || math.IsInf(p.USD, 0) || p.USD < 0 {
 		return fmt.Errorf("coin: invalid USD balance")
@@ -120,6 +137,9 @@ func (p *Portfolio) AddUSD(amount float64) {
 	p.normalize()
 }
 
+// DeductUSD withdraws amount when the balance covers it within dust
+// tolerance. It reports whether it did, plus the resulting (or unchanged)
+// balance.
 func (p *Portfolio) DeductUSD(amount float64) (ok bool, balance float64) {
 	p.normalize()
 	if p.USD+coinDustEpsilon < amount {
@@ -146,6 +166,9 @@ func (p *Portfolio) BuyTicker(symbol string, quantity, base float64) error {
 	return nil
 }
 
+// SellTicker removes quantity of symbol and the proportional share of its cost
+// basis, returned as soldBase. Selling the whole position (within dust
+// tolerance) deletes it. ok is false when the position cannot cover quantity.
 func (p *Portfolio) SellTicker(symbol string, quantity float64) (remaining, soldBase float64, ok bool, err error) {
 	position, exists := p.Assets[symbol]
 	if !exists || !isPositiveFinite(quantity) || position.Quantity+coinDustEpsilon < quantity {

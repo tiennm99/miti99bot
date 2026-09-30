@@ -87,7 +87,7 @@ func TestError_AttachesErrField(t *testing.T) {
 }
 
 func TestNewlineEscaping_NoLogInjection(t *testing.T) {
-	// Closes J3 (log-injection class) — slog must escape \n inside field
+	// Log-injection guard — slog must escape \n inside field
 	// values so an attacker controlled string can't synthesise a fake log
 	// record on the next line.
 	buf, restore := captureLogger(t, slog.LevelInfo)

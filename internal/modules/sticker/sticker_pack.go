@@ -17,10 +17,10 @@ import (
 )
 
 const (
-	// stickerPackNameEnv overrides which set /addsticker writes to. The set
-	// must already exist and must have been created by this bot, which is the
-	// only thing that makes it bot-manageable — there is no command to create
-	// one, by design.
+	// stickerPackNameEnv overrides which set /addsticker writes to. The name
+	// must end in "_by_<bot_username>", the only thing that makes a set
+	// bot-manageable; packTitle checks it before any upload. A set that does
+	// not exist yet is created by the first successful /addsticker.
 	stickerPackNameEnv = "STICKER_PACK_NAME"
 
 	// defaultStickerPackName is the shared pack used when the env is unset.

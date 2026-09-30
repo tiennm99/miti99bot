@@ -29,9 +29,9 @@ func (s *state) handleStats(ctx context.Context, b *bot.Bot, update *models.Upda
 
 	// Fetch sequentially (not concurrently) so the price client's keep-alive
 	// connection pool is reused across coins rather than opening N simultaneous
-	// TLS handshakes. The reply-reserved sub-context bounds the whole loop so the final
-	// Reply keeps its budget; a slow/failed provider degrades to "(price
-	// unavailable)" instead of failing the summary.
+	// TLS handshakes. The reply-reserved sub-context bounds the whole loop so the
+	// final reply keeps its budget; a slow or failed provider degrades that row
+	// to "N/A" and the summary to partial totals instead of failing the reply.
 	fetchCtx, cancel := chathelper.FetchContext(ctx)
 	defer cancel()
 	for _, symbol := range sortedAssetSymbols(p.Assets) {
@@ -92,8 +92,13 @@ func sortedAssetSymbols(assets map[string]AssetPosition) []string {
 	return symbols
 }
 
+// portfolioReplyLimit keeps the rendered reply under Telegram's 4096-character
+// message limit with room to spare.
 const portfolioReplyLimit = 4000
 
+// portfolioTableReply renders the position and summary tables, dropping
+// positions from the end (and noting how many) until the reply fits
+// portfolioReplyLimit.
 func portfolioTableReply(title string, positions, summary [][]string) string {
 	omitted := 0
 	for {

@@ -9,7 +9,7 @@ func TestNormalizeWord(t *testing.T) {
 		"CRANE":     "crane",
 		"  crane  ": "crane",
 		"c-r-a-n-e": "crane",
-		"héllo":     "hllo", // strips non a-z (including the é and accented o-equivalent)
+		"héllo":     "hllo", // strips non a-z bytes, including both UTF-8 bytes of é
 		"!@#$%":     "",
 		"42 crane":  "crane",
 	}

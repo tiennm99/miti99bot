@@ -14,8 +14,8 @@ import (
 	"github.com/tiennm99/miti99bot/internal/testutil"
 )
 
-// installAlias builds a registry holding only the alias module. Both commands
-// are public, so no auth is needed for them to dispatch.
+// installAlias builds a registry holding only the alias module. Every command
+// it registers is public, so no auth is needed for them to dispatch.
 func installAlias(t *testing.T) *testutil.RecordingBot {
 	t.Helper()
 	rb := testutil.NewRecordingBot(t)
@@ -173,8 +173,8 @@ func TestAlias_AnimationBeatsDocument(t *testing.T) {
 	}
 }
 
-// Global namespace, last assignment wins — and the reply says so, since there
-// is no /unalias to undo a mistake with.
+// Global namespace, last assignment wins — and the reply says so, because an
+// overwrite silently discards whatever the name held before.
 func TestAlias_OverwriteAnnouncesReplacement(t *testing.T) {
 	rb := installAlias(t)
 	rb.Bot.ProcessUpdate(context.Background(),

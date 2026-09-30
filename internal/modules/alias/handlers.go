@@ -18,9 +18,9 @@ import (
 )
 
 const (
-	// handlerTimeout bounds both handlers. The bot dispatches updates inline on
-	// a single worker with no deadline of its own, so without this the
-	// library's 60s per-call HTTP ceiling is the only bound.
+	// handlerTimeout bounds every command handler and the fallback. The bot
+	// dispatches updates inline on a single worker with no deadline of its own,
+	// so without this the library's 60s per-call HTTP ceiling is the only bound.
 	handlerTimeout = 10 * time.Second
 
 	// maxNameLen matches Telegram's own username cap, which is the format these
@@ -51,7 +51,8 @@ const genericFailure = "Something went wrong. Try again in a moment."
 // errUnknownKind marks a stored record this build cannot send.
 var errUnknownKind = errors.New("alias: unknown kind")
 
-// parseName validates the single argument both commands take.
+// parseName validates the single name argument /alias, /insert and /unalias
+// take, and the bare command name the fallback resolves.
 //
 // A leading "@" is stripped rather than rejected: the names are username-shaped
 // and typing one with the sigil is a natural mistake, not a different request.

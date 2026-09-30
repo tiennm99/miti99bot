@@ -9,8 +9,8 @@ import (
 // ErrCronNotFound is returned when name addresses an unregistered cron.
 var ErrCronNotFound = errors.New("cron not found")
 
-// DispatchScheduled runs the cron registered under name with the per-module
-// prefixed Deps the registry stored at Build time. Returns ErrCronNotFound if
+// DispatchScheduled runs the cron registered under name with the owning
+// module's Deps the registry stored at Build time. Returns ErrCronNotFound if
 // no module owns that name — a scheduler firing an unknown name is a
 // configuration bug worth surfacing to the caller.
 //
