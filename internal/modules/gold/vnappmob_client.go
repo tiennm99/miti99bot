@@ -12,6 +12,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/tiennm99/miti99bot/internal/log"
@@ -39,6 +40,10 @@ type VNAppMobClient struct {
 	BaseURL string                        // explicit test override; production uses https://api.vnappmob.com
 	Token   string                        // optional env override (GOLD_VNAPP_API_KEY)
 	cache   storage.DocStore[apiKeyCache] // module-scoped typed cache store
+
+	// tokenRejected is set once VNAppMob answers 401/403 to Token, so later
+	// calls use the self-managed key instead of the dead env override.
+	tokenRejected atomic.Bool
 
 	nowFn func() time.Time
 	mu    sync.Mutex
@@ -92,6 +97,12 @@ func (c *VNAppMobClient) FetchSJCPrice(ctx context.Context) (buy, sell float64, 
 		return 0, 0, err
 	}
 
+	if c.Token != "" && key == c.Token {
+		// Without this the retry below would get the same rejected env key back
+		// from getKey, and an expired GOLD_VNAPP_API_KEY could never recover.
+		c.tokenRejected.Store(true)
+		log.Warn("vnappmob_env_key_rejected", "status", statusErr.StatusCode, "msg", "GOLD_VNAPP_API_KEY rejected; switching to self-managed key")
+	}
 	log.Warn("vnappmob_sjc_auth_failed", "status", statusErr.StatusCode, "msg", "refreshing key after auth failure")
 	if refreshErr := c.refreshKey(ctx); refreshErr != nil {
 		return 0, 0, fmt.Errorf("vnappmob: 403 refresh failed: %w", refreshErr)
@@ -165,10 +176,11 @@ type httpStatusError struct {
 
 func (e *httpStatusError) Error() string { return e.msg }
 
-// getKey returns a valid API key, refreshing from the typed cache store or the
-// remote endpoint when the current key is missing or close to expiry.
+// getKey returns the env-provided Token when set and not yet rejected. Otherwise it returns the
+// cached key, requesting a new one from the remote endpoint when the cached key
+// is missing or close to expiry.
 func (c *VNAppMobClient) getKey(ctx context.Context) (string, error) {
-	if c.Token != "" {
+	if c.Token != "" && !c.tokenRejected.Load() {
 		return c.Token, nil
 	}
 

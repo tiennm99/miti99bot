@@ -303,3 +303,42 @@ func TestFetchSJCPrice_InvalidValues(t *testing.T) {
 		})
 	}
 }
+
+// A rejected GOLD_VNAPP_API_KEY must not be retried: the client switches to a
+// self-managed key for this call and every later one.
+func TestFetchSJCPrice_RejectedEnvTokenSwitchesToManagedKey(t *testing.T) {
+	exp := time.Unix(1000, 0).Add(14 * 24 * time.Hour).Unix()
+	managed := makeJWT(exp)
+	var envHits, refreshHits int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/request_api_key":
+			atomic.AddInt32(&refreshHits, 1)
+			fmt.Fprint(w, managed)
+		case "/api/v2/gold/sjc":
+			if r.Header.Get("Authorization") != "Bearer "+managed {
+				atomic.AddInt32(&envHits, 1)
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
+			_, _ = w.Write([]byte(`{"results":[{"buy_1l":"90000000.0","sell_1l":"91000000.0"}]}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	c := newTestVNAppMobClient(srv, newTestColl())
+	c.Token = "expired-env-key"
+	for i := range 2 {
+		if _, _, err := c.FetchSJCPrice(context.Background()); err != nil {
+			t.Fatalf("FetchSJCPrice call %d: %v", i+1, err)
+		}
+	}
+	if got := atomic.LoadInt32(&envHits); got != 1 {
+		t.Fatalf("requests with env key: got %d, want 1", got)
+	}
+	if got := atomic.LoadInt32(&refreshHits); got != 1 {
+		t.Fatalf("refresh hits: got %d, want 1", got)
+	}
+}
