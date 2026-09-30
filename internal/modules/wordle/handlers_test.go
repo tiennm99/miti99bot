@@ -190,3 +190,27 @@ func TestWordle_GroupSubjectIsChatID(t *testing.T) {
 		t.Errorf("user-keyed game leaked despite group context: %+v", gUser)
 	}
 }
+
+// Running out of guesses already records the loss, so a later /wordle_giveup
+// on that round must not count a second one.
+func TestWordleGiveup_OutOfGuessesDoesNotRecordSecondLoss(t *testing.T) {
+	rb, games := installWordle(t, 0, "", "")
+	g := &GameState{Target: "crane", StartedAt: 1}
+	for range MaxGuesses {
+		g.Guesses = append(g.Guesses, GuessRecord{Word: "slate", Results: CompareWords("slate", "crane")})
+	}
+	if err := saveGame(context.Background(), games, "1", g); err != nil {
+		t.Fatalf("seed game: %v", err)
+	}
+
+	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(1, "/wordle_giveup"))
+	if got := rb.LastSent().Text(); !strings.Contains(got, "Current round is over") || !strings.Contains(got, "CRANE") {
+		t.Fatalf("/wordle_giveup on exhausted round: %q", got)
+	}
+
+	rb.Reset()
+	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(1, "/wordle_stats"))
+	if got := rb.LastSent().Text(); !strings.Contains(got, "Played: 0") {
+		t.Fatalf("giveup on exhausted round recorded stats: %q", got)
+	}
+}

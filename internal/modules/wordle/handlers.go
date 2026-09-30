@@ -169,7 +169,8 @@ func (s *state) handleNew(ctx context.Context, b *bot.Bot, update *models.Update
 }
 
 // handleGiveup is /wordle_giveup — reveals answer for the current round.
-// Idempotent on already-finished rounds (parrots the same answer back).
+// Calls on a finished round (solved, given up, or out of guesses) echo the
+// answer without touching stats.
 func (s *state) handleGiveup(ctx context.Context, b *bot.Bot, update *models.Update) error {
 	msg := update.Message
 	if msg == nil {
@@ -192,6 +193,12 @@ func (s *state) handleGiveup(ctx context.Context, b *bot.Bot, update *models.Upd
 	}
 	if g.Giveup {
 		return chathelper.Reply(ctx, b, msg, fmt.Sprintf("Already gave up — %s.", strings.ToUpper(g.Target)))
+	}
+	// A round lost by running out of guesses already recorded its loss in
+	// handleWordle; giving up on it must not count a second one.
+	if isFinished(g) {
+		return chathelper.Reply(ctx, b, msg,
+			fmt.Sprintf("Current round is over. Use /wordle_new to start another. Answer was %s.", strings.ToUpper(g.Target)))
 	}
 	g.Giveup = true
 	if err := saveGame(ctx, s.games, subject, g); err != nil {
