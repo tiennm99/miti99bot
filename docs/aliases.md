@@ -149,15 +149,9 @@ notes cannot, and Telegram's send methods for them have no caption field at all.
 
 ## Listing
 
-`/aliases` prints the count and every name, sorted, in one message.
-
-**Names only, not what each holds.** The store answers "which keys exist" in a
-single call, while naming each kind would cost one read per alias — a round trip
-each against MongoDB, on a dispatcher that serves one update at a time. To find
-out what a name holds, `/insert` it.
-
-One line per alias, showing what the name holds, with the invocation in a
-`<code>` span so tapping it copies a command ready to send:
+`/aliases` prints the count and every name, sorted, in one message — one line
+per alias, showing what the name holds, with the invocation in a `<code>` span
+so tapping it copies a command ready to send:
 
 ```
 3 aliases:

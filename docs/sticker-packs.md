@@ -15,10 +15,10 @@ written afterwards.
 
 | Command | Parameters | Reply to | What it does |
 |---|---|---|---|
-| `/addsticker` | `[emoji...]` | sticker, photo, or image document | Adds it to the shared pack and replies with the link |
+| `/addsticker` | `[emoji...]` | sticker, photo, image document, video, GIF, or video note | Adds it to the shared pack and replies with the link |
 
-Single-shot: one message, optionally replying to a sticker or image. No
-conversation state.
+Single-shot: one message replying to the media to add. No conversation state.
+[What it accepts](#what-it-accepts) lists every supported kind.
 
 ## Configuration
 
@@ -34,7 +34,7 @@ the configured pack belongs to someone else.
 
 The caller's identity is used nowhere. That is what makes the command stateless:
 no records, no keys, no per-user locks, and no ownership checks. It is also why
-`/addsticker` needs no storage and fits in `util`.
+`/addsticker` needs no per-user storage.
 
 `STICKER_PACK_NAME` **must end in `_by_<this bot's username>`** — Telegram
 requires that suffix on every set a bot creates, and refuses to let a bot edit

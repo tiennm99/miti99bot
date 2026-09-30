@@ -4,7 +4,8 @@
 
 `miti99bot` is a Go Telegram bot with pluggable modules under
 `internal/modules`. Runtime storage is MongoDB when `MONGO_URL` is set and
-in-memory storage in tests. Read `README.md` before implementation work.
+in-memory otherwise, which is what tests and local no-database runs use. Read
+`README.md` before implementation work.
 
 `third_party/monkeyd-crawler` is a git submodule resolved through a `go.mod`
 `replace` directive, not a versioned dependency. Go commands fail until it is
@@ -33,7 +34,8 @@ deleting commands, update all related surfaces:
 - command parameter metadata used by Telegram and `/help`
 - handler usage text and user-facing error text
 - tests for registration, handlers, and command menu behavior
-- README/docs when behavior changes are user-visible
+- the README module table, plus the feature doc under `docs/` when one exists,
+  when behavior changes are user-visible
 
 Follow `docs/command-parameter-conventions.md` for all command parameter
 metadata and usage text. Keep metadata, usage errors, examples, and tests exact.

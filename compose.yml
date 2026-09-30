@@ -33,7 +33,7 @@ services:
     # Coolify network for the container health monitor against GET / only.
     expose:
       - "8080"
-    # No compose healthcheck: distroless has no shell/curl and cmd/server has no
-    # -healthcheck flag. Configure Coolify's HTTP monitor against GET / instead
+    # No compose healthcheck: Coolify's own HTTP monitor covers it, so none is
+    # defined here. Configure that monitor against GET / instead
     # (returns text/plain "miti99bot ok"). Note: a plain / check does not verify
     # Mongo connectivity — see docs/deploy-coolify-selfhosted.md.

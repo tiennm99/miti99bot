@@ -7,22 +7,27 @@ Atlas via long polling and an in-process cron scheduler.
 
 | Module | What it does |
 |---|---|
-| `util` | `/help`, `/info`, `/stickerid` |
-| `misc` | `/ping`, `/ping_stats`, `/random`, `/wheelofnames`, `/ff`, `/xlt1`, `/giaxang`, `/the_answer`, `/trongtruonghop` + `/tth`, `/trongtruonghopvng` + `/tthvng` disclaimers |
+| `util` | `/help`, `/info` (admin), `/stickerid` (owner) |
+| `misc` | `/ping`, `/ping_stats` (admin), `/random`, `/wheelofnames`, `/ff` (admin), `/xlt1`, `/giaxang` (Petrolimex retail fuel prices), `/the_answer` (owner), `/trongtruonghop` + `/tth`, `/trongtruonghopvng` + `/tthvng` disclaimers |
 | `amlich` | Vietnamese lunar calendar: `/amlich` (dương lịch → âm lịch, defaults to today), `/duonglich` (âm lịch → dương lịch, `nhuan` flag for leap months); dates accept `d`, `d/m`, or `d/m/yyyy` — missing parts fill from today in the input's calendar. Years 1800–2199 only |
-| `wordle` | Daily Wordle game |
-| `loldle` | League-of-Legends "guess the champion" |
-| `lol` | Pro-match schedule (`/lol`, `/lol_tomorrow`, `/lol_this_week`, `/lol_next_week`), per-chat digest opt-in (`/lol_subscribe`, `/lol_unsubscribe`) + daily push at 08:00 ICT |
-| `stock` | VN-stocks paper trading |
-| `gold` | Gold paper trading (VNAppMob SJC buy/sell VND/luong) |
-| `coin` | Crypto paper trading in USD (Binance -> Coinbase -> CoinGecko price fallback) |
+| `wordle` | Daily Wordle game: `/wordle [word]`, `/wordle_new`, `/wordle_giveup`, `/wordle_stats` |
+| `loldle` | League-of-Legends "guess the champion": `/loldle [champion]`, `/loldle_giveup`, `/loldle_stats`, `/loldle_setmax` (owner) |
+| `lol` | Pro-match schedule (`/lol [date]`, `/lol_tomorrow`, `/lol_this_week`, `/lol_next_week`), per-chat digest opt-in (`/lol_subscribe`, `/lol_unsubscribe`) + daily push at 08:00 ICT |
+| `stock` | VN-stocks paper trading: `/stock_price`, `/stock_info`, `/stock_events`, `/stock_topup`, `/stock_buy`, `/stock_sell`, `/stock_cash_dividend`, `/stock_share_dividend`, `/stock_portfolio` |
+| `gold` | Gold paper trading (VNAppMob SJC buy/sell VND/luong): `/gold_price`, `/gold_topup`, `/gold_buy`, `/gold_sell`, `/gold_portfolio` |
+| `coin` | Crypto paper trading in USD (Binance -> Coinbase -> CoinGecko price fallback): `/coin_price`, `/coin_topup`, `/coin_buy`, `/coin_sell`, `/coin_portfolio` |
 | `stats` | `/stats` (top commands), `/stats users`, `/stats user <username>`, `/stats cmd <command_name>` |
 | `sticker` | `/addsticker` — append a replied sticker, image, video or GIF to one shared pack. See [docs/sticker-packs.md](docs/sticker-packs.md) |
 | `alias` | `/alias <name>` save a replied message under a name, then send it back with `/insert <name>`, bare `/<name>`, or inline `@botname <prefix>`; `/aliases` lists, `/unalias` deletes. See [docs/aliases.md](docs/aliases.md) |
-| `blacklist` | Per-topic text deny-list with whitelist exceptions: `/blacklist_add`, `/blacklist_del`, `/whitelist_add`, `/whitelist_del`, `/blacklist_rules` lists both, `/blacklist_check` judges a text. Passive — the bot never scans chat. See [docs/blacklist.md](docs/blacklist.md) |
+| `blacklist` | Per-topic text deny-list with whitelist exceptions: `/blacklist_add`, `/blacklist_del`, `/whitelist_add`, `/whitelist_del`, `/blacklist_rules` lists both, `/blacklist_check` judges a text, `/blacklist` does either, `/whitelist_rnd` picks a random exception. Passive — the bot never scans chat. See [docs/blacklist.md](docs/blacklist.md) |
 | `monkeyd` | `/monkeyd_crawl <url> [font_size]` export a monkeydd.com novel as a PDF, `/monkeyd_tags <url>` list its tags as hashtags |
 
-Disable modules with the `MODULES` environment variable.
+Commands marked (admin) require a user ID in `ADMIN_IDS` or the owner; commands
+marked (owner) require `OWNER_ID`. Both kinds are hidden from `/help` and the
+Telegram command menu. Every other command is public.
+
+Choose modules with the `MODULES` environment variable, a comma-separated list;
+empty loads every module.
 
 ## Command discovery
 
@@ -41,6 +46,8 @@ discovery surface includes example invocations.
 Future commands must follow the
 [command parameter conventions](docs/command-parameter-conventions.md). Keep
 command metadata, handler usage text, tests, and documentation aligned.
+
+## Feature notes
 
 ### Lunar calendar accuracy
 
@@ -220,16 +227,25 @@ all.
 cmd/server/                  entrypoint (long polling + in-process cron + HTTP health)
 internal/server/             HTTP route (/ health only; cron has no HTTP route)
 internal/telegram/           Telegram long-polling bot wrapper
-internal/cron/               in-process cron scheduler
+internal/cron/               in-process cron scheduler (UTC)
+internal/deploynotify/       startup DM to the owner with the deployed commit
 internal/modules/            Module framework, registry, dispatchers, modules
 internal/storage/            typed DocStore[T] (Provider + Typed); mongodb runtime + memory (tests). Values persist as flattened native BSON root documents
 internal/systemstate/        shared `system` collection helper for startup migration records
+internal/log/, metrics/      JSON logging (LOG_LEVEL) and periodic metrics flush
 third_party/monkeyd-crawler/ git submodule; resolved by a go.mod replace directive
 compose.yml                  Coolify self-host stack (single bot service)
-docs/deploy-coolify-selfhosted.md    Self-host deploy and operations guide
-docs/command-parameter-conventions.md  Command parameter syntax rules
-docs/amlich-known-issues.md  Lunar algorithm decision and known edge cases
 ```
+
+## Documentation
+
+- [Self-host deploy and operations](docs/deploy-coolify-selfhosted.md), including the full environment variable list
+- [Command parameter conventions](docs/command-parameter-conventions.md)
+- [Aliases](docs/aliases.md)
+- [Blacklist](docs/blacklist.md)
+- [Sticker pack](docs/sticker-packs.md)
+- [Lunar calendar algorithm and known issues](docs/amlich-known-issues.md)
+- [Agent and contributor rules](AGENTS.md)
 
 ## Run locally
 
@@ -270,8 +286,9 @@ dev bot is created manually; its token is injected through the environment.
 
 The `lol` module reads its schedule from the PandaScore REST API and needs
 `LOL_PANDASCORE_TOKEN` (free tier). Without it every `/lol*` fetch fails while
-the rest of the bot runs normally. See [`.env.example`](.env.example) for the
-full variable list.
+the rest of the bot runs normally. See the
+[environment table](docs/deploy-coolify-selfhosted.md#environment) for every
+variable, and [`.env.example`](.env.example) for a template.
 
 Persistent MongoDB locally (auto-selected when `MONGO_URL` is set):
 
@@ -295,18 +312,21 @@ use `go test -v ./...` to see individual skip reasons.
 
 ```sh
 go vet ./...
+golangci-lint run
 go test -count=1 ./...
 go build ./...
 ```
 
-CI additionally runs the test suite with Go's race detector.
+CI runs the same steps, with the test suite under Go's race detector
+(`go test -race`), plus an informational `govulncheck` and a `docker build`.
+Lint settings live in [`.golangci.yml`](.golangci.yml).
 
 ## Deploy
 
 [`docs/deploy-coolify-selfhosted.md`](docs/deploy-coolify-selfhosted.md) covers
 Coolify + MongoDB Atlas (free M0), long polling (no public ingress), and
-in-process cron. Storage auto-selects `mongodb` when `MONGO_URL` is set; the
-cron scheduler runs by default.
+in-process cron. Coolify redeploys on every push to `main`. Storage
+auto-selects `mongodb` when `MONGO_URL` is set; the cron scheduler always runs.
 
 ## License
 

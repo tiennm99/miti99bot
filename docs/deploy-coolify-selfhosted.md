@@ -15,31 +15,38 @@ Run `miti99bot` as a long-lived container on [Coolify](https://coolify.io) with
 
 - **Storage** — `mongodb` auto-selected when `MONGO_URL` is set (no `KV_PROVIDER`).
 - **Cron** — an in-process scheduler (`internal/cron`) runs unconditionally and
-  fires each module cron on its `Schedule` (UTC).
+  fires each module cron on its `Schedule`, evaluated in UTC. The only cron
+  today is the `lol` daily digest at `0 1 * * *` (08:00 ICT).
 - **Transport** — long polling (`b.Start`) is the **only** transport. The bot
   opens an outbound connection to Telegram and pulls updates, so there is no
   public domain, no `/webhook`, and no webhook secret. The container clears any
   leftover webhook on startup (`deleteWebhook`) before polling.
 
-## Required environment
+## Environment
 
 Copy [`.env.example`](../.env.example) → `.env` (gitignored) and fill in.
 
 | Var | Required | Notes |
 |---|---|---|
-| `TELEGRAM_BOT_TOKEN` | ✅ | from @BotFather |
+| `TELEGRAM_BOT_TOKEN` | ✅ | from @BotFather; startup fails without it |
 | `MONGO_URL` | ✅ | Atlas SRV string **incl. credentials** — secret, never logged |
 | `MONGO_DATABASE` | ✅ | e.g. `miti99bot` |
-| `MODULES` | optional | CSV; empty = all modules |
-| `OWNER_ID` | optional | owner-only commands (renamed from `BOT_OWNER_ID`) |
-| `ADMIN_IDS` | optional | CSV of admin ids (renamed from `ADMIN_USER_IDS`) |
+| `MODULES` | optional | CSV; empty = all modules, including any added later |
+| `OWNER_ID` | optional | Telegram user id for owner-only commands, the deploy DM, and the `/addsticker` pack owner. Unset = owner-only commands are denied and `/addsticker` refuses |
+| `ADMIN_IDS` | optional | CSV of Telegram user ids for admin-only commands |
+| `STICKER_PACK_NAME` | optional | set `/addsticker` writes to; default `miti99_by_miti99bot`. See [sticker packs](sticker-packs.md) |
+| `LOL_PANDASCORE_TOKEN` | ✅ for lol module | PandaScore API token (free tier) — secret, never logged; without it every `/lol*` fetch fails (stale cache may still serve briefly) |
 | `WHEELOFNAMES_API_URL` | optional | full `/api/gif` endpoint for remote `/wheelofnames` GIF rendering |
 | `WHEELOFNAMES_API_TOKEN` | optional | bearer token matching the wheelofnames service `API_TOKEN` |
-| `LOL_PANDASCORE_TOKEN` | ✅ for lol module | PandaScore API token (free tier) — secret, never logged; without it every `/lol*` fetch fails (stale cache may still serve briefly) |
+| `LOG_LEVEL` | optional | `debug`, `info` (default), `warn`, or `error`; logs are JSON on stdout |
+| `GOLD_VNAPP_API_KEY` | leave unset | VNAppMob key; unset = the gold module fetches one and caches it in MongoDB |
+| `KV_PROVIDER` | leave unset | `memory` or `mongodb`; unset = `mongodb` when `MONGO_URL` is set, otherwise `memory` |
+| `PORT` | leave unset | health server port; default `8080` |
+| `SOURCE_COMMIT` | never set | provided by Coolify at runtime for the deploy DM (see step 6 below) |
 
-**Leave UNSET on self-host:** `KV_PROVIDER`, `PORT`,
-`TELEGRAM_WEBHOOK_SECRET`, and `GOLD_VNAPP_API_KEY`. Stock, coin, and gold URL
-overrides are not supported in runtime env; modules use coded defaults.
+Stock, coin, and gold provider URL overrides are not supported in runtime env;
+modules use coded defaults. There is no `TELEGRAM_WEBHOOK_SECRET`: long polling
+has no webhook.
 
 > Cron runs in-process (`internal/cron`) — there is no `/cron` HTTP route and no
 > `CRON_SHARED_SECRET`. The scheduler is the sole trigger; nothing inbound.
@@ -86,7 +93,7 @@ reply is immediate.
    Atlas admin or cluster-wide. Use a **strong unique password**.
 3. **Network access:** add `0.0.0.0/0`.
 
-   > **Accepted trade-off (validated decision).** The Coolify host has no stable
+   > **Accepted trade-off.** The Coolify host has no stable
    > egress IP, so the Atlas IP allow-list is open to the internet. This widens
    > the database surface. The mandatory compensating controls are: (1) strong
    > unique password, (2) least-privilege `readWrite`-on-one-db user, (3) the
@@ -96,31 +103,33 @@ reply is immediate.
 4. Copy the `mongodb+srv://…` connection string into `MONGO_URL` and put the
    db name in `MONGO_DATABASE`.
 
-> Storage layout: one collection per module. Each document is a flattened native
-> document — `{ _id: <user key>, ...payload fields, version, updatedAt }` with no
-> `value` envelope. Payload fields are hoisted to the document root so they
-> expand and are queryable in Compass. The two non-object values are wrapped in a
-> named field: `lol` schedule subscribers under `subscribers` (array) and the
-> daily push date under `date`. Concurrency uses the `version` field (optimistic lock);
-> `updatedAt` is a BSON Date.
->
-> The `stats` collection uses queryable aggregate documents for command/user
-> counts and creates indexes on startup. Deleted legacy command rows are
-> retained with `deleted: true`; `/stats` queries filter those rows from visible
-> results. Stats startup uses the idempotent
-> `migration:stats-delete-stock-dividend-v1` migration to retire historical
-> `/stock_dividend` rows without erasing them. A historical `system` collection may remain in MongoDB with completed
-> migration records; keep those records as audit history. Stock stores cash as
-> `vnd`, embeds positions as `assets.<symbol>.{quantity,base,openedAt}`, and
-> retains normalized per-user SSI history under
-> `dividends.<symbol>.<ssi_event_id>`. Unprocessed retained dividend events are
-> replayed on every `/stock_portfolio` until they are processed or expire after
-> 90 days; events with no Record date stay informational while SSI is
-> rechecked, and later SSI responses that omit an event do not delete the
-> retained record. Coin stores cash as `usd` and embeds positions as
-> `assets.<symbol>.{quantity,base}`. Stock startup maintenance runs the
-> idempotent `migration:stock-dividend-history-v1` migration to remove the
-> retired dividend cursor and hashed applied-event ledger.
+### Storage layout
+
+- **One collection per module.** Each document is a flattened native document
+  — `{ _id: <user key>, ...payload fields, version, updatedAt }` with no `value`
+  envelope. Payload fields are hoisted to the document root so they expand and
+  are queryable in Compass. The two non-object values are wrapped in a named
+  field: `lol` schedule subscribers under `subscribers` (array) and the daily
+  push date under `date`. Concurrency uses the `version` field (optimistic
+  lock); `updatedAt` is a BSON Date.
+- **`stats`** uses queryable aggregate documents for command/user counts and
+  creates its indexes on startup. Deleted legacy command rows are retained with
+  `deleted: true`, and `/stats` filters them from visible results.
+- **`stock`** stores cash as `vnd`, embeds positions as
+  `assets.<symbol>.{quantity,base,openedAt}`, and retains normalized per-user
+  SSI dividend history under `dividends.<symbol>.<ssi_event_id>`. The
+  [README](../README.md#stock-dividend-commands) describes how those records
+  are replayed and expired.
+- **`coin`** stores cash as `usd` and embeds positions as
+  `assets.<symbol>.{quantity,base}`.
+- **`system`** holds one marker per completed one-time startup migration. Keep
+  those records as audit history. The current markers are
+  `migration:stats-delete-stock-dividend-v1` (retires historical
+  `/stock_dividend` stats rows without erasing them),
+  `migration:stock-dividend-history-v1` (removes the retired dividend cursor
+  and hashed applied-event ledger), and
+  `migration:sticker-drop-legacy-packs-v1` (removes records left by the retired
+  per-user sticker pack commands).
 
 ## 2. Coolify
 
@@ -132,9 +141,8 @@ reply is immediate.
    `replace` directive. Coolify must clone submodules, or the Docker build
    fails at `go mod download` with an unresolved
    `github.com/tiennm99/monkeyd-crawler`. Turn on Coolify's recursive-clone /
-   submodule option for the resource. If submodules cannot be enabled, drop the
-   module instead by setting `MODULES` to the list without `monkeyd` — the build
-   still needs the submodule, so this is only a runtime opt-out.
+   submodule option for the resource. There is no build without it: leaving
+   `monkeyd` out of `MODULES` only disables the commands at runtime.
 3. Set the env vars above in Coolify.
 4. **No public domain / port** is needed — polling is outbound-only. Do not
    publish a port or attach a domain. `expose: 8080` keeps the health endpoint
@@ -152,21 +160,19 @@ reply is immediate.
    `compose.yml`; an interpolated empty value can override Coolify's runtime
    env-file value.
 7. **Health check:** use Coolify's HTTP monitor against `GET /` (returns
-   `text/plain` `miti99bot ok`). Do **not** use a compose `healthcheck` — the
-   distroless image has no shell/curl and `cmd/server` has no `-healthcheck`
-   flag. Note: `/` reports healthy even if Mongo is unreachable (the driver
-   auto-reconnects on the next op); a DB outage will not auto-restart the
-   container — accepted trade-off.
+   `text/plain` `miti99bot ok`). The committed `compose.yml` defines no
+   `healthcheck`, and `cmd/server` has no `-healthcheck` flag. Note: `/`
+   reports healthy even if Mongo is unreachable (the driver auto-reconnects on
+   the next op); a DB outage will not auto-restart the container — accepted
+   trade-off.
 
 ## 3. Command menu
 
-The bot registers its Telegram command menu from loaded public modules on
-every startup. The Go module registry is the single source of truth; no separate
-command-menu file or manual registration step is required. A command's
-description plus optional `Parameters` metadata feed both surfaces. Telegram
-renders the command name separately and accepts only a single-line plain-text
-description. Both the native menu and `/help` show syntax plus the summary and
-omit example invocations.
+The bot registers its Telegram command menu from the loaded modules' public
+commands on every startup. The Go module registry is the single source of
+truth, so no separate command-menu file or manual registration step is
+required. See [Command discovery](../README.md#command-discovery) for how the
+menu text is built.
 
 ## Operations
 
@@ -210,8 +216,15 @@ cp .env.example .env # fill TELEGRAM_BOT_TOKEN, MONGO_URL, MONGO_DATABASE
 docker compose up --build
 ```
 
-Boot logs should show `storage backend backend=mongodb database=…` (no
-connection string), `cron scheduler started`, and `telegram long polling
-started`. A request to `http://localhost:8080/` returns `miti99bot ok` (use
-`Invoke-WebRequest` in PowerShell or `curl` in a POSIX shell). The bot's webhook
-must be unset (the container clears it on startup) or `getUpdates` 409s.
+Boot logs are JSON lines. Look for `"msg":"storage backend"` with
+`"backend":"mongodb"` and the database name (never the connection string),
+`"msg":"cron scheduler started"`, and `"msg":"telegram long polling started"`.
+`compose.yml` does not publish port 8080 to the host, so check the health
+endpoint from inside the container:
+
+```sh
+docker compose exec bot wget -qO- http://127.0.0.1:8080/
+```
+
+It returns `miti99bot ok`. The bot's webhook must be unset (the container
+clears it on startup) or `getUpdates` 409s.
