@@ -138,3 +138,8 @@ func setupMongoStatsTest(t *testing.T) (context.Context, storage.Collection, sto
 	provider := storage.NewMongoProvider(db)
 	return ctx, provider.Collection("stats"), provider.Collection(systemstate.CollectionName)
 }
+
+func TestInc_MongoUsernameMoveClearsOldHolder(t *testing.T) {
+	_, statsColl, _ := setupMongoStatsTest(t)
+	assertUsernameMoveClearsOldHolder(t, statsColl)
+}

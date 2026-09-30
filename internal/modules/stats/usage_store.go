@@ -106,16 +106,25 @@ func (s *docUsageStore) Increment(ctx context.Context, cmd string, user usageUse
 	return nil
 }
 
+// refreshUsernameLocked rewrites the username on every row of user.ID, so a
+// Telegram username change carries the user's whole history with it and
+// /stats user <new name> finds all of it. It also clears that username from
+// other users' rows: Telegram usernames can move to a new account, and a stale
+// copy would make lookups by name ambiguous. The caller must hold s.mu.
 func (s *docUsageStore) refreshUsernameLocked(ctx context.Context, user usageUser) error {
 	entries, err := s.loadEntriesLocked(ctx)
 	if err != nil {
 		return err
 	}
 	for _, e := range entries {
-		if e.UserID != user.ID || e.Username == user.Username {
+		switch {
+		case e.UserID == user.ID && e.Username != user.Username:
+			e.Username = user.Username
+		case e.UserID != user.ID && user.Username != "" && e.Username == user.Username:
+			e.Username = ""
+		default:
 			continue
 		}
-		e.Username = user.Username
 		if err := s.docs.Put(ctx, usageKey(e.Cmd, e.UserID), e); err != nil {
 			return fmt.Errorf("stats refresh username %d: %w", user.ID, err)
 		}
@@ -255,6 +264,11 @@ type mongoUsageStore struct {
 	coll *mongo.Collection
 }
 
+// Increment upserts the row with $inc, so concurrent increments need no lock.
+// Unsetting "deleted" revives a soft-deleted row that is being used again; the
+// retired command is filtered out before that can happen. A follow-up
+// UpdateMany propagates a username change to the user's other rows, and a
+// second one clears the username from any other account that held it before.
 func (s *mongoUsageStore) Increment(ctx context.Context, cmd string, user usageUser, hasUser bool) error {
 	if isRetiredCommand(cmd) {
 		return nil
@@ -300,6 +314,21 @@ func (s *mongoUsageStore) Increment(ctx context.Context, cmd string, user usageU
 		},
 	); err != nil {
 		return fmt.Errorf("mongo stats refresh username %d: %w", user.ID, err)
+	}
+	if user.Username == "" {
+		return nil
+	}
+	// The username may have moved from another account; drop the stale copy so
+	// lookups by name resolve to one user.
+	if _, err := s.coll.UpdateMany(ctx,
+		bson.M{"uid": bson.M{"$ne": user.ID}, "user": user.Username},
+		bson.M{
+			"$unset":       bson.M{"user": ""},
+			"$inc":         bson.M{"version": int64(1)},
+			"$currentDate": bson.M{"updatedAt": true},
+		},
+	); err != nil {
+		return fmt.Errorf("mongo stats clear moved username %s: %w", user.Username, err)
 	}
 	return nil
 }

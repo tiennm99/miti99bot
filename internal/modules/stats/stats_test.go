@@ -497,3 +497,36 @@ func tail(s string) string {
 	}
 	return s[len(s)-n:]
 }
+
+// assertUsernameMoveClearsOldHolder checks that when a Telegram username moves
+// to another account, the previous holder's rows drop it, so /stats user
+// <name> resolves to the new owner alone.
+func assertUsernameMoveClearsOldHolder(t *testing.T, coll storage.Collection) {
+	t.Helper()
+	ctx := context.Background()
+	c := newCounter(coll)
+	docs := storage.Typed[usageEntry](coll)
+
+	c.Inc(ctx, "ping", updateFrom(42, "bob"))
+	c.Inc(ctx, "wordle", updateFrom(42, "bob"))
+	c.Inc(ctx, "lol", updateFrom(77, "bob"))
+
+	old, _, err := docs.Get(ctx, usageKey("ping", 42))
+	if err != nil {
+		t.Fatalf("ping:42: %v", err)
+	}
+	if old.Username != "" || old.N != 1 {
+		t.Errorf("old holder row = %+v, want username cleared and count kept", old)
+	}
+	rows, found, err := c.store.CommandsByUser(ctx, "bob", 10)
+	if err != nil || !found {
+		t.Fatalf("CommandsByUser(bob) found=%v err=%v", found, err)
+	}
+	if len(rows) != 1 || rows[0].display != "/lol" {
+		t.Errorf("CommandsByUser(bob) = %+v, want only the new holder's /lol", rows)
+	}
+}
+
+func TestInc_UsernameMoveClearsOldHolder(t *testing.T) {
+	assertUsernameMoveClearsOldHolder(t, storage.NewMemoryProvider().Collection("stats"))
+}
