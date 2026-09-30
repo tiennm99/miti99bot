@@ -29,7 +29,6 @@ package lol
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -420,8 +419,3 @@ func truncate(s string, maxLen int) string {
 	}
 	return s[:cut] + "..."
 }
-
-// ErrEmptyResult is reserved for explicit "no events" scenarios where the
-// fetch succeeded but returned zero matches. Currently unused outside tests
-// but kept exported so callers can distinguish from network errors.
-var ErrEmptyResult = errors.New("lol: no events in range")

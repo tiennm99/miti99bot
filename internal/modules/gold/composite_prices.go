@@ -12,8 +12,8 @@ type sjcPriceFetcher interface {
 	FetchSJCPrice(ctx context.Context) (buy, sell float64, err error)
 }
 
-// compositePriceFetcher uses VNAppMob SJC prices only. If VNAppMob fails,
-// the error is surfaced to the user instead of falling back to XAU/USD.
+// compositePriceFetcher uses VNAppMob SJC prices only. If VNAppMob fails, the
+// error is surfaced to the user; there is no fallback source.
 type compositePriceFetcher struct {
 	vnappmob sjcPriceFetcher
 }
