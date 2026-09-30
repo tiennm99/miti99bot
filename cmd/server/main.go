@@ -124,9 +124,14 @@ func main() {
 		log.Fatal("missing required env", "key", "TELEGRAM_BOT_TOKEN")
 	}
 
-	// Periodic metrics flush. Cancels with rootCtx and emits one final
-	// flush on shutdown so the trailing window isn't lost.
-	go metrics.Run(rootCtx)
+	// Periodic metrics flush. Cancels with rootCtx; shutdown below waits for it
+	// and flushes once more after polling stops, so the trailing window and the
+	// last in-flight update are not lost when main returns.
+	metricsDone := make(chan struct{})
+	go func() {
+		metrics.Run(rootCtx)
+		close(metricsDone)
+	}()
 
 	provider, closeProvider, err := buildProvider(rootCtx, cfg)
 	if err != nil {
@@ -224,7 +229,9 @@ func main() {
 	// Long polling is the sole Telegram transport (no webhook, no public
 	// ingress). Telegram permits exactly one getUpdates consumer per bot token,
 	// so deploy exactly one replica. The webhook was cleared at startup above.
+	pollingDone := make(chan struct{})
 	go func() {
+		defer close(pollingDone)
 		log.Info("telegram long polling started")
 		b.Start(rootCtx) // returns when rootCtx is cancelled
 		log.Info("telegram long polling stopped")
@@ -237,6 +244,13 @@ func main() {
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		log.Error("graceful shutdown failed", "err", err)
 	}
+	select {
+	case <-pollingDone:
+	case <-shutdownCtx.Done():
+		log.Warn("telegram long polling did not stop before shutdown timeout")
+	}
+	<-metricsDone
+	metrics.Flush()
 }
 
 func initStockStore(ctx context.Context, provider storage.Provider) error {
