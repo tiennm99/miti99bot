@@ -25,6 +25,7 @@ func TestNew_RegistersExpectedCommands(t *testing.T) {
 		"ping_stats":        modules.VisibilityProtected,
 		"random":            modules.VisibilityPublic,
 		"wheelofnames":      modules.VisibilityPublic,
+		"gacha":             modules.VisibilityPublic,
 		"ff":                modules.VisibilityProtected,
 		"xlt1":              modules.VisibilityPublic,
 		"giaxang":           modules.VisibilityPublic,

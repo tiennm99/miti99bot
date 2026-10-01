@@ -67,6 +67,7 @@ func TestCommandDiscovery_AllPublicCommandsHaveSafeMetadata(t *testing.T) {
 		"gold_topup":           "<vnd_amount>",
 		"gold_buy":             "<luong>",
 		"gold_sell":            "<luong>",
+		"gacha":                "<option,...>",
 		"lol":                  "[date]",
 		"loldle":               "[champion]",
 		"monkeyd_crawl":        "<url> [font_size]",

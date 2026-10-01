@@ -8,7 +8,7 @@ Atlas via long polling and an in-process cron scheduler.
 | Module | What it does |
 |---|---|
 | `util` | `/help`, `/info` (admin), `/stickerid` (owner) |
-| `misc` | `/ping`, `/ping_stats` (admin), `/random`, `/wheelofnames`, `/ff` (admin), `/xlt1`, `/giaxang` (Petrolimex retail fuel prices), `/the_answer` (owner), `/trongtruonghop` + `/tth`, `/trongtruonghopvng` + `/tthvng` disclaimers |
+| `misc` | `/ping`, `/ping_stats` (admin), `/random`, `/wheelofnames`, `/gacha` (Genshin-style wish; tag `*4`/`*5` for rarity), `/ff` (admin), `/xlt1`, `/giaxang` (Petrolimex retail fuel prices), `/the_answer` (owner), `/trongtruonghop` + `/tth`, `/trongtruonghopvng` + `/tthvng` disclaimers |
 | `amlich` | Vietnamese lunar calendar: `/amlich` (dương lịch → âm lịch, defaults to today), `/duonglich` (âm lịch → dương lịch, `nhuan` flag for leap months); dates accept `d`, `d/m`, or `d/m/yyyy` — missing parts fill from today in the input's calendar. Years 1800–2199 only |
 | `wordle` | Daily Wordle game: `/wordle [word]`, `/wordle_new`, `/wordle_giveup`, `/wordle_stats` |
 | `loldle` | League-of-Legends "guess the champion": `/loldle [champion]`, `/loldle_giveup`, `/loldle_stats`, `/loldle_setmax` (owner) |
