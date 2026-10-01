@@ -37,6 +37,8 @@ func TestAuth_Permits(t *testing.T) {
 	}{
 		{"public-no-message", VisibilityPublic, &models.Update{}, true},
 		{"public-stranger", VisibilityPublic, updateFrom(stranger), true},
+		{"unlisted-stranger", VisibilityUnlisted, updateFrom(stranger), true},
+		{"unlisted-no-message", VisibilityUnlisted, &models.Update{}, true},
 		{"protected-owner", VisibilityProtected, updateFrom(owner), true},
 		{"protected-callback-owner", VisibilityProtected, callbackFrom(owner), true},
 		{"protected-admin", VisibilityProtected, updateFrom(admin), true},

@@ -24,6 +24,7 @@ func TestBotCommandMenu_UsesLoadedPublicCommandsInModuleOrder(t *testing.T) {
 				Commands: []modules.Command{
 					{Name: "beta_public", Description: "Beta public", Parameters: "<value>", Visibility: modules.VisibilityPublic},
 					{Name: "beta_private", Description: "Beta private", Visibility: modules.VisibilityPrivate},
+					{Name: "beta_unlisted", Description: "Beta unlisted", Visibility: modules.VisibilityUnlisted},
 				},
 			},
 			{

@@ -16,7 +16,7 @@ func validateCommand(c Command) error {
 		return fmt.Errorf("command name %q must match %s", c.Name, commandNameRe)
 	}
 	switch c.Visibility {
-	case VisibilityPublic, VisibilityProtected, VisibilityPrivate:
+	case VisibilityPublic, VisibilityProtected, VisibilityPrivate, VisibilityUnlisted:
 	default:
 		return fmt.Errorf("command %q: unknown visibility %d", c.Name, c.Visibility)
 	}
@@ -56,7 +56,7 @@ func validateCallback(c Callback) error {
 		return fmt.Errorf("callback prefix %q is invalid", c.Prefix)
 	}
 	switch c.Visibility {
-	case VisibilityPublic, VisibilityProtected, VisibilityPrivate:
+	case VisibilityPublic, VisibilityProtected, VisibilityPrivate, VisibilityUnlisted:
 	default:
 		return fmt.Errorf("callback prefix %q: unknown visibility %d", c.Prefix, c.Visibility)
 	}

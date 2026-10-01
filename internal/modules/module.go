@@ -12,13 +12,16 @@ import (
 // Visibility classifies who may invoke a command. The dispatcher enforces
 // this at command-handler entry: Public is unrestricted; Protected requires
 // the sender to be in Auth.AdminUserIDs (or be the bot owner); Private
-// requires the sender to be Auth.BotOwnerID. /help filters by the same field.
+// requires the sender to be Auth.BotOwnerID; Unlisted is unrestricted like
+// Public but never advertised. /help and the Telegram command menu list
+// Public commands only.
 type Visibility int
 
 const (
 	VisibilityPublic Visibility = iota
 	VisibilityProtected
 	VisibilityPrivate
+	VisibilityUnlisted
 )
 
 // CommandHandler runs in response to a Telegram command. Returning an error

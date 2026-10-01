@@ -26,7 +26,7 @@ type Auth struct {
 // Denies are silent — callers must NOT reply to denied requests, otherwise the
 // existence of a Protected/Private command is leaked to unprivileged users.
 func (a Auth) Permits(v Visibility, update *models.Update) bool {
-	if v == VisibilityPublic {
+	if v == VisibilityPublic || v == VisibilityUnlisted {
 		return true
 	}
 	if update == nil {

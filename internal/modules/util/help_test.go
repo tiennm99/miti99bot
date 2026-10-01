@@ -36,6 +36,7 @@ func TestRenderHelp_GroupsByModuleAndSkipsNonPublic(t *testing.T) {
 			cmd("a_pub", modules.VisibilityPublic, "alpha public"),
 			cmd("a_prot", modules.VisibilityProtected, "alpha protected"),
 			cmd("a_priv", modules.VisibilityPrivate, "alpha private — must not appear"),
+			cmd("a_unlisted", modules.VisibilityUnlisted, "alpha unlisted — must not appear"),
 		}),
 		"beta": fakeFactory("beta", []modules.Command{
 			cmd("b_pub", modules.VisibilityPublic, "beta <i>desc</i>"),
@@ -66,6 +67,9 @@ func TestRenderHelp_GroupsByModuleAndSkipsNonPublic(t *testing.T) {
 	}
 	if strings.Contains(out, "a_priv") {
 		t.Errorf("output leaked private command\n---output---\n%s", out)
+	}
+	if strings.Contains(out, "a_unlisted") {
+		t.Errorf("output leaked unlisted command\n---output---\n%s", out)
 	}
 	if strings.Contains(out, "a_prot") {
 		t.Errorf("output leaked protected command\n---output---\n%s", out)
