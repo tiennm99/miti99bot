@@ -88,9 +88,9 @@ reply is immediate.
 `/gacha` uses the same service and token: the bot swaps the URL's last path
 segment, so `.../api/gif` becomes `.../api/gacha`. It renders a 7-second
 `640x360` silent MP4 wish animation, posts `Wishing...` while it renders, and
-falls back to a text reply such as `★★★★★ Pizza` on the same failures. Options
-tagged `*4` or `*5` are rarer, following Genshin base rates (5★ 0.6%, 4★ 5.1%,
-3★ 94.3%) over the tiers present; untagged options are 3★.
+falls back to a text reply such as `★★★★★ Pizza` on the same failures. Every
+option is equally likely, as with `/random`; a `*4` or `*5` tag only sets the
+rarity shown in the animation and reply. Untagged options are 3★.
 
 ## 1. MongoDB Atlas (M0)
 

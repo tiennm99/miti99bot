@@ -3,7 +3,6 @@ package misc
 import (
 	"context"
 	"encoding/json"
-	"math/rand/v2"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -26,55 +25,6 @@ func TestParseGachaOptions(t *testing.T) {
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("parseGachaOptions() = %#v, want %#v", got, want)
-	}
-}
-
-// One option per tier must land near the Genshin base rates.
-func TestPickGachaOption_FollowsTierRates(t *testing.T) {
-	options := []gachaOption{{"five", 5}, {"four", 4}, {"three", 3}}
-	rng := rand.New(rand.NewPCG(1, 2))
-	const rolls = 200_000
-	counts := make([]int, len(options))
-	for range rolls {
-		counts[pickGachaOption(options, rng)]++
-	}
-	for i, wantPerMille := range []float64{6, 51, 943} {
-		got := float64(counts[i]) / rolls * 1000
-		if got < wantPerMille*0.85 || got > wantPerMille*1.15 {
-			t.Errorf("%s rate = %.2f‰, want about %.0f‰", options[i].Label, got, wantPerMille)
-		}
-	}
-}
-
-func TestPickGachaOption_UniformWithinTier(t *testing.T) {
-	options := []gachaOption{{"a", 3}, {"b", 3}, {"c", 3}, {"d", 3}}
-	rng := rand.New(rand.NewPCG(3, 4))
-	counts := make([]int, len(options))
-	for range 40_000 {
-		counts[pickGachaOption(options, rng)]++
-	}
-	for i, n := range counts {
-		if n < 9_000 || n > 11_000 {
-			t.Errorf("option %d picked %d times, want about 10000", i, n)
-		}
-	}
-}
-
-// Missing tiers do not dilute the odds: with only 4★ and 5★ options, the
-// 4★ share is 51/(51+6).
-func TestPickGachaOption_RenormalisesPresentTiers(t *testing.T) {
-	options := []gachaOption{{"five", 5}, {"four", 4}}
-	rng := rand.New(rand.NewPCG(5, 6))
-	five := 0
-	const rolls = 100_000
-	for range rolls {
-		if pickGachaOption(options, rng) == 0 {
-			five++
-		}
-	}
-	got := float64(five) / rolls
-	if want := 6.0 / 57; got < want*0.9 || got > want*1.1 {
-		t.Fatalf("5★ share = %.4f, want about %.4f", got, want)
 	}
 }
 

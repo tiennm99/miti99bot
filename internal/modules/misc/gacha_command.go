@@ -26,11 +26,6 @@ const (
 	gachaDefaultRarity = gachaMinRarity
 )
 
-// gachaTierRates are Genshin Impact's base single-wish odds per mille. A
-// pick first rolls a tier among the tiers present, then an option uniformly
-// within it, so untagged input is a plain uniform pick.
-var gachaTierRates = map[int]int{5: 6, 4: 51, 3: 943}
-
 // gachaRarityTag matches a trailing "*3", "*4", or "*5" rarity tag.
 var gachaRarityTag = regexp.MustCompile(`\s*\*\s*([345])$`)
 
@@ -58,35 +53,6 @@ func parseGachaOptions(arg string) []gachaOption {
 	return out
 }
 
-// pickGachaOption returns the index of the wished option. rng may be nil to
-// use the global source.
-func pickGachaOption(options []gachaOption, rng *rand.Rand) int {
-	intN := rand.IntN
-	if rng != nil {
-		intN = rng.IntN
-	}
-	byRarity := map[int][]int{}
-	total := 0
-	for i, option := range options {
-		if len(byRarity[option.Rarity]) == 0 {
-			total += gachaTierRates[option.Rarity]
-		}
-		byRarity[option.Rarity] = append(byRarity[option.Rarity], i)
-	}
-	roll := intN(total)
-	for rarity := gachaMaxRarity; rarity >= gachaMinRarity; rarity-- {
-		tier := byRarity[rarity]
-		if len(tier) == 0 {
-			continue
-		}
-		if roll < gachaTierRates[rarity] {
-			return tier[intN(len(tier))]
-		}
-		roll -= gachaTierRates[rarity]
-	}
-	return 0 // unreachable: roll < total, the sum of present tier rates.
-}
-
 // gachaResultText renders an option as its stars followed by its label.
 func gachaResultText(option gachaOption) string {
 	return strings.Repeat("★", option.Rarity) + " " + option.Label
@@ -106,7 +72,9 @@ func gachaCommand() modules.Command {
 			if len(options) == 0 {
 				return chathelper.Reply(ctx, b, update.Message, gachaUsage)
 			}
-			winner := pickGachaOption(options, nil)
+			// Every option is equally likely; the rarity tag only styles the
+			// wish animation and the result text.
+			winner := rand.IntN(len(options))
 			results := make([]string, len(options))
 			for i, option := range options {
 				results[i] = gachaResultText(option)
