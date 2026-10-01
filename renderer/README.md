@@ -1,6 +1,7 @@
 # wheelofnames
 
-Self-hosted API that renders wheel-of-names GIF animations with Remotion.
+Self-hosted API that renders wheel-of-names GIF animations and gacha wish
+MP4 animations with Remotion.
 
 ## API
 
@@ -31,6 +32,36 @@ Response is `image/gif` with winner metadata headers:
 
 `X-Wheel-Winner` is URL-encoded so non-ASCII labels are safe in HTTP headers.
 
+### Gacha wish
+
+```http
+POST /api/gacha
+Content-Type: application/json
+Accept: video/mp4
+Authorization: Bearer change-me
+```
+
+```json
+{
+  "label": "Pizza",
+  "rarity": 5,
+  "fps": 24,
+  "width": 640
+}
+```
+
+Renders a 7-second wish animation in the style of a gacha game: a meteor
+coloured by rarity (blue 3★, purple 4★, gold 5★) falls across a night sky,
+lands in a white flash, and the label is revealed with its stars popping in.
+`rarity` is required; `fps` is `24` or `30`; `width` is `640` (360 tall) or
+`854` (480 tall). The caller chooses the result and its rarity — the service
+only draws it.
+
+Response is a silent H.264 `video/mp4` (Telegram plays it as an animation)
+with `X-Gacha-Rarity` and `X-Render-Duration-Ms` headers. Both routes share the
+`MAX_CONCURRENT_RENDERS` slots. All visuals are drawn procedurally; no game
+assets are used.
+
 ## Local
 
 Install dependencies and Chromium once:
@@ -48,15 +79,16 @@ npm run dev
 
 ### Generate GIF files locally
 
-Generate the quick smoke fixture at the git-ignored path
-`fixtures/smoke.gif`:
+Generate the quick smoke fixtures at the git-ignored paths
+`fixtures/smoke.gif` and `fixtures/gacha-5-star.mp4`:
 
 ```sh
 npm run render:smoke
 ```
 
 Generate the complete fixture set at `fixtures/smoke.gif`,
-`fixtures/vietnamese.gif`, and `fixtures/sixteen-options.gif`:
+`fixtures/vietnamese.gif`, `fixtures/sixteen-options.gif`, and
+`fixtures/gacha-{3,4,5}-star.mp4`:
 
 ```sh
 npm run render:fixtures
@@ -86,7 +118,7 @@ npm run render:local -- \
 
 `--winner` is a zero-based index and is random when omitted. Run
 `npm run render:local -- --help` for duration, hold, FPS, size, theme, and timeout
-options. The documented root `wheel.gif` and `fixtures/*.gif` outputs are
+options. The documented root `wheel.gif` and `fixtures/*.gif`/`*.mp4` outputs are
 git-ignored and safe to delete; custom output paths may need their own ignore
 rule.
 

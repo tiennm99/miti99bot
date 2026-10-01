@@ -45,6 +45,26 @@ try {
   }
 
   console.log(`api-smoke: ${response.rawPayload.byteLength} bytes`);
+
+  const gacha = await app.inject({
+    method: 'POST',
+    url: '/api/gacha',
+    headers: {
+      authorization: 'Bearer smoke-token',
+    },
+    payload: {label: 'Pizza', rarity: 5},
+  });
+
+  if (gacha.statusCode !== 200) {
+    throw new Error(`Expected gacha 200, got ${gacha.statusCode}: ${gacha.body}`);
+  }
+
+  const box = gacha.rawPayload.subarray(4, 8).toString();
+  if (box !== 'ftyp') {
+    throw new Error(`Expected MP4 ftyp box, got ${box}`);
+  }
+
+  console.log(`api-smoke gacha: ${gacha.rawPayload.byteLength} bytes`);
 } finally {
   await app.close();
 }

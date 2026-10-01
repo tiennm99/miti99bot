@@ -37,3 +37,11 @@ Send `Authorization: Bearer <API_TOKEN>` with the JSON body.
 
 `X-Wheel-Winner` is URL-encoded. Decode it before displaying if service-side
 winner selection is used.
+
+## Gacha
+
+`/gacha` in miti99bot calls `POST /api/gacha` on the same service and token.
+The bot derives the endpoint from `WHEELOFNAMES_API_URL` by replacing its last
+path segment (`/api/gif` becomes `/api/gacha`), picks the result and rarity
+itself, and sends the MP4 with `sendAnimation`. On any failure it falls back to
+a text reply.

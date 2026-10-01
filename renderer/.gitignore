@@ -6,5 +6,6 @@ coverage/
 !.env.example
 .tmp/
 fixtures/*.gif
+fixtures/*.mp4
 /wheel.gif
 *.log

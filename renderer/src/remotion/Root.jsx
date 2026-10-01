@@ -1,5 +1,8 @@
 import {Composition} from 'remotion';
+import {GachaComposition} from './GachaComposition.jsx';
+import {gachaTotalSeconds} from './gacha-timeline.js';
 import {WheelComposition} from './WheelComposition.jsx';
+import {gachaFrameSizes} from '../schemas/gacha-request.js';
 
 /** @type {import('../schemas/wheel-request.js').WheelRenderRequest} */
 const defaultProps = {
@@ -29,15 +32,49 @@ export const getCompositionMetadata = (props) => {
   };
 };
 
+/** @type {import('../schemas/gacha-request.js').GachaRenderRequest} */
+const defaultGachaProps = {
+  label: 'Pizza',
+  rarity: 5,
+  fps: 24,
+  width: 640,
+};
+
+/**
+ * @param {{fps: number, width: number}} props
+ */
+export const getGachaCompositionMetadata = (props) => {
+  const fps = props.fps || defaultGachaProps.fps;
+  const width = props.width in gachaFrameSizes ? props.width : defaultGachaProps.width;
+  return {
+    durationInFrames: Math.ceil(gachaTotalSeconds * fps),
+    fps,
+    height: gachaFrameSizes[/** @type {640 | 854} */ (width)],
+    width,
+  };
+};
+
 export const RemotionRoot = () => (
-  <Composition
-    calculateMetadata={({props}) => getCompositionMetadata(props)}
-    component={WheelComposition}
-    defaultProps={defaultProps}
-    durationInFrames={Math.ceil(((defaultProps.durationMs + defaultProps.holdMs) / 1000) * defaultProps.fps)}
-    fps={defaultProps.fps}
-    height={defaultProps.size}
-    id="WheelGif"
-    width={defaultProps.size}
-  />
+  <>
+    <Composition
+      calculateMetadata={({props}) => getCompositionMetadata(props)}
+      component={WheelComposition}
+      defaultProps={defaultProps}
+      durationInFrames={Math.ceil(((defaultProps.durationMs + defaultProps.holdMs) / 1000) * defaultProps.fps)}
+      fps={defaultProps.fps}
+      height={defaultProps.size}
+      id="WheelGif"
+      width={defaultProps.size}
+    />
+    <Composition
+      calculateMetadata={({props}) => getGachaCompositionMetadata(props)}
+      component={GachaComposition}
+      defaultProps={defaultGachaProps}
+      durationInFrames={Math.ceil(gachaTotalSeconds * defaultGachaProps.fps)}
+      fps={defaultGachaProps.fps}
+      height={gachaFrameSizes[defaultGachaProps.width]}
+      id="GachaWish"
+      width={defaultGachaProps.width}
+    />
+  </>
 );
