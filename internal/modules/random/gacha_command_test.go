@@ -100,7 +100,7 @@ func TestGacha_UsesRemoteAPIWhenConfigured(t *testing.T) {
 	if want := `Result: <span class="tg-spoiler">★★★★ Pho</span>`; call.Form["caption"] != want {
 		t.Fatalf("caption = %q, want %q", call.Form["caption"], want)
 	}
-	for field, want := range map[string]string{"parse_mode": "HTML", "duration": "7", "width": "640", "height": "360"} {
+	for field, want := range map[string]string{"parse_mode": "HTML", "duration": "6", "width": "360", "height": "640"} {
 		if got := call.Form[field]; got != want {
 			t.Fatalf("%s = %q, want %q", field, got, want)
 		}
@@ -171,55 +171,5 @@ func TestGacha_ForwardsMessageThreadID(t *testing.T) {
 	}
 	if animations != 1 {
 		t.Fatalf("sendAnimation calls = %d, want 1", animations)
-	}
-}
-
-func TestGachaBeta_UsesBetaRendererAndAnyoneCanRunIt(t *testing.T) {
-	var gotPath string
-	var got gachaAPIRequest
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotPath = r.URL.Path
-		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
-			t.Errorf("Decode request body: %v", err)
-		}
-		w.Header().Set("Content-Type", "video/mp4")
-		_, _ = w.Write(mp4Bytes)
-	}))
-	defer server.Close()
-	t.Setenv(wheelOfNamesAPIURLEnv, server.URL+"/api/gif")
-
-	// 7 is neither the owner (999) nor an admin.
-	rb := installRandom(t, 999)
-	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(7, "/gachabeta Bún bò"))
-
-	if gotPath != "/api/gachabeta" {
-		t.Fatalf("path = %q, want /api/gachabeta", gotPath)
-	}
-	if want := (gachaAPIRequest{Label: "Bún bò", Rarity: 5, FPS: gachaRemoteFPS, Width: gachaRemoteWidth}); got != want {
-		t.Fatalf("request = %+v, want %+v", got, want)
-	}
-	var animation *testutil.SentCall
-	sent := rb.Sent()
-	for i := range sent {
-		if sent[i].Method == "sendAnimation" {
-			animation = &sent[i]
-		}
-	}
-	if animation == nil {
-		t.Fatalf("calls = %+v, want a sendAnimation", rb.Sent())
-	}
-	for field, want := range map[string]string{"duration": "6", "width": "360", "height": "640"} {
-		if got := animation.Form[field]; got != want {
-			t.Fatalf("%s = %q, want %s", field, got, want)
-		}
-	}
-}
-
-func TestGachaBeta_EmptyArgsRepliesBetaUsage(t *testing.T) {
-	rb := installRandom(t, 999)
-	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(7, "/gachabeta"))
-
-	if got := rb.LastSent().Text(); got != gachaBetaUsage {
-		t.Errorf("gachabeta reply = %q, want usage %q", got, gachaBetaUsage)
 	}
 }

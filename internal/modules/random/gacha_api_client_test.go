@@ -13,7 +13,7 @@ func TestGachaAPIEndpoint_SwapsLastPathSegment(t *testing.T) {
 		"https://render.example/api/gif/": "https://render.example/api/gacha",
 		"http://10.0.0.5:3000/api/gif":    "http://10.0.0.5:3000/api/gacha",
 	} {
-		got, err := gachaAPIEndpoint(raw, "gacha")
+		got, err := gachaAPIEndpoint(raw)
 		if err != nil {
 			t.Fatalf("gachaAPIEndpoint(%q): %v", raw, err)
 		}
@@ -21,7 +21,7 @@ func TestGachaAPIEndpoint_SwapsLastPathSegment(t *testing.T) {
 			t.Errorf("gachaAPIEndpoint(%q) = %q, want %q", raw, got, want)
 		}
 	}
-	if _, err := gachaAPIEndpoint("", "gacha"); err != errWheelAPINotConfigured {
+	if _, err := gachaAPIEndpoint(""); err != errWheelAPINotConfigured {
 		t.Fatalf("empty url err = %v, want errWheelAPINotConfigured", err)
 	}
 }
@@ -38,7 +38,7 @@ func TestWheelAPIClient_RenderGachaRejectsInvalidInput(t *testing.T) {
 		{name: "rarity too high", label: "a", rarity: 6},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if _, err := client.RenderGacha(context.Background(), "gacha", tc.label, tc.rarity); err == nil {
+			if _, err := client.RenderGacha(context.Background(), tc.label, tc.rarity); err == nil {
 				t.Fatal("RenderGacha returned nil error")
 			}
 		})
@@ -66,7 +66,7 @@ func TestWheelAPIClient_RenderGachaReturnsErrorsForBadResponses(t *testing.T) {
 			defer server.Close()
 
 			client := wheelAPIClient{HTTP: server.Client(), URL: server.URL + "/api/gif"}
-			if _, err := client.RenderGacha(context.Background(), "gacha", "a", 3); err == nil {
+			if _, err := client.RenderGacha(context.Background(), "a", 3); err == nil {
 				t.Fatal("RenderGacha returned nil error")
 			}
 		})

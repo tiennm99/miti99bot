@@ -86,16 +86,12 @@ instead. With no renderer configured there is no holding message — the winner
 reply is immediate.
 
 `/gacha` uses the same service and token: the bot swaps the URL's last path
-segment, so `.../api/gif` becomes `.../api/gacha`. It renders a 7-second
-`640x360` silent MP4 wish animation, posts `Wishing...` while it renders, and
+segment, so `.../api/gif` becomes `.../api/gacha`. It renders a 6-second
+`360x640` portrait silent MP4 wish animation (a card pack torn open), posts `Wishing...` while it renders, and
 falls back to a text reply such as `★★★★★ Pizza` on the same failures. Every
 option is equally likely, as with `/random`; the rarity only sets what the
 animation and reply show. Options are 5★ by default; prefix `4*` or `3*` to
 lower one, e.g. `/gacha Pizza, 4* Pho, 3* Rice`.
-
-The unlisted `/gachabeta` takes the same input and renders the beta version
-of the wish from `.../api/gachabeta` on the same service as a `360x640`
-portrait MP4, with the same text fallback.
 
 ## 1. MongoDB Atlas (M0)
 

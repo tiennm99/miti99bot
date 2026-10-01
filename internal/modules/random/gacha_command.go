@@ -18,7 +18,6 @@ import (
 
 const (
 	gachaUsage       = "Usage: /gacha <option,...>\nOptions are 5* by default; prefix 4* or 3* to lower one, e.g. /gacha Pizza, 4* Pho, 3* Rice"
-	gachaBetaUsage   = "Usage: /gachabeta <option,...>\nOptions are 5* by default; prefix 4* or 3* to lower one, e.g. /gachabeta Pizza, 4* Pho, 3* Rice"
 	gachaPlaceholder = "Wishing..."
 	gachaFilename    = "gacha.mp4"
 
@@ -59,27 +58,13 @@ func gachaResultText(option gachaOption) string {
 	return strings.Repeat("★", option.Rarity) + " " + option.Label
 }
 
+// gachaCommand picks one option and renders it as a wish animation, falling
+// back to a text reply when rendering fails.
 func gachaCommand() modules.Command {
-	return newGachaCommand("gacha", modules.VisibilityPublic,
-		"Wish for one comma-separated option, Genshin style; 5* by default, prefix 4* or 3*",
-		gachaUsage, gachaStyleWish)
-}
-
-// gachaBetaCommand trials the beta version of the wish animation. It is
-// unlisted: anyone can run it, but it stays out of the command menu and /help.
-func gachaBetaCommand() modules.Command {
-	return newGachaCommand("gachabeta", modules.VisibilityUnlisted,
-		"Gacha (beta version); 5* by default, prefix 4* or 3*",
-		gachaBetaUsage, gachaStyleBeta)
-}
-
-// newGachaCommand builds a wish command that picks one option and renders it
-// in style, falling back to a text reply when rendering fails.
-func newGachaCommand(name string, visibility modules.Visibility, description, usage string, style gachaStyle) modules.Command {
 	return modules.Command{
-		Name:        name,
-		Visibility:  visibility,
-		Description: description,
+		Name:        "gacha",
+		Visibility:  modules.VisibilityPublic,
+		Description: "Wish for one comma-separated option as a gacha card pack; 5* by default, prefix 4* or 3*",
 		Parameters:  "<option,...>",
 		Handler: func(ctx context.Context, b *bot.Bot, update *models.Update) error {
 			if update.Message == nil {
@@ -87,7 +72,7 @@ func newGachaCommand(name string, visibility modules.Visibility, description, us
 			}
 			options := parseGachaOptions(chathelper.ArgAfterCommand(update.Message.Text))
 			if len(options) == 0 {
-				return chathelper.Reply(ctx, b, update.Message, usage)
+				return chathelper.Reply(ctx, b, update.Message, gachaUsage)
 			}
 			// Every option is equally likely; the rarity tag only styles the
 			// wish animation and the result text.
@@ -98,10 +83,10 @@ func newGachaCommand(name string, visibility modules.Visibility, description, us
 			}
 
 			placeholder := sendRenderPlaceholder(ctx, b, update.Message, gachaPlaceholder)
-			animation, err := renderGachaAnimation(ctx, style, options[winner].Label, options[winner].Rarity)
+			animation, err := renderGachaAnimation(ctx, options[winner].Label, options[winner].Rarity)
 			if err != nil {
 				if !errors.Is(err, errWheelAPINotConfigured) {
-					log.Warn("gacha remote render failed", "command", name, "err", err)
+					log.Warn("gacha remote render failed", "err", err)
 				}
 				return replaceWheelPlaceholder(ctx, b, update.Message, placeholder, results[winner])
 			}
@@ -119,11 +104,11 @@ func newGachaCommand(name string, visibility modules.Visibility, description, us
 				ParseMode: models.ParseModeHTML,
 			})
 			if err != nil {
-				log.Warn("gacha send animation failed", "command", name, "chat", update.Message.Chat.ID, "err", err)
+				log.Warn("gacha send animation failed", "chat", update.Message.Chat.ID, "err", err)
 				return replaceWheelPlaceholder(ctx, b, update.Message, placeholder, results[winner])
 			}
 			if err := chathelper.DeleteMessage(ctx, b, update.Message, placeholder); err != nil {
-				log.Warn("gacha placeholder delete failed", "command", name, "chat", update.Message.Chat.ID, "err", err)
+				log.Warn("gacha placeholder delete failed", "chat", update.Message.Chat.ID, "err", err)
 			}
 			return nil
 		},
