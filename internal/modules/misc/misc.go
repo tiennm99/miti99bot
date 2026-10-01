@@ -1,8 +1,6 @@
 // Package misc is a small module that proves the framework end-to-end:
 // /ping (public, exercises a store write), /ping_stats (protected, exercises a
-// store read), /random (public random picker), /wheelofnames (public wheel
-// picker with optional GIF), /gacha (public Genshin-style wish picker with
-// optional MP4), /ff (protected give-up-on-T1 rant), /xlt1 (public
+// store read), /ff (protected give-up-on-T1 rant), /xlt1 (public
 // apologise-to-T1 petition, the sequel to /ff), /giaxang (public Petrolimex
 // retail fuel prices), /the_answer (private easter egg), and the public
 // disclaimer commands /trongtruonghop, /tth, /trongtruonghopvng, and /tthvng.
@@ -55,9 +53,6 @@ func New(deps modules.Deps) modules.Module {
 		Commands: []modules.Command{
 			pingCommand(store),
 			pingStatsCommand(store),
-			randomCommand(),
-			wheelOfNamesCommand(),
-			gachaCommand(),
 			ffCommand(),
 			xlt1Command(),
 			giaxangCommand(),

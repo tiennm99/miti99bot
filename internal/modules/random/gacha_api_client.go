@@ -1,4 +1,4 @@
-package misc
+package random
 
 import (
 	"bytes"
@@ -10,10 +10,21 @@ import (
 )
 
 const (
-	gachaRemoteFPS      = 24
-	gachaRemoteWidth    = 640
-	gachaRemoteHeight   = 360
-	gachaRemoteDuration = 7
+	gachaRemoteFPS    = 24
+	gachaRemoteWidth  = 640
+	gachaRemoteHeight = 360
+)
+
+// gachaStyle is one wish animation the renderer serves: its path next to
+// /api/gif and the clip length in seconds.
+type gachaStyle struct {
+	Path     string
+	Duration int
+}
+
+var (
+	gachaStyleWish = gachaStyle{Path: "gacha", Duration: 7}
+	gachaStyleBeta = gachaStyle{Path: "gachabeta", Duration: 8}
 )
 
 type gachaAPIRequest struct {
@@ -23,10 +34,11 @@ type gachaAPIRequest struct {
 	Width  int    `json:"width"`
 }
 
-// gachaAPIEndpoint derives the wish renderer from the configured wheel
-// endpoint: the same service serves /api/gacha next to /api/gif, so the last
-// path segment is swapped and no second URL needs configuring.
-func gachaAPIEndpoint(rawURL string) (*url.URL, error) {
+// gachaAPIEndpoint derives a wish renderer from the configured wheel
+// endpoint: the same service serves /api/gacha and /api/gachabeta next to
+// /api/gif, so the last path segment is swapped and no second URL needs
+// configuring.
+func gachaAPIEndpoint(rawURL, path string) (*url.URL, error) {
 	endpoint, err := wheelAPIEndpoint(rawURL)
 	if err != nil {
 		return nil, err
@@ -34,12 +46,13 @@ func gachaAPIEndpoint(rawURL string) (*url.URL, error) {
 	base := *endpoint
 	base.Path = strings.TrimSuffix(base.Path, "/")
 	base.RawPath = ""
-	return base.ResolveReference(&url.URL{Path: "gacha"}), nil
+	return base.ResolveReference(&url.URL{Path: path}), nil
 }
 
-// RenderGacha returns the MP4 wish animation revealing label at rarity stars.
-func (c wheelAPIClient) RenderGacha(ctx context.Context, label string, rarity int) ([]byte, error) {
-	endpoint, err := gachaAPIEndpoint(c.URL)
+// RenderGacha returns the MP4 wish animation at path revealing label at
+// rarity stars.
+func (c wheelAPIClient) RenderGacha(ctx context.Context, path, label string, rarity int) ([]byte, error) {
+	endpoint, err := gachaAPIEndpoint(c.URL, path)
 	if err != nil {
 		return nil, err
 	}
@@ -66,14 +79,14 @@ func isMP4(data []byte) bool {
 	return len(data) >= 8 && bytes.Equal(data[4:8], []byte("ftyp"))
 }
 
-func renderGachaAnimation(ctx context.Context, label string, rarity int) (wheelAnimation, error) {
-	data, err := newWheelAPIClientFromEnv().RenderGacha(ctx, label, rarity)
+func renderGachaAnimation(ctx context.Context, style gachaStyle, label string, rarity int) (wheelAnimation, error) {
+	data, err := newWheelAPIClientFromEnv().RenderGacha(ctx, style.Path, label, rarity)
 	if err != nil {
 		return wheelAnimation{}, err
 	}
 	return wheelAnimation{
 		Data:     data,
-		Duration: gachaRemoteDuration,
+		Duration: style.Duration,
 		Width:    gachaRemoteWidth,
 		Height:   gachaRemoteHeight,
 	}, nil

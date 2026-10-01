@@ -8,7 +8,8 @@ Atlas via long polling and an in-process cron scheduler.
 | Module | What it does |
 |---|---|
 | `util` | `/help`, `/info` (admin), `/stickerid` (owner) |
-| `misc` | `/ping`, `/ping_stats` (admin), `/random`, `/wheelofnames`, `/gacha` (Genshin-style wish; options are 5★ by default, prefix `4*` or `3*`), `/ff` (admin), `/xlt1`, `/giaxang` (Petrolimex retail fuel prices), `/the_answer` (owner), `/trongtruonghop` + `/tth`, `/trongtruonghopvng` + `/tthvng` disclaimers |
+| `misc` | `/ping`, `/ping_stats` (admin), `/ff` (admin), `/xlt1`, `/giaxang` (Petrolimex retail fuel prices), `/the_answer` (owner), `/trongtruonghop` + `/tth`, `/trongtruonghopvng` + `/tthvng` disclaimers |
+| `random` | Pick one comma-separated option at random: `/random` (text), `/wheelofnames` (wheel GIF), `/gacha` (Genshin-style wish; options are 5★ by default, prefix `4*` or `3*`), `/gachabeta` (unlisted; toon-shaded beta wish with S/SS/SSS ranks). The animations use the optional wheelofnames renderer |
 | `amlich` | Vietnamese lunar calendar: `/amlich` (dương lịch → âm lịch, defaults to today), `/duonglich` (âm lịch → dương lịch, `nhuan` flag for leap months); dates accept `d`, `d/m`, or `d/m/yyyy` — missing parts fill from today in the input's calendar. Years 1800–2199 only |
 | `wordle` | Daily Wordle game: `/wordle [word]`, `/wordle_new`, `/wordle_giveup`, `/wordle_stats` |
 | `loldle` | League-of-Legends "guess the champion": `/loldle [champion]`, `/loldle_giveup`, `/loldle_stats`, `/loldle_setmax` (owner) |
@@ -25,7 +26,8 @@ Atlas via long polling and an in-process cron scheduler.
 
 Commands marked (admin) require a user ID in `ADMIN_IDS` or the owner; commands
 marked (owner) require `OWNER_ID`. Both kinds are hidden from `/help` and the
-Telegram command menu. Every other command is public.
+Telegram command menu. Commands marked (unlisted) can be run by anyone but are
+also hidden from `/help` and the menu. Every other command is public.
 
 Choose modules with the `MODULES` environment variable, a comma-separated list;
 empty loads every module.
