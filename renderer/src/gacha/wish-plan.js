@@ -83,22 +83,9 @@ export const getWishPageProps = (request) => {
 };
 
 /**
- * Exponential ease-in-out over 0..1.
- *
- * @param {number} t
- */
-const easeInOutExpo = (t) => {
-  if (t <= 0 || t >= 1) {
-    return Math.min(1, Math.max(0, t));
-  }
-  return t < 0.5 ? 2 ** (20 * t - 10) / 2 : (2 - 2 ** (10 - 20 * t)) / 2;
-};
-
-/**
  * Pointer position for a frame during the drag, as fractions of the pack
  * control's box, or null outside it. The button is held while the pointer
- * sweeps across the seal, easing exponentially in and out like a hand
- * tearing it.
+ * sweeps across the seal.
  *
  * @param {number} seconds
  * @returns {{x: number, y: number} | null}
@@ -108,7 +95,7 @@ export const getDragPointer = (seconds) => {
   if (seconds < dragStart || seconds > dragEnd) {
     return null;
   }
-  return {x: 0.08 + 0.9 * easeInOutExpo((seconds - dragStart) / (dragEnd - dragStart)), y: 0.12};
+  return {x: 0.08 + 0.9 * ((seconds - dragStart) / (dragEnd - dragStart)), y: 0.12};
 };
 
 const contentTypes = Object.freeze({

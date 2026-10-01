@@ -34,26 +34,6 @@ body {
   width: min(36vh, 60vw);
 }
 
-/*
- * The torn pack keeps pack-cards' 1.35s drop and its short hold, but falls
- * in one exponential ease-in-out. Not scoped to #stage: the pack also drops
- * inside pack-cards' flight overlay on <body>.
- */
-html .recap-pack-torn :is(.recap-webgl-pack, .recap-pack-lining) {
-  animation-name: wish-pack-away;
-  animation-timing-function: cubic-bezier(0.87, 0, 0.13, 1);
-}
-
-@keyframes wish-pack-away {
-  0%,
-  20% {
-    transform: translateY(0);
-  }
-  100% {
-    transform: translateY(calc(100vh + 100%));
-  }
-}
-
 /* A video has no buttons or prompts to read: hide the interactive captions. */
 #stage .recap-pack-scene > .eyebrow,
 #stage .recap-pack-title,
