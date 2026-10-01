@@ -67,15 +67,23 @@ only draws it.
 ### Gacha wish beta
 
 `POST /api/gachabeta` takes the same body and returns the same response as
-`/api/gacha`, rendering an 8-second beta style instead, modelled on the meteor
-shot of a music video: white, teal, green, red, and blue meteors glide slowly
-down a starry night sky over a snow-rimmed mountain ridge. A hero meteor in the
-rarity colour (blue 3★, purple 4★, gold 5★) joins the volley, slows, and burns
-out in a glint at the centre, where the food label appears under rank `SSS`.
+`/api/gacha`, rendering a 10.5-second beta style instead, cut like an anime
+gacha game's six-star wish:
+
+1. The camera dives through a ring of painterly clouds into a swirling eye,
+   then a beam rushes past.
+2. A meteor slows to a stop over a sea of clouds inside a rainbow halo,
+   sheds sparkles, and bursts into a starburst under a red flash.
+3. Crystal comets fall through the daytime sky while a red star joins them
+   and strikes in a white flash.
+4. A black silhouette of the rank emblem sheds shards on a red disc, then the
+   splash card shows the emblem, a name plate with the label and `Rank SSS`,
+   and six stars popping in.
 
 The caller randomly chooses the food and sends it as `label` (for example,
-`"Bún bò"`). The beta reveal always shows `SSS`; `rarity` only chooses the hero
-meteor's colour. `/api/gacha` keeps its existing ranks.
+`"Bún bò"`). The beta reveal always shows `SSS`; `rarity` tints the meteor
+head and the splash card's emblem (blue 3★, purple 4★, gold 5★). `/api/gacha`
+keeps its existing ranks.
 
 Response is a silent H.264 `video/mp4` (Telegram plays it as an animation)
 with `X-Gacha-Rarity` and `X-Render-Duration-Ms` headers. Both routes share the

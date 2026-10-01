@@ -1,69 +1,106 @@
 import {describe, expect, test} from 'vitest';
 import {
+  betaStarCount,
+  createShards,
   gachaBetaTimeline,
   gachaBetaTotalSeconds,
   getBetaRank,
-  getBurnGlint,
-  getHeroMeteor,
-  getSkyMeteorHead,
-  meteorAngleDegrees,
-  revealAnchor,
-  skyMeteors,
+  getFlash,
+  getHaloState,
+  getMeteorHead,
+  getRedMeteor,
+  getShardOffset,
+  getShot,
+  getStarRevealTimes,
+  getVolleyCometHead,
+  getVortexState,
+  volleyComets,
 } from '../src/remotion/gacha-beta-scene.js';
+import {createRandom} from '../src/remotion/gacha-timeline.js';
 
-const width = 640;
-const height = 360;
-
-describe('gacha beta meteor scene', () => {
-  test('beats run in order and the result holds before the clip ends', () => {
+describe('gacha beta wish scene', () => {
+  test('shots cut in order: vortex, beam, sky, volley, silhouette, reveal', () => {
     const tl = gachaBetaTimeline;
-    expect(tl.fadeInEnd).toBeLessThan(tl.heroStart);
-    expect(tl.heroStart).toBeLessThan(tl.heroBurn);
-    expect(tl.heroBurn).toBeLessThan(tl.labelIn);
-    expect(tl.labelIn).toBeLessThan(tl.rankIn);
-    expect(tl.rankIn + 2).toBeLessThan(gachaBetaTotalSeconds);
+    /** @type {string[]} */
+    const order = [];
+    for (let seconds = 0; seconds < gachaBetaTotalSeconds; seconds += 0.05) {
+      const shot = getShot(seconds);
+      if (order.at(-1) !== shot) {
+        order.push(shot);
+      }
+    }
+    expect(order).toEqual(['vortex', 'beam', 'sky', 'volley', 'silhouette', 'reveal']);
+    expect(tl.meteorStop).toBeLessThan(tl.haloEnd);
+    expect(tl.haloEnd).toBeLessThan(tl.burstEnd);
+    expect(tl.redStarIn).toBeLessThan(tl.volleyEnd);
   });
 
-  test('background meteors appear on their cue and glide down to the right', () => {
-    for (const meteor of skyMeteors) {
-      expect(getSkyMeteorHead(meteor, meteor.start - 0.01, width, height)).toBeNull();
-      const a = getSkyMeteorHead(meteor, meteor.start + 0.5, width, height);
-      const b = getSkyMeteorHead(meteor, meteor.start + 1.5, width, height);
-      expect(a && b).toBeTruthy();
-      if (a && b) {
-        expect(b.x).toBeGreaterThan(a.x);
-        expect(b.y).toBeGreaterThan(a.y);
-        expect((Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI).toBeCloseTo(meteorAngleDegrees);
-      }
+  test('the six stars finish popping with time to hold the card', () => {
+    const times = getStarRevealTimes();
+    expect(times).toHaveLength(betaStarCount);
+    expect(betaStarCount).toBe(6);
+    expect(times[0]).toBeGreaterThan(gachaBetaTimeline.plateIn);
+    expect((times.at(-1) ?? Infinity) + 1).toBeLessThan(gachaBetaTotalSeconds);
+  });
+
+  test('flashes open the clip, cover the burst in red, and hand over at each loud cut', () => {
+    const tl = gachaBetaTimeline;
+    expect(getFlash(0).opacity).toBe(1);
+    expect(getFlash(tl.burstEnd)).toMatchObject({color: '#ff5a6e'});
+    expect(getFlash(tl.redFlashEnd).opacity).toBe(1);
+    expect(getFlash(tl.volleyEnd).opacity).toBe(1);
+    expect(getFlash(tl.silhouetteEnd).opacity).toBe(1);
+    expect(getFlash(2).opacity).toBe(0);
+    expect(getFlash(9.5).opacity).toBe(0);
+  });
+
+  test('the camera dives into the vortex', () => {
+    expect(getVortexState(gachaBetaTimeline.vortexEnd).zoom).toBeGreaterThan(getVortexState(0).zoom);
+  });
+
+  test('the meteor decelerates to a stop and holds through the halo', () => {
+    const tl = gachaBetaTimeline;
+    const a = getMeteorHead(tl.beamEnd);
+    const b = getMeteorHead(tl.beamEnd + 0.3);
+    const c = getMeteorHead(tl.meteorStop - 0.3);
+    const stop = getMeteorHead(tl.meteorStop);
+    expect(b.x - a.x).toBeGreaterThan(stop.x - c.x);
+    expect(stop.speed).toBe(0);
+    expect(getMeteorHead(tl.haloEnd)).toEqual(stop);
+  });
+
+  test('the rainbow halo blooms after the stop and closes before the burst', () => {
+    const tl = gachaBetaTimeline;
+    expect(getHaloState(tl.beamEnd).opacity).toBe(0);
+    expect(getHaloState(tl.meteorStop + 0.3).opacity).toBeGreaterThan(0.8);
+    expect(getHaloState(tl.haloEnd).opacity).toBe(0);
+  });
+
+  test('volley comets fall and drift right', () => {
+    for (const comet of volleyComets) {
+      const early = getVolleyCometHead(comet, comet.start + 0.2);
+      const late = getVolleyCometHead(comet, gachaBetaTimeline.volleyEnd);
+      expect(late.y).toBeGreaterThan(early.y);
+      expect(late.x).toBeGreaterThan(early.x);
     }
   });
 
-  test('the volley stays in the upper sky so the result area is clear at the reveal', () => {
-    for (const meteor of skyMeteors) {
-      const head = getSkyMeteorHead(meteor, gachaBetaTimeline.labelIn, width, height);
-      if (head) {
-        expect(head.y).toBeLessThan(height * 0.62);
-      }
-    }
-  });
-
-  test('hero meteor is hidden before its cue, then slows to burn out on the anchor', () => {
+  test('the red meteor flares, then drops toward the centre by the impact', () => {
     const tl = gachaBetaTimeline;
-    expect(getHeroMeteor(tl.heroStart - 0.1, width, height).visible).toBe(0);
-    const early = getHeroMeteor(tl.heroStart + 0.5, width, height);
-    const mid = getHeroMeteor(tl.heroStart + 1, width, height);
-    const late = getHeroMeteor(tl.heroBurn - 0.5, width, height);
-    const late2 = getHeroMeteor(tl.heroBurn, width, height);
-    expect(Math.hypot(mid.x - early.x, mid.y - early.y)).toBeGreaterThan(Math.hypot(late2.x - late.x, late2.y - late.y));
-    expect(late2.x).toBeCloseTo(revealAnchor.x * width);
-    expect(late2.y).toBeCloseTo(revealAnchor.y * height);
-    expect(getHeroMeteor(tl.heroBurn + 0.2, width, height).visible).toBe(0);
+    expect(getRedMeteor(tl.redStarIn).flare).toBe(0);
+    const impact = getRedMeteor(tl.volleyEnd);
+    expect(impact.falling).toBe(1);
+    expect(impact.y).toBeGreaterThan(getRedMeteor(tl.redStarIn + 0.3).y);
   });
 
-  test('burn glint fires only around the burn-out', () => {
-    expect(getBurnGlint(gachaBetaTimeline.heroBurn - 1)).toBe(0);
-    expect(getBurnGlint(gachaBetaTimeline.heroBurn)).toBe(1);
-    expect(getBurnGlint(gachaBetaTimeline.heroBurn + 2)).toBe(0);
+  test('silhouette shards burst outward from the centre', () => {
+    const shards = createShards(createRandom(3), 12);
+    for (const shard of shards) {
+      const mid = getShardOffset(shard, gachaBetaTimeline.volleyEnd + 0.7);
+      const end = getShardOffset(shard, gachaBetaTimeline.silhouetteEnd);
+      expect(Math.hypot(end.dx, end.dy)).toBeGreaterThanOrEqual(Math.hypot(mid.dx, mid.dy));
+      expect(Math.hypot(end.dx, end.dy)).toBeCloseTo(shard.reach);
+    }
   });
 
   test('beta food reveal displays SSS', () => {
