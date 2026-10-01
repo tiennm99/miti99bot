@@ -46,6 +46,19 @@ describe('gacha wish plan', () => {
     expect(dragEnd + 2).toBeLessThan(gachaTotalSeconds);
   });
 
+  test('the drag eases exponentially in and out across the seal', () => {
+    const {dragStart, dragEnd} = wishTimeline;
+    const x = (/** @type {number} */ fraction) =>
+      getDragPointer(dragStart + (dragEnd - dragStart) * fraction)?.x ?? NaN;
+    expect(x(0)).toBeCloseTo(0.08);
+    expect(x(1)).toBeCloseTo(0.98);
+    expect(x(0.5)).toBeCloseTo(0.53);
+    // Slow at both ends, fast through the middle.
+    expect(x(0.2) - x(0)).toBeLessThan(0.01);
+    expect(x(1) - x(0.8)).toBeLessThan(0.01);
+    expect(x(0.6) - x(0.4)).toBeGreaterThan(0.6);
+  });
+
   test('page requests map to the page directory and the installed package', () => {
     expect(resolveWishAsset(`${wishOrigin}/index.html`, roots)).toEqual({
       file: path.join(roots.page, 'index.html'),

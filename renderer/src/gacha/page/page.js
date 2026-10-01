@@ -52,12 +52,14 @@ const createFace = () => {
  * over 1750ms: the card is clear of the pack at 900ms, then it flips with a
  * half turn (rotateY 180deg to 0deg) and the pack drops away while it glides
  * to the centre. The page reshapes those animations without changing the
- * library: the rise keeps its speed, everything after the card clears the
- * pack is stretched so the flip has time for three extra turns, and the flip
- * eases out like a flicked card slowing to a stop while sparkles burst
- * around it.
+ * library: the rise out of the pack eases exponentially in and out,
+ * everything after the card clears the pack is stretched so the flip has time
+ * for three extra turns, and the flip eases out like a flicked card slowing to
+ * a stop while sparkles burst around it.
  */
 const flight = Object.freeze({duration: 1750, clearAt: 900});
+/** Exponential ease-in-out, as a CSS timing function. */
+const easeInOutExpo = 'cubic-bezier(.87, 0, .13, 1)';
 const afterClearStretch = 1.65;
 const flip = Object.freeze({startDegrees: 180 + 3 * 360, easing: 'cubic-bezier(.3, .4, .25, 1)'});
 
@@ -139,9 +141,16 @@ Element.prototype.animate = function (keyframes, options) {
   // The flight path: keyframes spaced evenly over the whole flight.
   if (options.duration === flight.duration && options.easing === 'linear') {
     const total = stretch(flight.duration);
-    const stretched = keyframes.map((frame) => ({
+    const at = (/** @type {Keyframe} */ frame) => Number(frame.offset) * flight.duration;
+    // Until the card clears the pack it only translates, so the rise is one
+    // straight segment: keep its two ends and ease between them.
+    const cleared = keyframes.findIndex((frame) => at(frame) > flight.clearAt);
+    const [start] = keyframes;
+    const eased =
+      start && cleared > 1 ? [{...start, easing: easeInOutExpo}, ...keyframes.slice(cleared - 1)] : keyframes;
+    const stretched = eased.map((frame) => ({
       ...frame,
-      offset: stretch(Number(frame.offset) * flight.duration) / total,
+      offset: stretch(at(frame)) / total,
     }));
     return animate.call(this, stretched, {...options, duration: total});
   }
