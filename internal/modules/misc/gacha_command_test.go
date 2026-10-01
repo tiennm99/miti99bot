@@ -14,14 +14,16 @@ import (
 var mp4Bytes = []byte("\x00\x00\x00\x18ftypisom-remote")
 
 func TestParseGachaOptions(t *testing.T) {
-	got := parseGachaOptions(" Pizza*5, Pho *4 , Rice, Bun * 3, *5, , Cake*7, a*b ")
+	got := parseGachaOptions(" Pizza, 4* Pho , 3*Rice, 3 * Bun, 5* Cake, 5*, , 7* Tea, a*b, Pho 4* ")
 	want := []gachaOption{
 		{Label: "Pizza", Rarity: 5},
 		{Label: "Pho", Rarity: 4},
 		{Label: "Rice", Rarity: 3},
 		{Label: "Bun", Rarity: 3},
-		{Label: "Cake*7", Rarity: 3},
-		{Label: "a*b", Rarity: 3},
+		{Label: "Cake", Rarity: 5},
+		{Label: "7* Tea", Rarity: 5},
+		{Label: "a*b", Rarity: 5},
+		{Label: "Pho 4*", Rarity: 5},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("parseGachaOptions() = %#v, want %#v", got, want)
@@ -29,7 +31,7 @@ func TestParseGachaOptions(t *testing.T) {
 }
 
 func TestGacha_EmptyArgsRepliesUsage(t *testing.T) {
-	for _, text := range []string{"/gacha", "/gacha , ,", "/gacha *5"} {
+	for _, text := range []string{"/gacha", "/gacha , ,", "/gacha 5*"} {
 		t.Run(text, func(t *testing.T) {
 			rb, _ := installMisc(t, 999)
 			rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(7, text))
@@ -43,7 +45,7 @@ func TestGacha_EmptyArgsRepliesUsage(t *testing.T) {
 
 func TestGacha_NotConfiguredRepliesWithStars(t *testing.T) {
 	rb, _ := installMisc(t, 999)
-	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(7, "/gacha Pizza*5"))
+	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(7, "/gacha Pizza"))
 
 	calls := rb.Sent()
 	if len(calls) != 1 || calls[0].Method != "sendMessage" || calls[0].Text() != "★★★★★ Pizza" {
@@ -68,7 +70,7 @@ func TestGacha_UsesRemoteAPIWhenConfigured(t *testing.T) {
 	t.Setenv(wheelOfNamesAPITokenEnv, "remote-token")
 
 	rb, _ := installMisc(t, 999)
-	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(7, "/gacha Pho*4"))
+	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(7, "/gacha 4* Pho"))
 
 	if gotPath != "/api/gacha" {
 		t.Fatalf("path = %q, want /api/gacha", gotPath)
@@ -113,7 +115,7 @@ func TestGacha_RemoteFailureFallsBackToText(t *testing.T) {
 	t.Setenv(wheelOfNamesAPIURLEnv, server.URL+"/api/gif")
 
 	rb, _ := installMisc(t, 999)
-	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(7, "/gacha Rice"))
+	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(7, "/gacha 3* Rice"))
 
 	sent := rb.Sent()
 	if len(sent) != 2 {
@@ -134,7 +136,7 @@ func TestGacha_SendAnimationFailureFallsBackToText(t *testing.T) {
 
 	rb, _ := installMisc(t, 999)
 	rb.FailMethod("sendAnimation", http.StatusInternalServerError, "")
-	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(7, "/gacha Rice"))
+	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(7, "/gacha 3* Rice"))
 
 	call := rb.LastSent()
 	if call.Method != "editMessageText" || call.Text() != "★★★ Rice" {
@@ -151,7 +153,7 @@ func TestGacha_ForwardsMessageThreadID(t *testing.T) {
 	t.Setenv(wheelOfNamesAPIURLEnv, server.URL+"/api/gif")
 
 	rb, _ := installMisc(t, 999)
-	update := testutil.NewSupergroupMessage(-100, 7, "/gacha Rice")
+	update := testutil.NewSupergroupMessage(-100, 7, "/gacha 3* Rice")
 	update.Message.MessageThreadID = 42
 	rb.Bot.ProcessUpdate(context.Background(), update)
 

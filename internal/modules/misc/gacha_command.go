@@ -17,17 +17,17 @@ import (
 )
 
 const (
-	gachaUsage       = "Usage: /gacha <option,...>\nTag rarity with *4 or *5, e.g. /gacha Pizza*5, Pho*4, Rice"
+	gachaUsage       = "Usage: /gacha <option,...>\nOptions are 5* by default; prefix 4* or 3* to lower one, e.g. /gacha Pizza, 4* Pho, 3* Rice"
 	gachaPlaceholder = "Wishing..."
 	gachaFilename    = "gacha.mp4"
 
 	gachaMinRarity     = 3
 	gachaMaxRarity     = 5
-	gachaDefaultRarity = gachaMinRarity
+	gachaDefaultRarity = gachaMaxRarity
 )
 
-// gachaRarityTag matches a trailing "*3", "*4", or "*5" rarity tag.
-var gachaRarityTag = regexp.MustCompile(`\s*\*\s*([345])$`)
+// gachaRarityTag matches a leading "3*", "4*", or "5*" rarity prefix.
+var gachaRarityTag = regexp.MustCompile(`^([345])\s*\*\s*`)
 
 type gachaOption struct {
 	Label  string
@@ -35,15 +35,15 @@ type gachaOption struct {
 }
 
 // parseGachaOptions splits comma-separated options and strips each one's
-// rarity tag. Untagged options are 3★; options left blank after the tag is
-// removed are dropped.
+// rarity prefix. Unprefixed options are 5★; options left blank after the
+// prefix is removed are dropped.
 func parseGachaOptions(arg string) []gachaOption {
 	parts := splitWheelOptions(arg)
 	out := make([]gachaOption, 0, len(parts))
 	for _, part := range parts {
 		option := gachaOption{Label: part, Rarity: gachaDefaultRarity}
 		if m := gachaRarityTag.FindStringSubmatchIndex(part); m != nil {
-			option.Label = strings.TrimSpace(part[:m[0]])
+			option.Label = strings.TrimSpace(part[m[1]:])
 			option.Rarity = int(part[m[2]] - '0')
 		}
 		if option.Label != "" {
@@ -62,7 +62,7 @@ func gachaCommand() modules.Command {
 	return modules.Command{
 		Name:        "gacha",
 		Visibility:  modules.VisibilityPublic,
-		Description: "Wish for one comma-separated option, Genshin style; tag *4 or *5 for rarity",
+		Description: "Wish for one comma-separated option, Genshin style; 5* by default, prefix 4* or 3*",
 		Parameters:  "<option,...>",
 		Handler: func(ctx context.Context, b *bot.Bot, update *models.Update) error {
 			if update.Message == nil {
