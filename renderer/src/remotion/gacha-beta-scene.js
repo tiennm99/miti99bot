@@ -1,67 +1,29 @@
 /**
- * Scene math for the beta wish: a toon-shaded night sky viewed through a
- * perspective camera that dollies toward a hero cloud, follows a comet that
- * pierces it, and holds on the comet as it flares and bursts. Kept free of
- * React so the choreography can be unit tested.
- */
-
-/**
- * @typedef {object} Vec3
- * @property {number} x
- * @property {number} y
- * @property {number} z
- */
-
-/**
- * @typedef {object} Camera
- * @property {number} x
- * @property {number} y
- * @property {number} z
- * @property {number} roll  Screen roll in degrees.
- */
-
-/**
- * @typedef {object} Projection
- * @property {number} x      Screen pixels.
- * @property {number} y      Screen pixels.
- * @property {number} scale  Pixels per world unit at that depth.
- * @property {number} depth  World units in front of the camera.
+ * Choreography for the beta wish: coloured meteors glide down a night sky over
+ * a mountain ridge, a hero meteor in the rarity colour slows and burns out at
+ * the centre, and the result appears where it died. Kept free of React so the
+ * motion can be unit tested.
  */
 
 export const gachaBetaTotalSeconds = 8;
 
-/** Seconds from the start of the clip for each beat of the three phases. */
+/** Seconds from the start of the clip for each beat. */
 export const gachaBetaTimeline = Object.freeze({
-  dollyEnd: 2,
-  cometAppear: 1.2,
-  pierceStart: 1.9,
-  pierceEnd: 2.6,
-  flightEnd: 4.8,
-  flashPeak: 5.05,
-  flashEnd: 5.45,
-  cardIn: 5.2,
-  rankIn: 5.6,
+  fadeInEnd: 0.4,
+  heroStart: 1.1,
+  heroBurn: 4.4,
+  labelIn: 4.5,
+  rankIn: 4.9,
 });
 
-/** The cloud the camera dollies toward and the comet pierces. */
-export const heroCloud = Object.freeze({x: 0, y: 30, z: 800, radius: 170});
+/** Where the hero meteor burns out and the result is centred, as frame fractions. */
+export const revealAnchor = Object.freeze({x: 0.5, y: 0.44});
 
-/** The approach behind the cloud, the entry point, and the exit in front. */
-const cometHidden = Object.freeze({x: -1050, y: -430, z: 1500});
-const cometPierceFrom = Object.freeze({x: 40, y: 20, z: 1300});
-const cometPierceTo = Object.freeze({x: 0, y: 30, z: 500});
+/** Every meteor travels down and to the right at this angle, as in the source shot. */
+export const meteorAngleDegrees = 32;
 
-/** The camera trails the comet from behind and slightly above it. */
-const cameraFollowOffset = Object.freeze({x: 0, y: -30, z: -420});
-
-/**
- * Seconds at which the comet crosses the hero cloud's plane. The pierce moves
- * linearly in depth, so the crossing is a fixed fraction of the segment.
- */
-export const pierceTime =
-  gachaBetaTimeline.pierceStart +
-  ((gachaBetaTimeline.pierceEnd - gachaBetaTimeline.pierceStart) * (cometPierceFrom.z - heroCloud.z)) /
-    (cometPierceFrom.z - cometPierceTo.z);
+const angle = (meteorAngleDegrees * Math.PI) / 180;
+const direction = Object.freeze({x: Math.cos(angle), y: Math.sin(angle)});
 
 /**
  * @param {number} value
@@ -73,132 +35,96 @@ const clamp01 = (value) => Math.min(1, Math.max(0, value));
  * @param {number} t
  * @returns {number}
  */
-const easeInOutSine = (t) => -(Math.cos(Math.PI * clamp01(t)) - 1) / 2;
-
-/**
- * @param {number} t
- * @returns {number}
- */
-const easeOutCubic = (t) => 1 - (1 - clamp01(t)) ** 3;
-
-/**
- * @param {Vec3} a
- * @param {Vec3} b
- * @param {number} t
- * @returns {Vec3}
- */
-const lerp3 = (a, b, t) => ({x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t, z: a.z + (b.z - a.z) * t});
-
-/**
- * Comet position in world units. It approaches behind the hero cloud, punches
- * straight through it toward the camera, then flies off on a rising arc and
- * slows as it gathers light for the burst.
- *
- * @param {number} seconds
- * @returns {Vec3}
- */
-export const getCometPosition = (seconds) => {
-  const tl = gachaBetaTimeline;
-  if (seconds < tl.pierceStart) {
-    const t = clamp01((seconds - tl.cometAppear) / (tl.pierceStart - tl.cometAppear));
-    return lerp3(cometHidden, cometPierceFrom, t);
-  }
-  if (seconds < tl.pierceEnd) {
-    return lerp3(cometPierceFrom, cometPierceTo, (seconds - tl.pierceStart) / (tl.pierceEnd - tl.pierceStart));
-  }
-  const u = easeOutCubic((seconds - tl.pierceEnd) / (tl.flightEnd - tl.pierceEnd));
-  return {
-    x: cometPierceTo.x + 600 * u,
-    y: cometPierceTo.y - 300 * u + 120 * Math.sin(Math.PI * u),
-    z: cometPierceTo.z + 2600 * u,
-  };
+const smoothstep = (t) => {
+  const x = clamp01(t);
+  return x * x * (3 - 2 * x);
 };
 
 /**
- * Action camera: a slow dolly toward the hero cloud, then a chase that locks
- * onto the comet from behind with a little lag and banks into its turn.
- *
- * @param {number} seconds
- * @returns {Camera}
+ * @typedef {object} SkyMeteor
+ * @property {number} start   Seconds at which the head is at its entry point.
+ * @property {number} x       Entry point, fraction of width.
+ * @property {number} y       Entry point, fraction of height.
+ * @property {number} speed   Frame heights per second along the travel direction.
+ * @property {number} length  Tail length in frame heights.
+ * @property {number} width   Tail thickness in frame heights.
+ * @property {string} color   Halo and tail colour; every head burns white.
  */
-export const getCamera = (seconds) => {
-  const tl = gachaBetaTimeline;
-  const dolly = {x: 0, y: 0, z: 250 * easeInOutSine(seconds / tl.dollyEnd)};
-  const lagged = getCometPosition(Math.max(tl.pierceEnd, seconds - 0.12));
-  const chase = {
-    x: lagged.x + cameraFollowOffset.x,
-    y: lagged.y + cameraFollowOffset.y,
-    z: lagged.z + cameraFollowOffset.z,
-  };
-  const follow = easeInOutSine((seconds - pierceTime) / (tl.pierceEnd + 0.4 - pierceTime));
-  const position = lerp3(dolly, {...chase, z: Math.max(dolly.z, chase.z)}, follow);
-  const bank = seconds > tl.pierceEnd ? 7 * Math.sin(Math.PI * clamp01((seconds - tl.pierceEnd) / 1.6)) : 0;
-  return {...position, roll: bank * follow};
-};
 
 /**
- * Perspective projection onto the frame. Returns null for points behind or
- * too close to the camera.
+ * Background meteors in the source shot's colours. They enter from the upper
+ * left in a loose staggered volley and keep gliding slowly for the whole clip.
+ */
+export const skyMeteors = /** @type {readonly SkyMeteor[]} */ (
+  Object.freeze([
+    {start: 0, x: 0.36, y: -0.08, speed: 0.1, length: 0.5, width: 0.011, color: '#eef4ff'},
+    {start: 0, x: 0.1, y: -0.02, speed: 0.11, length: 0.34, width: 0.014, color: '#52e07a'},
+    {start: 0.2, x: -0.04, y: 0.12, speed: 0.12, length: 0.42, width: 0.018, color: '#9ff5e4'},
+    {start: 0.9, x: -0.06, y: -0.05, speed: 0.12, length: 0.46, width: 0.016, color: '#f4f8ff'},
+    {start: 1.3, x: 0.17, y: -0.09, speed: 0.1, length: 0.32, width: 0.012, color: '#ff8a7a'},
+    {start: 1.6, x: -0.1, y: 0.06, speed: 0.13, length: 0.5, width: 0.015, color: '#6f9cff'},
+    {start: 2.6, x: 0.55, y: -0.1, speed: 0.11, length: 0.4, width: 0.01, color: '#ffe6a8'},
+    {start: 3.2, x: -0.08, y: -0.08, speed: 0.12, length: 0.38, width: 0.012, color: '#5fe8d0'},
+  ])
+);
+
+/**
+ * Head position of a background meteor in pixels, or null before it enters.
  *
- * @param {Vec3} point
- * @param {Camera} camera
+ * @param {SkyMeteor} meteor
+ * @param {number} seconds
  * @param {number} width
  * @param {number} height
- * @returns {Projection | null}
+ * @returns {{x: number, y: number} | null}
  */
-export const project = (point, camera, width, height) => {
-  const depth = point.z - camera.z;
-  if (depth < 30) {
+export const getSkyMeteorHead = (meteor, seconds, width, height) => {
+  if (seconds < meteor.start) {
     return null;
   }
-  const focal = height * 1.2;
-  const scale = focal / depth;
+  const travel = (seconds - meteor.start) * meteor.speed * height;
+  return {x: meteor.x * width + direction.x * travel, y: meteor.y * height + direction.y * travel};
+};
+
+/** How far up the diagonal the hero meteor enters, in frame heights from the anchor. */
+const heroReach = 0.72;
+
+/**
+ * The hero meteor streaks down the same diagonal as the volley, slowing until
+ * it burns out on the reveal anchor.
+ *
+ * @param {number} seconds
+ * @param {number} width
+ * @param {number} height
+ * @returns {{x: number, y: number, visible: number, tail: number}}
+ *   `visible` fades the meteor out as it burns; `tail` shrinks its trail as
+ *   it slows.
+ */
+export const getHeroMeteor = (seconds, width, height) => {
+  const tl = gachaBetaTimeline;
+  const t = clamp01((seconds - tl.heroStart) / (tl.heroBurn - tl.heroStart));
+  const remaining = heroReach * height * (1 - t) ** 2.4;
   return {
-    x: width / 2 + (point.x - camera.x) * scale,
-    y: height / 2 + (point.y - camera.y) * scale,
-    scale,
-    depth,
+    x: revealAnchor.x * width - direction.x * remaining,
+    y: revealAnchor.y * height - direction.y * remaining,
+    visible: seconds < tl.heroStart ? 0 : 1 - smoothstep((seconds - (tl.heroBurn - 0.15)) / 0.3),
+    tail: 1 - 0.75 * t,
   };
 };
 
 /**
- * Comet glow from 0 to 1: it ignites behind the cloud, then builds steadily
- * through the flight until the burst.
+ * Brightness of the burn-out glint where the hero meteor dies, peaking at the
+ * burn and fading as the result settles.
  *
  * @param {number} seconds
  * @returns {number}
  */
-export const getCometGlow = (seconds) => {
-  const tl = gachaBetaTimeline;
-  if (seconds < tl.pierceEnd) {
-    return 0.35 * clamp01((seconds - tl.cometAppear) / 0.4);
+export const getBurnGlint = (seconds) => {
+  const elapsed = seconds - gachaBetaTimeline.heroBurn;
+  if (elapsed < -0.2 || elapsed > 1) {
+    return 0;
   }
-  return 0.35 + 0.65 * clamp01((seconds - tl.pierceEnd) / (tl.flightEnd - tl.pierceEnd)) ** 2;
+  return elapsed < 0 ? 1 + elapsed / 0.2 : (1 - elapsed) ** 2;
 };
 
-/**
- * Decaying shake in pixels for the pierce and the burst.
- *
- * @param {number} seconds
- * @param {number} height
- * @returns {{x: number, y: number}}
- */
-export const getBetaShake = (seconds, height) => {
-  let x = 0;
-  let y = 0;
-  for (const [start, amplitude] of [
-    [pierceTime, 0.02],
-    [gachaBetaTimeline.flightEnd, 0.035],
-  ]) {
-    const elapsed = seconds - (start ?? 0);
-    if (elapsed >= 0 && elapsed < 0.6) {
-      const decay = (amplitude ?? 0) * height * (1 - elapsed / 0.6) ** 2;
-      x += Math.sin(elapsed * 77) * decay;
-      y += Math.cos(elapsed * 59) * decay;
-    }
-  }
-  return {x, y};
-};
-
-/** The beta food wish always reveals SSS; rarity still controls its light palette. */
+/** The beta food wish always reveals SSS; rarity still controls the hero meteor's colour. */
 export const getBetaRank = () => 'SSS';

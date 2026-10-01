@@ -24,5 +24,5 @@ const createGachaRenderer = (compositionId) => (inputProps, options) =>
 
 export const renderGachaVideo = createGachaRenderer('GachaWish');
 
-/** The beta wish: toon-shaded 3D-perspective sky, comet through a cloud, SSS reveal. */
+/** The beta wish: a meteor shower over a mountain ridge, ending in an SSS reveal. */
 export const renderGachaBetaVideo = createGachaRenderer('GachaBetaWish');

@@ -67,19 +67,15 @@ only draws it.
 ### Gacha wish beta
 
 `POST /api/gachabeta` takes the same body and returns the same response as
-`/api/gacha`, rendering an 8-second beta style instead: a cosmic, astrology
-themed night sky with toon-shaded clouds and stars, without outlines, seen
-through a perspective action camera:
-
-1. The sky fades in around a main cloud. A comet approaches from behind,
-   lights the cloud's rim, then punches through it with scattered puffs and an impact ring.
-2. The camera follows the flying star as its light and lens flare intensify,
-   ending in a starburst and white flash.
-3. The food label appears inside an astrology ring with rank `SSS`.
+`/api/gacha`, rendering an 8-second beta style instead, modelled on the meteor
+shot of a music video: white, teal, green, red, and blue meteors glide slowly
+down a starry night sky over a snow-rimmed mountain ridge. A hero meteor in the
+rarity colour (blue 3★, purple 4★, gold 5★) joins the volley, slows, and burns
+out in a glint at the centre, where the food label appears under rank `SSS`.
 
 The caller randomly chooses the food and sends it as `label` (for example,
-`"Bún bò"`). The beta reveal always shows `SSS`; `rarity` still chooses the
-comet's blue, purple, or gold palette. `/api/gacha` keeps its existing ranks.
+`"Bún bò"`). The beta reveal always shows `SSS`; `rarity` only chooses the hero
+meteor's colour. `/api/gacha` keeps its existing ranks.
 
 Response is a silent H.264 `video/mp4` (Telegram plays it as an animation)
 with `X-Gacha-Rarity` and `X-Render-Duration-Ms` headers. Both routes share the
