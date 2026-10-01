@@ -18,9 +18,9 @@ with stars), rendered as a silent MP4 by the existing wheelofnames service.
 
 ## Design
 
-- Odds follow Genshin base tier rates, normalised over tiers present:
-  5★ 0.6%, 4★ 5.1%, 3★ 94.3%; uniform within a tier. All-untagged input is
-  therefore a plain uniform pick.
+- Every option is equally likely, as with /random; the rarity tag is
+  cosmetic. (First shipped with Genshin tier rates; the user switched to
+  uniform odds on 2026-10-01.)
 - All visuals are procedural (CSS/gradients); no HoYoverse assets.
 - Bot derives the gacha endpoint from `WHEELOFNAMES_API_URL` (sibling path
   `gacha` next to `gif`), so no new env var. Same bearer token.
