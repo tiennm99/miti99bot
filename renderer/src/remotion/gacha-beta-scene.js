@@ -5,8 +5,6 @@
  * React so the choreography can be unit tested.
  */
 
-/** @typedef {3 | 4 | 5} GachaRarity */
-
 /**
  * @typedef {object} Vec3
  * @property {number} x
@@ -48,8 +46,8 @@ export const gachaBetaTimeline = Object.freeze({
 /** The cloud the camera dollies toward and the comet pierces. */
 export const heroCloud = Object.freeze({x: 0, y: 30, z: 800, radius: 170});
 
-/** Where the comet waits behind the hero cloud, then where it exits in front. */
-const cometHidden = Object.freeze({x: 60, y: 10, z: 1500});
+/** The approach behind the cloud, the entry point, and the exit in front. */
+const cometHidden = Object.freeze({x: -1050, y: -430, z: 1500});
 const cometPierceFrom = Object.freeze({x: 40, y: 20, z: 1300});
 const cometPierceTo = Object.freeze({x: 0, y: 30, z: 500});
 
@@ -92,7 +90,7 @@ const easeOutCubic = (t) => 1 - (1 - clamp01(t)) ** 3;
 const lerp3 = (a, b, t) => ({x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t, z: a.z + (b.z - a.z) * t});
 
 /**
- * Comet position in world units. It waits behind the hero cloud, punches
+ * Comet position in world units. It approaches behind the hero cloud, punches
  * straight through it toward the camera, then flies off on a rising arc and
  * slows as it gathers light for the burst.
  *
@@ -202,11 +200,5 @@ export const getBetaShake = (seconds, height) => {
   return {x, y};
 };
 
-/** @type {Record<GachaRarity, 'S' | 'SS' | 'SSS'>} */
-const betaRanks = {3: 'S', 4: 'SS', 5: 'SSS'};
-
-/**
- * @param {GachaRarity} rarity
- * @returns {'S' | 'SS' | 'SSS'}
- */
-export const getBetaRank = (rarity) => betaRanks[rarity];
+/** The beta food wish always reveals SSS; rarity still controls its light palette. */
+export const getBetaRank = () => 'SSS';

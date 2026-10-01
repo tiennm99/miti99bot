@@ -1,4 +1,5 @@
 import {useMemo} from 'react';
+import {Star} from '@remotion/shapes';
 import {AbsoluteFill, Easing, interpolate, useCurrentFrame, useVideoConfig} from 'remotion';
 import {
   gachaBetaTimeline,
@@ -18,9 +19,9 @@ const baseFont =
 
 const clamp = /** @type {const} */ ({extrapolateLeft: 'clamp', extrapolateRight: 'clamp'});
 
-/** Toon shading: flat colour bands with hard edges and no outline. */
-const skyBands =
-  'linear-gradient(180deg, #0a0c2c 0% 28%, #15185a 28% 52%, #262a80 52% 72%, #3a44a6 72% 88%, #5664c4 88%)';
+/** A luminous night sky behind flat, outline-free cloud shading. */
+const skyBackground =
+  'radial-gradient(ellipse at 50% 105%, #7886ce 0%, #353f83 32%, #171b49 65%, #090e29 100%)';
 const cloudShade = 'radial-gradient(circle at 38% 32%, #f6f4ff 0% 44%, #cdd1f6 44% 70%, #959cdb 70%)';
 const heroShade = 'radial-gradient(circle at 38% 30%, #ffffff 0% 46%, #d8dcfb 46% 72%, #a0a8e4 72%)';
 
@@ -91,11 +92,26 @@ const withAlpha = (hex, alpha) => {
  * @param {{size: number, fill: string, shade: string}} props
  */
 const ToonStar = ({size, fill, shade}) => (
-  <svg height={size} style={{display: 'block'}} viewBox="0 0 24 24" width={size}>
-    <path d="M12 0.8l3.2 7.9 8.3.6-6.4 5.3 2.1 8.2L12 18.3l-7.2 4.5 2.1-8.2L0.5 9.3l8.3-.6z" fill={shade} />
-    <path d="M12 0.8l3.2 7.9 8.3.6-6.4 5.3L12 14.2z" fill={fill} />
-    <path d="M12 0.8L8.8 8.7l-8.3.6 6.4 5.3L12 14.2z" fill={fill} opacity={0.82} />
-  </svg>
+  <div style={{height: size, position: 'relative', width: size}}>
+    <Star
+      cornerRadius={size * 0.035}
+      fill={shade}
+      innerRadius={size * 0.23}
+      outerRadius={size / 2}
+      points={5}
+      style={{height: size, position: 'absolute', width: size}}
+    />
+    <div style={{clipPath: 'polygon(0 0, 100% 0, 100% 42%, 50% 62%, 0 42%)', inset: 0, position: 'absolute'}}>
+      <Star
+        cornerRadius={size * 0.035}
+        fill={fill}
+        innerRadius={size * 0.23}
+        outerRadius={size / 2}
+        points={5}
+        style={{height: size, width: size}}
+      />
+    </div>
+  </div>
 );
 
 /**
@@ -126,7 +142,9 @@ export const GachaBetaComposition = (props) => {
   const cometVisible = seconds >= tl.cometAppear && seconds < tl.flashPeak;
   const burst = interpolate(seconds, [tl.flightEnd - 0.1, tl.flashPeak], [0, 1], clamp);
   const flash = interpolate(seconds, [tl.flightEnd, tl.flashPeak, tl.flashEnd], [0, 1, 0], clamp);
-  const cardVisible = seconds >= tl.cardIn - 0.2;
+  const cardVisible = seconds >= tl.cardIn;
+  const skyIn = interpolate(seconds, [0, 0.65], [0, 1], clamp);
+  const revealIn = interpolate(seconds, [tl.cardIn, tl.flashEnd + 0.2], [0, 1], clamp);
   const pierceBurst = interpolate(seconds, [pierceTime, pierceTime + 0.9], [0, 1], {
     ...clamp,
     easing: Easing.out(Easing.cubic),
@@ -179,13 +197,14 @@ export const GachaBetaComposition = (props) => {
     drawables.push({
       depth: hero.depth,
       node: (
-        <div key="hero" style={{left: hero.x, position: 'absolute', top: hero.y}}>
+        <div key="hero" style={{left: hero.x, opacity: skyIn, position: 'absolute', top: hero.y}}>
           {scene.heroPuffs.map((puff, index) => {
             const distance = Math.hypot(puff.dx, puff.dy) || 1;
             const push = pierceBurst * (0.6 + (1 - Math.min(1, distance)) * 1.4);
-            const ox = (puff.dx / distance) * push;
-            const oy = (puff.dy / distance) * push;
-            const opacity = 1 - pierceBurst * (distance < 0.5 ? 0.95 : 0.55);
+            const angle = (index / scene.heroPuffs.length) * Math.PI * 2;
+            const ox = Math.cos(angle) * push;
+            const oy = Math.sin(angle) * push;
+            const opacity = 1 - pierceBurst * (distance < 0.5 ? 1 : 0.65);
             return (
               <div
                 key={index}
@@ -197,7 +216,7 @@ export const GachaBetaComposition = (props) => {
                   opacity,
                   position: 'absolute',
                   top: (puff.dy + oy) * radius - puff.r * radius,
-                  transform: `scale(${1 + pierceBurst * 0.3})`,
+                  transform: `rotate(${puff.dx * 12}deg) scale(${1 + pierceBurst * 0.3}, 0.78)`,
                   width: puff.r * radius * 2,
                 }}
               />
@@ -276,7 +295,7 @@ export const GachaBetaComposition = (props) => {
               left: cometScreen.x - headSize / 2,
               position: 'absolute',
               top: cometScreen.y - headSize / 2,
-              transform: `rotate(${seconds * 140}deg)`,
+              transform: `perspective(${height}px) rotateY(${Math.sin(seconds * 4) * 32}deg) rotateZ(${seconds * 100}deg)`,
             }}
           >
             <ToonStar fill="#ffffff" shade={palette.core} size={headSize} />
@@ -328,9 +347,34 @@ export const GachaBetaComposition = (props) => {
     }
   }
 
+  if (hero && seconds >= pierceTime && seconds < pierceTime + 0.65) {
+    const impact = (seconds - pierceTime) / 0.65;
+    const diameter = heroCloud.radius * hero.scale * (0.4 + impact * 3.5);
+    drawables.push({
+      depth: hero.depth - 1,
+      node: (
+        <div
+          key="cloud-impact"
+          style={{
+            border: `${Math.max(1, 8 * (1 - impact))}px solid ${palette.core}`,
+            borderRadius: '50%',
+            boxShadow: `0 0 ${height * 0.04}px ${palette.glow}`,
+            height: diameter,
+            left: hero.x - diameter / 2,
+            opacity: 1 - impact,
+            position: 'absolute',
+            top: hero.y - diameter / 2,
+            transform: 'rotateX(48deg)',
+            width: diameter,
+          }}
+        />
+      ),
+    });
+  }
+
   drawables.sort((a, b) => b.depth - a.depth);
 
-  const rank = getBetaRank(props.rarity);
+  const rank = getBetaRank();
   const cardPop = interpolate(seconds, [tl.cardIn, tl.cardIn + 0.35, tl.cardIn + 0.55], [0.6, 1.08, 1], {
     ...clamp,
     easing: Easing.out(Easing.cubic),
@@ -341,10 +385,11 @@ export const GachaBetaComposition = (props) => {
     <AbsoluteFill style={{background: '#0a0c2c', fontFamily: baseFont, overflow: 'hidden'}}>
       <AbsoluteFill
         style={{
+          opacity: skyIn,
           transform: `translate(${shake.x}px, ${shake.y}px) rotate(${camera.roll}deg) scale(1.18)`,
         }}
       >
-        <AbsoluteFill style={{background: skyBands}} />
+        <AbsoluteFill style={{background: skyBackground}} />
 
         <svg
           height={height}
@@ -446,11 +491,11 @@ export const GachaBetaComposition = (props) => {
 
       {cardVisible ? (
         <AbsoluteFill
-          style={{background: `radial-gradient(circle, ${palette.deep} 0% 30%, #120f3a 30% 60%, #0a0c2c 60%)`}}
+          style={{background: `radial-gradient(ellipse, ${withAlpha(palette.deep, 0.9)}, #0a0c2cee)`, opacity: revealIn}}
         >
           <div
             style={{
-              background: `repeating-conic-gradient(from ${seconds * 12}deg, ${withAlpha(palette.glow, 0.32)} 0deg 10deg, transparent 10deg 20deg)`,
+              background: `repeating-conic-gradient(from ${seconds * 4}deg, ${withAlpha(palette.glow, 0.16)} 0deg 5deg, transparent 5deg 30deg)`,
               borderRadius: '50%',
               height: width * 1.5,
               left: width / 2 - width * 0.75,
@@ -478,6 +523,34 @@ export const GachaBetaComposition = (props) => {
           })}
           <div
             style={{
+              border: `1px solid ${withAlpha(palette.core, 0.35)}`,
+              borderRadius: '50%',
+              height: height * 0.8,
+              left: width / 2 - height * 0.4,
+              position: 'absolute',
+              top: height * 0.5 - height * 0.4,
+              transform: `rotate(${seconds * 5}deg)`,
+              width: height * 0.8,
+            }}
+          >
+            {Array.from({length: 12}, (_, index) => (
+              <div
+                key={index}
+                style={{
+                  background: palette.core,
+                  height: height * 0.018,
+                  left: '50%',
+                  opacity: 0.65,
+                  position: 'absolute',
+                  top: '50%',
+                  transform: `rotate(${index * 30}deg) translateY(${-height * 0.4}px)`,
+                  width: 2,
+                }}
+              />
+            ))}
+          </div>
+          <div
+            style={{
               alignItems: 'center',
               display: 'flex',
               flexDirection: 'column',
@@ -501,7 +574,7 @@ export const GachaBetaComposition = (props) => {
                 transform: `scale(${rankPop})`,
                 WebkitBackgroundClip: 'text',
                 backgroundClip: 'text',
-                filter: `drop-shadow(0 ${height * 0.012}px 0 #8a4b00) drop-shadow(0 0 ${height * 0.04}px ${palette.glow})`,
+                filter: `drop-shadow(0 0 ${height * 0.04}px ${palette.glow})`,
               }}
             >
               {rank}
@@ -516,7 +589,7 @@ export const GachaBetaComposition = (props) => {
                 maxWidth: width * 0.8,
                 overflowWrap: 'anywhere',
                 textAlign: 'center',
-                textShadow: `0 ${height * 0.01}px 0 ${palette.deep}, 0 0 ${height * 0.03}px ${withAlpha(palette.glow, 0.8)}`,
+                textShadow: `0 0 ${height * 0.03}px ${withAlpha(palette.glow, 0.8)}`,
               }}
             >
               {props.label}

@@ -42,6 +42,22 @@ describe('gacha beta scene', () => {
     }
   });
 
+  test('approaching comet is visible beside the cloud before passing behind it', () => {
+    const seconds = 1.4;
+    const camera = getCamera(seconds);
+    const comet = project(getCometPosition(seconds), camera, 640, 360);
+    const cloud = project(heroCloud, camera, 640, 360);
+    expect(comet && cloud).toBeTruthy();
+    if (comet && cloud) {
+      expect(comet.x).toBeGreaterThan(0);
+      expect(comet.x).toBeLessThan(640);
+      expect(comet.y).toBeGreaterThan(0);
+      expect(comet.y).toBeLessThan(360);
+      expect(Math.hypot(comet.x - cloud.x, comet.y - cloud.y)).toBeGreaterThan(heroCloud.radius * cloud.scale);
+      expect(comet.depth).toBeGreaterThan(cloud.depth);
+    }
+  });
+
   test('camera dollies toward the cloud, then chases the comet and keeps it in frame', () => {
     expect(getCamera(1).z).toBeGreaterThan(getCamera(0).z);
     for (const seconds of [3, 3.5, 4, 4.5]) {
@@ -84,7 +100,7 @@ describe('gacha beta scene', () => {
     expect(Math.hypot(...Object.values(getBetaShake(gachaBetaTimeline.flightEnd + 0.05, 360)))).toBeGreaterThan(0);
   });
 
-  test('ranks map rarity to S, SS, SSS', () => {
-    expect([3, 4, 5].map((rarity) => getBetaRank(/** @type {3 | 4 | 5} */ (rarity)))).toEqual(['S', 'SS', 'SSS']);
+  test('beta food reveal displays SSS', () => {
+    expect(getBetaRank()).toBe('SSS');
   });
 });
