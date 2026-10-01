@@ -2,7 +2,7 @@ import Fastify from 'fastify';
 import {loadConfig} from './config.js';
 import {createRenderSemaphore} from './lib/render-semaphore.js';
 import {getRemotionServeUrl} from './render/remotion-bundle.js';
-import {renderGachaVideo} from './render/render-gacha.js';
+import {renderGachaBetaVideo, renderGachaVideo} from './render/render-gacha.js';
 import {renderWheelGif} from './render/render-gif.js';
 import {registerGachaRoute} from './routes/gacha.js';
 import {registerGifRoute} from './routes/gif.js';
@@ -19,6 +19,7 @@ import {registerHealthRoute} from './routes/health.js';
  * @param {AppConfig} [options.config]
  * @param {(request: WheelRenderRequest, renderOptions: {timeoutInMilliseconds: number}) => Promise<{buffer: Buffer, durationMs: number, byteLength: number}>} [options.renderGif]
  * @param {(request: GachaRenderRequest, renderOptions: {timeoutInMilliseconds: number}) => Promise<{buffer: Buffer, durationMs: number, byteLength: number}>} [options.renderGacha]
+ * @param {(request: GachaRenderRequest, renderOptions: {timeoutInMilliseconds: number}) => Promise<{buffer: Buffer, durationMs: number, byteLength: number}>} [options.renderGachaBeta]
  * @param {boolean} [options.warmRemotionBundle]
  */
 export const buildServer = async (options = {}) => {
@@ -50,6 +51,12 @@ export const buildServer = async (options = {}) => {
   await registerGachaRoute(app, {
     config,
     renderGacha: options.renderGacha ?? renderGachaVideo,
+    semaphore,
+  });
+  await registerGachaRoute(app, {
+    config,
+    path: '/api/gachabeta',
+    renderGacha: options.renderGachaBeta ?? renderGachaBetaVideo,
     semaphore,
   });
 

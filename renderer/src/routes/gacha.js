@@ -14,6 +14,7 @@ import {maxGachaSeed, parseGachaRequest} from '../schemas/gacha-request.js';
  * @property {AppConfig} config
  * @property {{tryAcquire: () => boolean, release: () => void}} semaphore
  * @property {(request: GachaRenderRequest, options: {timeoutInMilliseconds: number}) => Promise<{buffer: Buffer, durationMs: number, byteLength: number}>} renderGacha
+ * @property {string} [path] Route path; defaults to /api/gacha. The beta wish shares this contract.
  */
 
 /**
@@ -24,7 +25,7 @@ import {maxGachaSeed, parseGachaRequest} from '../schemas/gacha-request.js';
  * @param {GachaRouteDeps} deps
  */
 export const registerGachaRoute = async (app, deps) => {
-  app.post('/api/gacha', async (request, reply) => {
+  app.post(deps.path ?? '/api/gacha', async (request, reply) => {
     if (!isAuthorized(request, deps.config.apiToken)) {
       return reply.code(401).send({error: 'unauthorized'});
     }

@@ -1,6 +1,6 @@
 import {mkdir, writeFile} from 'node:fs/promises';
 import path from 'node:path';
-import {renderGachaVideo} from '../src/render/render-gacha.js';
+import {renderGachaBetaVideo, renderGachaVideo} from '../src/render/render-gacha.js';
 import {renderWheelGif} from '../src/render/render-gif.js';
 
 const smoke = process.argv.includes('--smoke');
@@ -72,3 +72,12 @@ for (const fixture of smoke ? fixtures.slice(0, 1) : fixtures) {
 for (const fixture of smoke ? gachaFixtures.slice(0, 1) : gachaFixtures) {
   await save(`${fixture.name}.mp4`, await renderGachaVideo(fixture.request, {timeoutInMilliseconds: 30000}));
 }
+
+const betaFixture = {
+  label: 'Bún bò',
+  rarity: /** @type {const} */ (5),
+  fps: /** @type {const} */ (24),
+  width: /** @type {const} */ (640),
+  seed: 7,
+};
+await save('gachabeta-5-star.mp4', await renderGachaBetaVideo(betaFixture, {timeoutInMilliseconds: 30000}));

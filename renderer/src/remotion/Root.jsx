@@ -1,5 +1,7 @@
 import {Composition} from 'remotion';
+import {GachaBetaComposition} from './GachaBetaComposition.jsx';
 import {GachaComposition} from './GachaComposition.jsx';
+import {gachaBetaTotalSeconds} from './gacha-beta-scene.js';
 import {gachaTotalSeconds} from './gacha-timeline.js';
 import {WheelComposition} from './WheelComposition.jsx';
 import {gachaFrameSizes} from '../schemas/gacha-request.js';
@@ -43,12 +45,13 @@ const defaultGachaProps = {
 
 /**
  * @param {{fps: number, width: number}} props
+ * @param {number} [totalSeconds]
  */
-export const getGachaCompositionMetadata = (props) => {
+export const getGachaCompositionMetadata = (props, totalSeconds = gachaTotalSeconds) => {
   const fps = props.fps || defaultGachaProps.fps;
   const width = props.width in gachaFrameSizes ? props.width : defaultGachaProps.width;
   return {
-    durationInFrames: Math.ceil(gachaTotalSeconds * fps),
+    durationInFrames: Math.ceil(totalSeconds * fps),
     fps,
     height: gachaFrameSizes[/** @type {640 | 854} */ (width)],
     width,
@@ -75,6 +78,16 @@ export const RemotionRoot = () => (
       fps={defaultGachaProps.fps}
       height={gachaFrameSizes[defaultGachaProps.width]}
       id="GachaWish"
+      width={defaultGachaProps.width}
+    />
+    <Composition
+      calculateMetadata={({props}) => getGachaCompositionMetadata(props, gachaBetaTotalSeconds)}
+      component={GachaBetaComposition}
+      defaultProps={defaultGachaProps}
+      durationInFrames={Math.ceil(gachaBetaTotalSeconds * defaultGachaProps.fps)}
+      fps={defaultGachaProps.fps}
+      height={gachaFrameSizes[defaultGachaProps.width]}
+      id="GachaBetaWish"
       width={defaultGachaProps.width}
     />
   </>

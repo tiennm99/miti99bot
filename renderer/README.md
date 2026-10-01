@@ -64,6 +64,16 @@ twinkling stars and particles; when omitted the service picks a random one, so
 every roll draws a different sky. The caller chooses the result and its rarity — the service
 only draws it.
 
+### Gacha wish beta
+
+`POST /api/gachabeta` takes the same body and returns the same response as
+`/api/gacha`, rendering an 8-second beta style instead: a cosmic, astrology
+themed night sky in toon shading (flat colour bands, no outlines) seen through
+a perspective action camera. The camera dollies toward a hero cloud, a comet
+lights its rim from behind and bursts through it, the camera chases the comet
+as its flare builds, and after the burst the label appears with a rank
+(`S`, `SS`, `SSS` for rarity 3, 4, 5).
+
 Response is a silent H.264 `video/mp4` (Telegram plays it as an animation)
 with `X-Gacha-Rarity` and `X-Render-Duration-Ms` headers. Both routes share the
 `MAX_CONCURRENT_RENDERS` slots. All visuals are drawn procedurally; no game

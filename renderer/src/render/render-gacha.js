@@ -6,18 +6,23 @@ import {renderComposition} from './render-composition.js';
  */
 
 /**
- * Renders the wish animation as a silent H.264 MP4, which Telegram plays as a
- * looping animation and which keeps the glow gradients free of GIF banding.
+ * Builds a renderer for one wish composition. Output is a silent H.264 MP4,
+ * which Telegram plays as a looping animation and which keeps the glow
+ * gradients free of GIF banding.
  *
- * @param {GachaRenderRequest} inputProps
- * @param {{timeoutInMilliseconds: number}} options
- * @returns {Promise<RenderGachaResult>}
+ * @param {string} compositionId
+ * @returns {(inputProps: GachaRenderRequest, options: {timeoutInMilliseconds: number}) => Promise<RenderGachaResult>}
  */
-export const renderGachaVideo = (inputProps, options) =>
+const createGachaRenderer = (compositionId) => (inputProps, options) =>
   renderComposition({
-    compositionId: 'GachaWish',
+    compositionId,
     filename: 'gacha.mp4',
     inputProps: {...inputProps},
     media: {codec: 'h264', crf: 23, imageFormat: 'jpeg', jpegQuality: 90, muted: true},
     timeoutInMilliseconds: options.timeoutInMilliseconds,
   });
+
+export const renderGachaVideo = createGachaRenderer('GachaWish');
+
+/** The beta wish: toon-shaded 3D-perspective sky, comet through a cloud, SSS reveal. */
+export const renderGachaBetaVideo = createGachaRenderer('GachaBetaWish');
