@@ -14,6 +14,7 @@ import {maxGachaSeed, parseGachaRequest} from '../schemas/gacha-request.js';
  * @property {AppConfig} config
  * @property {{tryAcquire: () => boolean, release: () => void}} semaphore
  * @property {(request: GachaRenderRequest, options: {timeoutInMilliseconds: number}) => Promise<{buffer: Buffer, durationMs: number, byteLength: number}>} renderGacha
+ * @property {string} [name] Wish style: serves /api/<name> and names the file <name>.mp4. Defaults to gacha.
  */
 
 /**
@@ -24,7 +25,8 @@ import {maxGachaSeed, parseGachaRequest} from '../schemas/gacha-request.js';
  * @param {GachaRouteDeps} deps
  */
 export const registerGachaRoute = async (app, deps) => {
-  app.post('/api/gacha', async (request, reply) => {
+  const name = deps.name ?? 'gacha';
+  app.post(`/api/${name}`, async (request, reply) => {
     if (!isAuthorized(request, deps.config.apiToken)) {
       return reply.code(401).send({error: 'unauthorized'});
     }
@@ -52,7 +54,7 @@ export const registerGachaRoute = async (app, deps) => {
 
       return reply
         .header('Content-Type', 'video/mp4')
-        .header('Content-Disposition', 'inline; filename="gacha.mp4"')
+        .header('Content-Disposition', `inline; filename="${name}.mp4"`)
         .header('Cache-Control', 'no-store')
         .header('X-Gacha-Rarity', String(gachaRequest.rarity))
         .header('X-Render-Duration-Ms', String(result.durationMs))

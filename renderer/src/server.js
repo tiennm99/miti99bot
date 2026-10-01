@@ -3,6 +3,7 @@ import {loadConfig} from './config.js';
 import {createRenderSemaphore} from './lib/render-semaphore.js';
 import {getRemotionServeUrl} from './render/remotion-bundle.js';
 import {closeGachaBrowser, renderGachaVideo, warmGachaBrowser} from './render/render-gacha.js';
+import {renderGenshinVideo} from './render/render-genshin.js';
 import {renderWheelGif} from './render/render-gif.js';
 import {registerGachaRoute} from './routes/gacha.js';
 import {registerGifRoute} from './routes/gif.js';
@@ -19,6 +20,7 @@ import {registerHealthRoute} from './routes/health.js';
  * @param {AppConfig} [options.config]
  * @param {(request: WheelRenderRequest, renderOptions: {timeoutInMilliseconds: number}) => Promise<{buffer: Buffer, durationMs: number, byteLength: number}>} [options.renderGif]
  * @param {(request: GachaRenderRequest, renderOptions: {timeoutInMilliseconds: number}) => Promise<{buffer: Buffer, durationMs: number, byteLength: number}>} [options.renderGacha]
+ * @param {(request: GachaRenderRequest, renderOptions: {timeoutInMilliseconds: number}) => Promise<{buffer: Buffer, durationMs: number, byteLength: number}>} [options.renderGenshin]
  * @param {boolean} [options.warmRenderers]  Prepare the Remotion bundle and the gacha browser before serving.
  */
 export const buildServer = async (options = {}) => {
@@ -41,7 +43,7 @@ export const buildServer = async (options = {}) => {
   });
 
   await registerHealthRoute(app);
-  // One semaphore across both routes: they share the same browser and CPU.
+  // One semaphore across every route: renders share the CPU.
   const semaphore = createRenderSemaphore(config.maxConcurrentRenders);
   await registerGifRoute(app, {
     config,
@@ -51,6 +53,12 @@ export const buildServer = async (options = {}) => {
   await registerGachaRoute(app, {
     config,
     renderGacha: options.renderGacha ?? renderGachaVideo,
+    semaphore,
+  });
+  await registerGachaRoute(app, {
+    config,
+    name: 'genshin',
+    renderGacha: options.renderGenshin ?? renderGenshinVideo,
     semaphore,
   });
   // The gacha wish keeps one headless Chrome alive between renders.

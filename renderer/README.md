@@ -1,7 +1,8 @@
 # wheelofnames
 
-Self-hosted API that renders wheel-of-names GIF animations with Remotion and
-gacha wish MP4 animations with pack-cards.
+Self-hosted API that renders wheel-of-names GIF animations and Genshin-style
+meteor wish MP4 animations with Remotion, and card-pack gacha wish MP4
+animations with pack-cards.
 
 ## API
 
@@ -65,7 +66,7 @@ picks a random one, so every roll looks different. The caller chooses the
 result and its rarity — the service only draws it.
 
 Response is a silent H.264 `video/mp4` (Telegram plays it as an animation)
-with `X-Gacha-Rarity` and `X-Render-Duration-Ms` headers. Both routes share the
+with `X-Gacha-Rarity` and `X-Render-Duration-Ms` headers. All routes share the
 `MAX_CONCURRENT_RENDERS` slots. No game assets are used.
 
 pack-cards animates on the browser clock, so the wish does not use Remotion
@@ -82,6 +83,21 @@ pack-cards has no npm release, so it is installed from a GitHub tarball pinned
 to a commit. A moving branch URL would change the tarball's checksum and break
 `npm ci` against the lockfile, and the Docker image has no `git` for a git
 dependency.
+
+### Genshin wish
+
+`POST /api/genshin` takes the same body as `/api/gacha` and returns the same
+response, rendering a 7-second landscape wish in the style of a gacha game: a
+meteor coloured by rarity (blue 3★, purple 4★, gold 5★) flies in from the left
+across a night sky and bursts in a white flash where the rank emblem appears,
+and the label is revealed beside a rank emblem (`B`, `A`, `S`) with its stars
+popping in. Each tier is louder than the one below: 4★ adds a bigger meteor, a
+lens flare, impact shake, and a double shockwave; 5★ adds a rainbow sunburst
+before landing, a gold sky flood, a starburst, counter rotating rays, falling
+sparkles, and a sheen across the emblem. The per-tier table lives in
+`src/remotion/genshin-timeline.js`. `width` is `640` (360 tall) or `854` (480
+tall), and `seed` lays out the twinkling stars and particles. All visuals are
+drawn procedurally; no game assets are used.
 
 ## Local
 
@@ -101,7 +117,7 @@ npm run dev
 ### Generate GIF files locally
 
 Generate the quick smoke fixtures at the git-ignored paths
-`fixtures/smoke.gif` and `fixtures/gacha-5-star.mp4`:
+`fixtures/smoke.gif`, `fixtures/genshin-5-star.mp4`, and `fixtures/gacha-5-star.mp4`:
 
 ```sh
 npm run render:smoke
@@ -109,7 +125,7 @@ npm run render:smoke
 
 Generate the complete fixture set at `fixtures/smoke.gif`,
 `fixtures/vietnamese.gif`, `fixtures/sixteen-options.gif`, and
-`fixtures/gacha-{3,4,5}-star.mp4`:
+`fixtures/genshin-{3,4,5}-star.mp4`, and `fixtures/gacha-{3,4,5}-star.mp4`:
 
 ```sh
 npm run render:fixtures

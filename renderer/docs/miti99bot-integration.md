@@ -46,3 +46,6 @@ The bot derives the endpoint from `WHEELOFNAMES_API_URL` by replacing its last
 path segment (`/api/gif` becomes `/api/gacha`), picks the result and rarity
 itself, and sends the MP4 with `sendAnimation`. On any failure it falls back to
 a text reply.
+
+The unlisted `/genshin` command works the same way against `POST /api/genshin`
+and sends the 7-second 640x360 meteor wish.
