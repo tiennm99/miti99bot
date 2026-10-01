@@ -66,3 +66,37 @@ body {
   letter-spacing: 0.3vh;
   margin: 0;
 }
+
+.wish-sparkles {
+  inset: 0;
+  mix-blend-mode: screen;
+  pointer-events: none;
+  position: absolute;
+  z-index: 2;
+}
+
+.wish-sparkle {
+  --sparkle: #ffffff;
+  background: radial-gradient(circle, #ffffff 0 12%, var(--sparkle) 26%, transparent 62%);
+  height: 6vh;
+  left: 50%;
+  position: absolute;
+  top: 50%;
+  width: 6vh;
+}
+
+/* Four light rays crossing the glowing core make each sparkle twinkle. */
+.wish-sparkle::before,
+.wish-sparkle::after {
+  background: linear-gradient(90deg, transparent, #ffffff 45% 55%, transparent);
+  content: '';
+  height: 8%;
+  left: -20%;
+  position: absolute;
+  top: 46%;
+  width: 140%;
+}
+
+.wish-sparkle::after {
+  transform: rotate(90deg);
+}

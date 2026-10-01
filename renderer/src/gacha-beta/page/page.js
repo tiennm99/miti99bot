@@ -48,11 +48,72 @@ const createFace = () => {
 };
 
 /**
- * pack-cards reveals the card with a half turn, animating rotateY from 180deg
- * to 0deg. Starting that one animation further round spins the card more
- * before it lands face up, without changing the library.
+ * pack-cards (pinned commit 83e8fbb) flies the revealed card out of the pack
+ * over 1750ms: the card is clear of the pack at 900ms, then it flips with a
+ * half turn (rotateY 180deg to 0deg) and the pack drops away while it glides
+ * to the centre. The page reshapes those animations without changing the
+ * library: the rise keeps its speed, everything after the card clears the
+ * pack is stretched so the flip has time for three extra turns, and the flip
+ * eases out like a flicked card slowing to a stop while sparkles burst
+ * around it.
  */
-const flipStartDegrees = 540;
+const flight = Object.freeze({duration: 1750, clearAt: 900});
+const afterClearStretch = 1.65;
+const flip = Object.freeze({startDegrees: 180 + 3 * 360, easing: 'cubic-bezier(.3, .4, .25, 1)'});
+
+/**
+ * Maps a time in the original flight to the stretched one.
+ *
+ * @param {number} ms
+ */
+const stretch = (ms) => (ms <= flight.clearAt ? ms : flight.clearAt + (ms - flight.clearAt) * afterClearStretch);
+
+const sparkleColors = [wish.artwork.accent, '#ffffff', '#fff0b8'];
+
+/**
+ * Bursts small four-point sparkles out from the card while it spins. They
+ * sit beside the turning face inside the card's deck, so they travel with
+ * the card without spinning.
+ *
+ * @param {Element} deck
+ * @param {number} delay     Milliseconds until the spin starts.
+ * @param {number} duration  Length of the spin.
+ */
+const burstSparkles = (deck, delay, duration) => {
+  const layer = el('div', 'wish-sparkles');
+  deck.append(layer);
+  const size = deck.getBoundingClientRect().width || 200;
+  for (let index = 0; index < 72; index += 1) {
+    const sparkle = el('span', 'wish-sparkle');
+    const angle = Math.random() * Math.PI * 2;
+    const reach = size * (0.55 + Math.random() * 0.75);
+    const scale = 0.6 + Math.random() * 0.9;
+    sparkle.style.setProperty('--sparkle', sparkleColors[index % sparkleColors.length] ?? '#ffffff');
+    const dx = Math.cos(angle) * reach;
+    const dy = Math.sin(angle) * reach * 1.3;
+    sparkle.animate(
+      [
+        {transform: 'translate(-50%, -50%) scale(0) rotate(0deg)', opacity: 0},
+        {
+          transform: `translate(calc(-50% + ${dx * 0.45}px), calc(-50% + ${dy * 0.45}px)) scale(${scale}) rotate(45deg)`,
+          opacity: 1,
+          offset: 0.25,
+        },
+        {transform: `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px)) scale(0) rotate(90deg)`, opacity: 0},
+      ],
+      {
+        // Squaring front-loads the burst as the spin begins, then it thins out.
+        delay: delay + Math.random() ** 2 * duration * 0.8,
+        duration: 500 + Math.random() * 500,
+        easing: 'cubic-bezier(.2, .7, .3, 1)',
+        fill: 'both',
+      },
+    );
+    layer.append(sparkle);
+  }
+  setTimeout(() => layer.remove(), delay + duration + 1200);
+};
+
 const animate = Element.prototype.animate;
 /**
  * @this {Element}
@@ -60,16 +121,38 @@ const animate = Element.prototype.animate;
  * @param {number | KeyframeAnimationOptions} [options]
  */
 Element.prototype.animate = function (keyframes, options) {
-  const isFlip =
-    Array.isArray(keyframes) &&
-    keyframes.length === 2 &&
-    keyframes[0]?.transform === 'rotateY(180deg)' &&
-    keyframes[1]?.transform === 'rotateY(0deg)';
-  return animate.call(
-    this,
-    isFlip ? [{transform: `rotateY(${flipStartDegrees}deg)`}, keyframes[1] ?? {}] : keyframes,
-    options,
-  );
+  if (!Array.isArray(keyframes) || typeof options !== 'object') {
+    return animate.call(this, keyframes, options);
+  }
+  // The flight path: keyframes spaced evenly over the whole flight.
+  if (options.duration === flight.duration && options.easing === 'linear') {
+    const total = stretch(flight.duration);
+    const stretched = keyframes.map((frame) => ({
+      ...frame,
+      offset: stretch(Number(frame.offset) * flight.duration) / total,
+    }));
+    return animate.call(this, stretched, {...options, duration: total});
+  }
+  // The flip, the pack dropping away, and the spreading backs all start as the card clears the pack.
+  if (options.delay === flight.clearAt && options.duration === flight.duration - flight.clearAt) {
+    const duration = stretch(flight.duration) - flight.clearAt;
+    const isFlip =
+      keyframes.length === 2 &&
+      keyframes[0]?.transform === 'rotateY(180deg)' &&
+      keyframes[1]?.transform === 'rotateY(0deg)';
+    if (!isFlip) {
+      return animate.call(this, keyframes, {...options, duration});
+    }
+    if (this.parentElement) {
+      burstSparkles(this.parentElement, flight.clearAt, duration);
+    }
+    return animate.call(this, [{transform: `rotateY(${flip.startDegrees}deg)`}, keyframes[1] ?? {}], {
+      ...options,
+      duration,
+      easing: flip.easing,
+    });
+  }
+  return animate.call(this, keyframes, options);
 };
 
 const view = createPackView(stage, {
