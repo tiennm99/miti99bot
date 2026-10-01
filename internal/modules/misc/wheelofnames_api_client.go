@@ -89,11 +89,18 @@ func (c wheelAPIClient) Render(ctx context.Context, options []string, winner int
 		return nil, fmt.Errorf("wheelofnames api request encode failed: %w", err)
 	}
 
+	return c.post(ctx, endpoint, body, "image/gif", isWheelGIF)
+}
+
+// post sends one JSON render request to endpoint and returns the response
+// body once it is a 2xx of the expected media type that passes isValid. The
+// gif and gacha renderers share it because they live on the same service.
+func (c wheelAPIClient) post(ctx context.Context, endpoint *url.URL, body []byte, mediaType string, isValid func([]byte) bool) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint.String(), bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("wheelofnames api request build failed: %w", err)
 	}
-	req.Header.Set("Accept", "image/gif")
+	req.Header.Set("Accept", mediaType)
 	req.Header.Set("Content-Type", "application/json")
 	if c.Token != "" {
 		req.Header.Set("Authorization", "Bearer "+c.Token)
@@ -108,7 +115,7 @@ func (c wheelAPIClient) Render(ctx context.Context, options []string, winner int
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		return nil, fmt.Errorf("wheelofnames api status %d", resp.StatusCode)
 	}
-	if err := requireWheelGIFContentType(resp.Header.Get("Content-Type")); err != nil {
+	if err := requireContentType(resp.Header.Get("Content-Type"), mediaType); err != nil {
 		return nil, err
 	}
 
@@ -122,8 +129,8 @@ func (c wheelAPIClient) Render(ctx context.Context, options []string, winner int
 	if len(data) == 0 {
 		return nil, fmt.Errorf("wheelofnames api response empty")
 	}
-	if !isWheelGIF(data) {
-		return nil, fmt.Errorf("wheelofnames api response is not a gif")
+	if !isValid(data) {
+		return nil, fmt.Errorf("wheelofnames api response is not %s", mediaType)
 	}
 	return data, nil
 }
@@ -150,9 +157,9 @@ func wheelAPIEndpoint(rawURL string) (*url.URL, error) {
 	return endpoint, nil
 }
 
-func requireWheelGIFContentType(contentType string) error {
+func requireContentType(contentType, want string) error {
 	mediaType, _, err := mime.ParseMediaType(contentType)
-	if err != nil || mediaType != "image/gif" {
+	if err != nil || mediaType != want {
 		return fmt.Errorf("wheelofnames api content type %q unsupported", contentType)
 	}
 	return nil
