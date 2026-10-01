@@ -24,7 +24,7 @@ type gachaStyle struct {
 
 var (
 	gachaStyleWish = gachaStyle{Path: "gacha", Duration: 7}
-	gachaStyleBeta = gachaStyle{Path: "gachabeta", Duration: 11}
+	gachaStyleBeta = gachaStyle{Path: "gachabeta", Duration: 6}
 )
 
 type gachaAPIRequest struct {
