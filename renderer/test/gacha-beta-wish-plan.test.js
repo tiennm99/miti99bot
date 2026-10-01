@@ -3,6 +3,7 @@ import {describe, expect, test} from 'vitest';
 import {
   gachaBetaTotalSeconds,
   getDragPointer,
+  getWishFrameSize,
   getWishPageProps,
   resolveWishAsset,
   wishOrigin,
@@ -14,10 +15,20 @@ const roots = {page: path.resolve('/srv/page'), packCards: path.resolve('/srv/pa
 describe('gacha beta wish plan', () => {
   test('the page shows the request label with the same rank and stars as /api/gacha', () => {
     const base = {label: '<b>Bún bò</b>', fps: /** @type {const} */ (24), width: /** @type {const} */ (640), seed: 1};
-    expect(getWishPageProps({...base, rarity: 3})).toMatchObject({label: '<b>Bún bò</b>', rank: 'B', stars: 3, rarity: 'rare'});
+    expect(getWishPageProps({...base, rarity: 3})).toMatchObject({
+      label: '<b>Bún bò</b>',
+      rank: 'B',
+      stars: 3,
+      rarity: 'rare',
+    });
     expect(getWishPageProps({...base, rarity: 4})).toMatchObject({rank: 'A', stars: 4, rarity: 'epic'});
     expect(getWishPageProps({...base, rarity: 5})).toMatchObject({rank: 'S', stars: 5, rarity: 'legendary'});
     expect(getWishPageProps({...base, rarity: 5}).artwork).toEqual({accent: '#ffd36b', tint: '#7a4a10'});
+  });
+
+  test('the frame is portrait, with the requested width as its long edge', () => {
+    expect(getWishFrameSize(640)).toEqual({width: 360, height: 640});
+    expect(getWishFrameSize(854)).toEqual({width: 480, height: 854});
   });
 
   test('the drag sweeps left to right across the seal, then lets go', () => {

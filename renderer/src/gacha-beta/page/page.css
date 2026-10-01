@@ -30,7 +30,7 @@ body {
 
 /* Sit the pack below centre so the card rising out of it stays in frame. */
 #stage .recap-pack-stack {
-  margin: 24vh 0 0;
+  margin: 14vh 0 0;
   width: min(36vh, 60vw);
 }
 

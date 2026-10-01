@@ -67,12 +67,13 @@ only draws it.
 ### Gacha wish beta
 
 `POST /api/gachabeta` takes the same body and returns the same response as
-`/api/gacha`, rendering a 6-second beta style instead: a collectible card pack
+`/api/gacha`, rendering a 6-second portrait beta style instead: a collectible card pack
 from [pack-cards](https://github.com/paubineau/pack-cards) is torn open, and
 its card shows the request's `label`, its rank, and its stars. As on
 `/api/gacha`, `rarity` picks the rank (`B` for 3★, `A` for 4★, `S` for 5★),
 the star count, the card's material (rare, epic, legendary), and the pack's
-colour (blue, purple, gold).
+colour (blue, purple, gold). The video is portrait, with `width` as its long
+edge: `640` renders 360×640 and `854` renders 480×854.
 
 pack-cards animates on the browser clock, so this route does not use Remotion
 compositions. `src/render/render-gacha-beta.js` keeps one headless Chrome per

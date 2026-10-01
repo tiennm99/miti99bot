@@ -7,13 +7,13 @@ import {ensureBrowser, makeCancelSignal, RenderInternals} from '@remotion/render
 import {
   gachaBetaTotalSeconds,
   getDragPointer,
+  getWishFrameSize,
   getWishPageProps,
   resolveWishAsset,
   wishOrigin,
 } from '../gacha-beta/wish-plan.js';
 import {RenderTimeoutError} from '../lib/render-errors.js';
 import {cleanupTempDir, createRenderTempDir} from '../lib/tmp-files.js';
-import {gachaFrameSizes} from '../schemas/gacha-request.js';
 import {createCdpConnection} from './cdp-pipe.js';
 
 /**
@@ -158,7 +158,10 @@ export const closeGachaBetaBrowser = async () => {
  * @returns {Promise<void>}
  */
 export const warmGachaBetaBrowser = async () => {
-  await renderGachaBetaVideo({label: 'Warm-up', rarity: 5, fps: 24, width: 640, seed: 1}, {timeoutInMilliseconds: 120000});
+  await renderGachaBetaVideo(
+    {label: 'Warm-up', rarity: 5, fps: 24, width: 640, seed: 1},
+    {timeoutInMilliseconds: 120000},
+  );
 };
 
 /**
@@ -194,13 +197,13 @@ const captureFrames = async (cdp, sessionId, request, dir, guard) => {
    */
   const send = (method, params) => guard(cdp.send(method, params, sessionId));
   /** @param {string} expression */
-  const evaluate = async (expression) => (await send('Runtime.evaluate', {expression, returnByValue: true})).result?.value;
+  const evaluate = async (expression) =>
+    (await send('Runtime.evaluate', {expression, returnByValue: true})).result?.value;
 
   await send('Page.enable');
   await send('Fetch.enable', {patterns: [{urlPattern: '*'}]});
   await send('Emulation.setDeviceMetricsOverride', {
-    width: request.width,
-    height: gachaFrameSizes[request.width],
+    ...getWishFrameSize(request.width),
     deviceScaleFactor: 1,
     mobile: false,
   });

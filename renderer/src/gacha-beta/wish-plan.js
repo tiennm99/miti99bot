@@ -6,6 +6,7 @@
 
 import path from 'node:path';
 import {getRankLetter, getRarityPalette} from '../remotion/gacha-timeline.js';
+import {gachaFrameSizes} from '../schemas/gacha-request.js';
 
 /** @typedef {import('../schemas/gacha-request.js').GachaRenderRequest} GachaRenderRequest */
 /** @typedef {import('../remotion/gacha-timeline.js').GachaRarity} GachaRarity */
@@ -24,6 +25,15 @@ export const wishTimeline = Object.freeze({
   dragStart: 0.5,
   dragEnd: 1,
 });
+
+/**
+ * The beta wish is portrait: the request's `width` (640 or 854) is the long
+ * edge, so the frame is the /api/gacha frame turned upright.
+ *
+ * @param {GachaRenderRequest['width']} width
+ * @returns {{width: number, height: number}}
+ */
+export const getWishFrameSize = (width) => ({width: gachaFrameSizes[width], height: width});
 
 /** pack-cards rarity profile and glow preset for each requested rarity. */
 const rarityLooks = Object.freeze({
