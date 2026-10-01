@@ -152,13 +152,17 @@ export const closeGachaBrowser = async () => {
 };
 
 /**
- * Pays the shared browser's one-time shader compilation with a throwaway
- * wish, so the first real request renders as fast as later ones.
+ * Pays the shared browser's one-time costs with throwaway wishes, so the first
+ * real request renders as fast as later ones: the WebGL shader compilation,
+ * and the first raster of each card's engraving texture. 4★ and 5★ cards use
+ * different engravings, so both are warmed.
  *
  * @returns {Promise<void>}
  */
 export const warmGachaBrowser = async () => {
-  await renderGachaVideo({label: 'Warm-up', rarity: 5, fps: 24, width: 640, seed: 1}, {timeoutInMilliseconds: 120000});
+  for (const rarity of /** @type {const} */ ([5, 4])) {
+    await renderGachaVideo({label: 'Warm-up', rarity, fps: 24, width: 640, seed: 1}, {timeoutInMilliseconds: 120000});
+  }
 };
 
 /**

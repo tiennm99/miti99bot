@@ -33,9 +33,6 @@ const el = (tag, className, text) => {
   return node;
 };
 
-/** @type {Record<number, number>} */
-const polychromeStrength = {3: 0.3, 4: 0.42, 5: 0.55};
-
 const createFace = () => {
   const face = el('article', 'wish-card');
   const header = el('header', 'recap-card-header');
@@ -46,10 +43,7 @@ const createFace = () => {
   content.append(el('span', 'wish-rank', wish.rank), title, el('p', 'wish-stars', '★'.repeat(wish.stars)));
   const footer = el('footer', 'recap-card-footer');
   footer.append(el('span', '', `${wish.stars}★`), el('span', '', '01 / 01'));
-  // A rainbow sheen drifting across the whole face, stronger on rarer cards.
-  const sheen = el('span', 'wish-polychrome');
-  sheen.style.setProperty('--wish-polychrome', String(polychromeStrength[wish.stars] ?? 0.3));
-  face.append(sheen, header, content, footer);
+  face.append(header, content, footer);
   return face;
 };
 
@@ -121,15 +115,15 @@ const burstSparkles = (deck, delay, duration) => {
 };
 
 /**
- * Polychrome foil: every rarity gets pack-cards' rainbow holographic print,
- * from a border on 3★ to the whole card on 4★ and 5★.
+ * Engravings carry the polychrome (page.css): 4★ cards are tooled with the
+ * epic contour, 5★ cards with the legendary rings or facets, picked by
+ * pack-cards from the card's label. 3★ cards stay plain.
  *
  * @type {import('pack-cards').AppearanceSettingsOptions['rarities']}
  */
-const polychrome = Object.freeze({
-  rare: {foil: 'holographic', coverage: 'border', palette: 'spectrum', pattern: 'stardust'},
-  epic: {foil: 'holographic', coverage: 'full', palette: 'spectrum', pattern: 'stardust'},
-  legendary: {foil: 'holographic', coverage: 'full', palette: 'spectrum', pattern: 'facets'},
+const engravings = Object.freeze({
+  epic: {engraving: 'contour'},
+  legendary: {engraving: ['radial', 'facets']},
 });
 
 const animate = Element.prototype.animate;
@@ -177,7 +171,7 @@ const view = createPackView(stage, {
   label: 'Gacha',
   artwork: wish.artwork,
   labels: {title: 'Gacha', swipe: '', tap: ''},
-  appearance: {opening: 'animated', motion: 'interactive', glow: wish.glow, pack_zoom: true, rarities: polychrome},
+  appearance: {opening: 'animated', motion: 'interactive', glow: wish.glow, pack_zoom: true, rarities: engravings},
 });
 
 view.showPack({
