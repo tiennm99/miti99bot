@@ -1,4 +1,4 @@
-// Browser page for the beta wish: one pack-cards pack whose single card shows
+// Browser page for the gacha wish: one pack-cards pack whose single card shows
 // the rolled label, rank, and stars. The renderer injects `window.gachaWish`
 // before this module runs, tears the pack open with a scripted drag, and
 // captures each frame.

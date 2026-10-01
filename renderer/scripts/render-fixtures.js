@@ -1,7 +1,6 @@
 import {mkdir, writeFile} from 'node:fs/promises';
 import path from 'node:path';
-import {closeGachaBetaBrowser, renderGachaBetaVideo} from '../src/render/render-gacha-beta.js';
-import {renderGachaVideo} from '../src/render/render-gacha.js';
+import {closeGachaBrowser, renderGachaVideo} from '../src/render/render-gacha.js';
 import {renderWheelGif} from '../src/render/render-gif.js';
 
 const smoke = process.argv.includes('--smoke');
@@ -51,8 +50,8 @@ await mkdir(fixturesDir, {recursive: true});
 
 /** @type {{name: string, request: import('../src/schemas/gacha-request.js').GachaRenderRequest}[]} */
 const gachaFixtures = [
-  {name: 'gacha-5-star', request: {label: 'Pizza', rarity: 5, fps: 24, width: 640, seed: 7}},
-  {name: 'gacha-4-star', request: {label: 'Phở bò tái nạm gầu', rarity: 4, fps: 24, width: 640, seed: 11}},
+  {name: 'gacha-5-star', request: {label: 'Bún bò', rarity: 5, fps: 24, width: 640, seed: 7}},
+  {name: 'gacha-4-star', request: {label: 'Phở bò tái chín', rarity: 4, fps: 24, width: 640, seed: 11}},
   {name: 'gacha-3-star', request: {label: 'Cơm tấm', rarity: 3, fps: 24, width: 854, seed: 23}},
 ];
 
@@ -70,19 +69,10 @@ for (const fixture of smoke ? fixtures.slice(0, 1) : fixtures) {
   await save(`${fixture.name}.gif`, await renderWheelGif(fixture.request, {timeoutInMilliseconds: 30000}));
 }
 
-for (const fixture of smoke ? gachaFixtures.slice(0, 1) : gachaFixtures) {
-  await save(`${fixture.name}.mp4`, await renderGachaVideo(fixture.request, {timeoutInMilliseconds: 30000}));
-}
-
-const betaFixture = {
-  label: 'Bún bò',
-  rarity: /** @type {const} */ (5),
-  fps: /** @type {const} */ (24),
-  width: /** @type {const} */ (640),
-  seed: 7,
-};
 try {
-  await save('gachabeta-5-star.mp4', await renderGachaBetaVideo(betaFixture, {timeoutInMilliseconds: 60000}));
+  for (const fixture of smoke ? gachaFixtures.slice(0, 1) : gachaFixtures) {
+    await save(`${fixture.name}.mp4`, await renderGachaVideo(fixture.request, {timeoutInMilliseconds: 60000}));
+  }
 } finally {
-  await closeGachaBetaBrowser();
+  await closeGachaBrowser();
 }

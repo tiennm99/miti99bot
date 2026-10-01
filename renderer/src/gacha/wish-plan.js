@@ -1,20 +1,18 @@
 /**
- * Plan for the beta wish video: what the pack-cards page shows for a request,
+ * Plan for the gacha wish video: what the pack-cards page shows for a request,
  * when the scripted drag tears the pack open, and which files the page may
  * load. Kept free of Chrome so it can be unit tested.
  */
 
 import path from 'node:path';
-import {getRankLetter, getRarityPalette} from '../remotion/gacha-timeline.js';
-import {gachaFrameSizes} from '../schemas/gacha-request.js';
 
 /** @typedef {import('../schemas/gacha-request.js').GachaRenderRequest} GachaRenderRequest */
-/** @typedef {import('../remotion/gacha-timeline.js').GachaRarity} GachaRarity */
+/** @typedef {GachaRenderRequest['rarity']} GachaRarity */
 
 /** Origin the page is served from; every request to it is answered from disk. */
 export const wishOrigin = 'https://gacha.wish';
 
-export const gachaBetaTotalSeconds = 6;
+export const gachaTotalSeconds = 6;
 
 /**
  * Seconds into the clip. The pack waits briefly, then a drag across its seal
@@ -26,26 +24,49 @@ export const wishTimeline = Object.freeze({
   dragEnd: 1,
 });
 
+/** Short edge of the portrait frame for each requested long edge: 9:16, rounded to even pixels for H.264. */
+const gachaFrameSizes = Object.freeze({640: 360, 854: 480});
+
 /**
- * The beta wish is portrait: the request's `width` (640 or 854) is the long
- * edge, so the frame is the /api/gacha frame turned upright.
+ * The wish is portrait: the request's `width` (640 or 854) is the long edge.
  *
  * @param {GachaRenderRequest['width']} width
  * @returns {{width: number, height: number}}
  */
 export const getWishFrameSize = (width) => ({width: gachaFrameSizes[width], height: width});
 
-/** pack-cards rarity profile and glow preset for each requested rarity. */
+/**
+ * Per requested rarity: the rank letter, the pack-cards rarity profile and
+ * glow preset, and the card colours (blue, purple, gold).
+ */
 const rarityLooks = Object.freeze({
-  3: {rarity: 'rare', glow: /** @type {const} */ ('silver')},
-  4: {rarity: 'epic', glow: /** @type {const} */ ('platinum')},
-  5: {rarity: 'legendary', glow: /** @type {const} */ ('gold')},
+  3: {
+    rank: /** @type {const} */ ('B'),
+    rarity: 'rare',
+    glow: /** @type {const} */ ('silver'),
+    accent: '#6fb6ff',
+    tint: '#163a8a',
+  },
+  4: {
+    rank: /** @type {const} */ ('A'),
+    rarity: 'epic',
+    glow: /** @type {const} */ ('platinum'),
+    accent: '#c88cff',
+    tint: '#4a1d8f',
+  },
+  5: {
+    rank: /** @type {const} */ ('S'),
+    rarity: 'legendary',
+    glow: /** @type {const} */ ('gold'),
+    accent: '#ffd36b',
+    tint: '#7a4a10',
+  },
 });
 
 /**
  * @typedef {object} WishPageProps
  * @property {string} label
- * @property {'B' | 'A' | 'S'} rank  Same rank letter as /api/gacha.
+ * @property {'B' | 'A' | 'S'} rank
  * @property {GachaRarity} stars
  * @property {string} rarity
  * @property {'silver' | 'platinum' | 'gold'} glow
@@ -57,14 +78,8 @@ const rarityLooks = Object.freeze({
  * @returns {WishPageProps}
  */
 export const getWishPageProps = (request) => {
-  const palette = getRarityPalette(request.rarity);
-  return {
-    label: request.label,
-    rank: getRankLetter(request.rarity),
-    stars: request.rarity,
-    ...rarityLooks[request.rarity],
-    artwork: {accent: palette.glow, tint: palette.deep},
-  };
+  const {rank, rarity, glow, accent, tint} = rarityLooks[request.rarity];
+  return {label: request.label, rank, stars: request.rarity, rarity, glow, artwork: {accent, tint}};
 };
 
 /**

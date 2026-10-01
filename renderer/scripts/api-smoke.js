@@ -52,7 +52,7 @@ try {
     headers: {
       authorization: 'Bearer smoke-token',
     },
-    payload: {label: 'Pizza', rarity: 5},
+    payload: {label: 'Bún bò', rarity: 5},
   });
 
   if (gacha.statusCode !== 200) {
@@ -65,21 +65,6 @@ try {
   }
 
   console.log(`api-smoke gacha: ${gacha.rawPayload.byteLength} bytes`);
-
-  const beta = await app.inject({
-    method: 'POST',
-    url: '/api/gachabeta',
-    headers: {
-      authorization: 'Bearer smoke-token',
-    },
-    payload: {label: 'Bún bò', rarity: 5},
-  });
-
-  if (beta.statusCode !== 200 || beta.rawPayload.subarray(4, 8).toString() !== 'ftyp') {
-    throw new Error(`Expected gachabeta MP4, got ${beta.statusCode}: ${beta.body.slice(0, 200)}`);
-  }
-
-  console.log(`api-smoke gachabeta: ${beta.rawPayload.byteLength} bytes`);
 } finally {
   await app.close();
 }

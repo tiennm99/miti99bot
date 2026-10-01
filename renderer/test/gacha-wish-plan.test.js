@@ -1,19 +1,19 @@
 import path from 'node:path';
 import {describe, expect, test} from 'vitest';
 import {
-  gachaBetaTotalSeconds,
+  gachaTotalSeconds,
   getDragPointer,
   getWishFrameSize,
   getWishPageProps,
   resolveWishAsset,
   wishOrigin,
   wishTimeline,
-} from '../src/gacha-beta/wish-plan.js';
+} from '../src/gacha/wish-plan.js';
 
 const roots = {page: path.resolve('/srv/page'), packCards: path.resolve('/srv/pack-cards')};
 
-describe('gacha beta wish plan', () => {
-  test('the page shows the request label with the same rank and stars as /api/gacha', () => {
+describe('gacha wish plan', () => {
+  test('the page shows the request label with its rank and stars', () => {
     const base = {label: '<b>Bún bò</b>', fps: /** @type {const} */ (24), width: /** @type {const} */ (640), seed: 1};
     expect(getWishPageProps({...base, rarity: 3})).toMatchObject({
       label: '<b>Bún bò</b>',
@@ -43,7 +43,7 @@ describe('gacha beta wish plan', () => {
       expect(end.x).toBeLessThanOrEqual(1);
       expect(end.y).toBe(start.y);
     }
-    expect(dragEnd + 2).toBeLessThan(gachaBetaTotalSeconds);
+    expect(dragEnd + 2).toBeLessThan(gachaTotalSeconds);
   });
 
   test('page requests map to the page directory and the installed package', () => {

@@ -2,8 +2,7 @@ import Fastify from 'fastify';
 import {loadConfig} from './config.js';
 import {createRenderSemaphore} from './lib/render-semaphore.js';
 import {getRemotionServeUrl} from './render/remotion-bundle.js';
-import {closeGachaBetaBrowser, renderGachaBetaVideo, warmGachaBetaBrowser} from './render/render-gacha-beta.js';
-import {renderGachaVideo} from './render/render-gacha.js';
+import {closeGachaBrowser, renderGachaVideo, warmGachaBrowser} from './render/render-gacha.js';
 import {renderWheelGif} from './render/render-gif.js';
 import {registerGachaRoute} from './routes/gacha.js';
 import {registerGifRoute} from './routes/gif.js';
@@ -20,8 +19,7 @@ import {registerHealthRoute} from './routes/health.js';
  * @param {AppConfig} [options.config]
  * @param {(request: WheelRenderRequest, renderOptions: {timeoutInMilliseconds: number}) => Promise<{buffer: Buffer, durationMs: number, byteLength: number}>} [options.renderGif]
  * @param {(request: GachaRenderRequest, renderOptions: {timeoutInMilliseconds: number}) => Promise<{buffer: Buffer, durationMs: number, byteLength: number}>} [options.renderGacha]
- * @param {(request: GachaRenderRequest, renderOptions: {timeoutInMilliseconds: number}) => Promise<{buffer: Buffer, durationMs: number, byteLength: number}>} [options.renderGachaBeta]
- * @param {boolean} [options.warmRenderers]  Prepare the Remotion bundle and the beta wish browser before serving.
+ * @param {boolean} [options.warmRenderers]  Prepare the Remotion bundle and the gacha browser before serving.
  */
 export const buildServer = async (options = {}) => {
   const config = options.config ?? loadConfig();
@@ -29,7 +27,7 @@ export const buildServer = async (options = {}) => {
 
   if (warmRenderers) {
     await getRemotionServeUrl();
-    await warmGachaBetaBrowser();
+    await warmGachaBrowser();
   }
 
   const app = Fastify({
@@ -55,14 +53,8 @@ export const buildServer = async (options = {}) => {
     renderGacha: options.renderGacha ?? renderGachaVideo,
     semaphore,
   });
-  await registerGachaRoute(app, {
-    config,
-    path: '/api/gachabeta',
-    renderGacha: options.renderGachaBeta ?? renderGachaBetaVideo,
-    semaphore,
-  });
-  // The beta wish keeps one headless Chrome alive between renders.
-  app.addHook('onClose', closeGachaBetaBrowser);
+  // The gacha wish keeps one headless Chrome alive between renders.
+  app.addHook('onClose', closeGachaBrowser);
 
   return app;
 };

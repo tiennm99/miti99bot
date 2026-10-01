@@ -2,9 +2,6 @@ import {z} from 'zod';
 
 export const maxGachaSeed = 2 ** 31 - 1;
 
-/** Landscape frame sizes; heights keep 16:9 rounded to even pixels for H.264. */
-export const gachaFrameSizes = Object.freeze({640: 360, 854: 480});
-
 /**
  * @typedef {object} GachaRequestLimits
  * @property {number} maxOptionChars
@@ -15,8 +12,8 @@ export const gachaFrameSizes = Object.freeze({640: 360, 854: 480});
  * @property {string} label
  * @property {3 | 4 | 5} rarity
  * @property {24 | 30} fps
- * @property {640 | 854} width
- * @property {number} seed  Lays out the stars and particles for this roll.
+ * @property {640 | 854} width  Long edge of the portrait frame.
+ * @property {number} seed  Seeds the page's randomness, so a seed replays the same flecks and sparkles.
  */
 
 /**
@@ -38,7 +35,7 @@ export const createGachaRequestSchema = (limits) =>
 
 /**
  * Parses a request, picking a fresh seed when the caller sends none so every
- * roll draws a different sky.
+ * roll looks different.
  *
  * @param {unknown} input
  * @param {GachaRequestLimits} limits

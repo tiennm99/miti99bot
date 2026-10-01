@@ -1,7 +1,7 @@
 # wheelofnames
 
-Self-hosted API that renders wheel-of-names GIF animations and gacha wish
-MP4 animations with Remotion.
+Self-hosted API that renders wheel-of-names GIF animations with Remotion and
+gacha wish MP4 animations with pack-cards.
 
 ## API
 
@@ -43,56 +43,42 @@ Authorization: Bearer change-me
 
 ```json
 {
-  "label": "Pizza",
+  "label": "Bún bò",
   "rarity": 5,
   "fps": 24,
   "width": 640
 }
 ```
 
-Renders a 7-second wish animation in the style of a gacha game: a meteor
-coloured by rarity (blue 3★, purple 4★, gold 5★) flies in from the left across
-a night sky and bursts in a white flash where the rank emblem appears, and the label is revealed beside a rank emblem (`B`,
-`A`, `S`) with its stars popping in. Each tier is louder than the one below:
-4★ adds a bigger meteor, a lens flare, impact shake, and a double shockwave;
-5★ adds a rainbow sunburst before landing, a gold sky flood, a starburst, counter
-rotating rays, falling sparkles, and a sheen across the emblem. The per-tier
-table lives in `src/remotion/gacha-timeline.js`.
-`rarity` is required; `fps` is `24` or `30`; `width` is `640` (360 tall) or
-`854` (480 tall). Optional `seed` (integer, `0` to `2147483647`) lays out the
-twinkling stars and particles; when omitted the service picks a random one, so
-every roll draws a different sky. The caller chooses the result and its rarity — the service
-only draws it.
+Renders a 6-second portrait wish: a collectible card pack from
+[pack-cards](https://github.com/paubineau/pack-cards) is torn open, its card
+spins out with a burst of sparkles, and lands showing the request's `label`,
+its rank, and its stars under a polychrome rainbow foil. `rarity` (required)
+picks the rank (`B` for 3★, `A` for 4★, `S` for 5★), the star count, the
+card's material (rare, epic, legendary), and the colour (blue, purple, gold).
+`fps` is `24` or `30`. `width` is the long edge of the portrait frame:
+`640` renders 360×640 and `854` renders 480×854. Optional `seed` (integer,
+`0` to `2147483647`) seeds the page's randomness; when omitted the service
+picks a random one, so every roll looks different. The caller chooses the
+result and its rarity — the service only draws it.
 
-### Gacha wish beta
+Response is a silent H.264 `video/mp4` (Telegram plays it as an animation)
+with `X-Gacha-Rarity` and `X-Render-Duration-Ms` headers. Both routes share the
+`MAX_CONCURRENT_RENDERS` slots. No game assets are used.
 
-`POST /api/gachabeta` takes the same body and returns the same response as
-`/api/gacha`, rendering a 6-second portrait beta style instead: a collectible card pack
-from [pack-cards](https://github.com/paubineau/pack-cards) is torn open, and
-its card shows the request's `label`, its rank, and its stars. As on
-`/api/gacha`, `rarity` picks the rank (`B` for 3★, `A` for 4★, `S` for 5★),
-the star count, the card's material (rare, epic, legendary), and the pack's
-colour (blue, purple, gold). The video is portrait, with `width` as its long
-edge: `640` renders 360×640 and `854` renders 480×854.
-
-pack-cards animates on the browser clock, so this route does not use Remotion
-compositions. `src/render/render-gacha-beta.js` keeps one headless Chrome per
+pack-cards animates on the browser clock, so the wish does not use Remotion
+compositions. `src/render/render-gacha.js` keeps one headless Chrome per
 server process in `--deterministic-mode`, steps virtual time one frame at a
 time, tears the pack with a scripted drag, captures each frame, and encodes
-them with Remotion's bundled ffmpeg. The page and the package are served from
-disk; the page has no network access. The first render compiles the pack's
-WebGL shaders in software, which takes several seconds, so server start-up
-runs one throwaway wish first.
+them with Remotion's bundled ffmpeg. The page (`src/gacha/page/`) and the
+package are served from disk; the page has no network access. The first render
+compiles the pack's WebGL shaders in software, which takes several seconds, so
+server start-up runs one throwaway wish first.
 
 pack-cards has no npm release, so it is installed from a GitHub tarball pinned
 to a commit. A moving branch URL would change the tarball's checksum and break
 `npm ci` against the lockfile, and the Docker image has no `git` for a git
 dependency.
-
-Response is a silent H.264 `video/mp4` (Telegram plays it as an animation)
-with `X-Gacha-Rarity` and `X-Render-Duration-Ms` headers. Both routes share the
-`MAX_CONCURRENT_RENDERS` slots. All visuals are drawn procedurally; no game
-assets are used.
 
 ## Local
 
