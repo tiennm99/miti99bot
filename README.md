@@ -21,6 +21,7 @@ Atlas via long polling and an in-process cron scheduler.
 | `alias` | `/alias <name>` save a replied message under a name, then send it back with `/insert <name>`, bare `/<name>`, or inline `@botname <prefix>`; `/aliases` lists, `/unalias` deletes. See [docs/aliases.md](docs/aliases.md) |
 | `blacklist` | Per-topic text deny-list with whitelist exceptions: `/blacklist_add`, `/blacklist_del`, `/whitelist_add`, `/whitelist_del`, `/blacklist_rules` lists both, `/blacklist_check` judges a text, `/blacklist` does either, `/whitelist_rnd` picks a random exception. Passive — the bot never scans chat. See [docs/blacklist.md](docs/blacklist.md) |
 | `monkeyd` | `/monkeyd_crawl <url> [font_size]` export a monkeydd.com novel as a PDF, `/monkeyd_tags <url>` list its tags as hashtags |
+| `thoitiet` | Weather from Open-Meteo: `/thoitiethomnay` (alias `/thoitiet`) for current conditions and today, `/thoitietngaymai` for tomorrow, `/thoitiettuannay` for the next 7 days. Each takes `[location...]` (Vietnamese with or without diacritics, shorthand like `hcm`/`hn`, or a foreign city); the default is Ho Chi Minh City |
 
 Commands marked (admin) require a user ID in `ADMIN_IDS` or the owner; commands
 marked (owner) require `OWNER_ID`. Both kinds are hidden from `/help` and the
