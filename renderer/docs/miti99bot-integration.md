@@ -1,15 +1,16 @@
 # miti99bot Integration
 
-Future bot integration should keep winner handling explicit.
+miti99bot's `/wheelofnames` renders its wheel with this service, configured
+by `WHEELOFNAMES_API_URL` (pointing at `/api/gif`) and
+`WHEELOFNAMES_API_TOKEN`. Winner handling stays explicit:
 
-## Recommended Flow
-
-1. Bot parses `/wheelofnamesbeta` options.
-2. Bot chooses `winnerIndex` locally.
-3. Bot calls `POST /api/gif`.
-4. Bot sends response bytes with Telegram `sendAnimation`.
-5. Bot caption uses local winner as source of truth.
-6. If the service fails, bot falls back to existing local GIF renderer.
+1. The bot parses the comma-separated options.
+2. It chooses `winnerIndex` itself.
+3. It calls `POST /api/gif`.
+4. It sends the response bytes with Telegram `sendAnimation`.
+5. Its caption uses its own winner as the source of truth.
+6. If the service is not configured or fails, it replies with the winner as
+   text.
 
 ## Request
 
