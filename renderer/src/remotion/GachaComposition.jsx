@@ -4,7 +4,7 @@ import {
   createStarfield,
   gachaTimeline,
   getLabelFontSize,
-  getMeteorPoint,
+  getMeteorState,
   getRankLetter,
   getRarityPalette,
   getShakeOffset,
@@ -19,19 +19,24 @@ const baseFont =
 const clamp = /** @type {const} */ ({extrapolateLeft: 'clamp', extrapolateRight: 'clamp'});
 
 const skyStars = createStarfield(70, 7);
-const trailSpacing = 0.011;
+/** Seconds between motion-streak samples; the streak is the meteor's recent path. */
+const trailStep = 0.016;
+const sparkLifetime = 0.55;
+const meteorDuration = gachaTimeline.meteorEnd - gachaTimeline.meteorStart;
 const starburstSpikes = 10;
 
 /**
- * Sparks shed by the meteor. Each is born at a point along the fall and
- * drifts away from it while fading. Tiers draw a prefix of this pool.
+ * Sparks shed by the meteor. Each is born on the path, keeps part of the
+ * meteor's velocity plus a random kick, and then falls under gravity while
+ * fading. Tiers draw a prefix of this pool.
  */
 const meteorSparks = (() => {
   const random = createRandom(11);
   return Array.from({length: 80}, () => ({
-    born: random(),
-    driftX: (random() - 0.5) * 0.1,
-    driftY: (random() - 0.2) * 0.1,
+    born: random() * meteorDuration,
+    inherit: 0.15 + random() * 0.3,
+    kickX: (random() - 0.5) * 0.5,
+    kickY: (random() - 0.7) * 0.5,
     size: 0.006 + random() * 0.012,
   }));
 })();
@@ -103,13 +108,15 @@ export const GachaComposition = (props) => {
   const fx = getTierEffects(props.rarity);
   const tl = gachaTimeline;
 
-  const meteorProgress = interpolate(seconds, [tl.meteorStart, tl.meteorEnd], [0, 1], {
-    ...clamp,
-    easing: Easing.in(Easing.quad),
-  });
+  const meteorElapsed = seconds - tl.meteorStart;
+  const meteorProgress = Math.min(1, Math.max(0, meteorElapsed / meteorDuration));
   const meteorVisible = seconds >= tl.meteorStart && seconds < tl.flashHoldEnd;
-  const head = getMeteorPoint(meteorProgress, width, height);
+  const head = getMeteorState(meteorElapsed, width, height);
   const headRadius = height * interpolate(meteorProgress, [0, 1], [0.025, 0.085], clamp) * fx.headScale;
+  // Stretch the head along its velocity like motion blur, keeping its area.
+  const headSpeed = Math.hypot(head.vx, head.vy);
+  const headStretch = 1 + Math.min(0.9, headSpeed / (height * 1.6));
+  const headAngle = (Math.atan2(head.vy, head.vx) * 180) / Math.PI;
   const haloOpacity = fx.halo ? interpolate(meteorProgress, [0.45, 0.8], [0, 1], clamp) : 0;
   const skyFlood = interpolate(seconds, [tl.meteorStart + 1.2, tl.meteorEnd], [0, fx.skyFlood], clamp);
 
@@ -117,7 +124,7 @@ export const GachaComposition = (props) => {
     ...clamp,
     easing: Easing.inOut(Easing.quad),
   });
-  const impact = getMeteorPoint(1, width, height);
+  const impact = getMeteorState(meteorDuration, width, height);
   const bloomRadius = interpolate(seconds, [tl.flashStart, tl.flashPeak], [0.1, 2.2], clamp) * width;
 
   const revealed = seconds >= tl.revealStart;
@@ -203,11 +210,11 @@ export const GachaComposition = (props) => {
 
           {meteorVisible
             ? Array.from({length: fx.trailSamples}, (_, index) => {
-                const sampleProgress = meteorProgress - index * trailSpacing;
-                if (sampleProgress <= 0) {
+                const sampleElapsed = Math.min(meteorElapsed, meteorDuration) - index * trailStep;
+                if (sampleElapsed <= 0) {
                   return null;
                 }
-                const point = getMeteorPoint(sampleProgress, width, height);
+                const point = getMeteorState(sampleElapsed, width, height);
                 const fade = 1 - index / fx.trailSamples;
                 const radius = headRadius * (0.25 + 0.75 * fade ** 1.3);
                 return (
@@ -228,15 +235,17 @@ export const GachaComposition = (props) => {
 
           {meteorVisible
             ? meteorSparks.slice(0, fx.sparks).map((spark, index) => {
-                if (spark.born > meteorProgress) {
+                const age = Math.min(meteorElapsed, meteorDuration) - spark.born;
+                if (age < 0 || age >= sparkLifetime) {
                   return null;
                 }
-                const age = (meteorProgress - spark.born) * 4;
-                if (age >= 1) {
-                  return null;
-                }
-                const origin = getMeteorPoint(spark.born, width, height);
-                const size = spark.size * height * (1 - age) * fx.headScale;
+                const origin = getMeteorState(spark.born, width, height);
+                const life = age / sparkLifetime;
+                const size = spark.size * height * (1 - life) * fx.headScale;
+                const sparkGravity = height * 0.9;
+                const x = origin.x + (origin.vx * spark.inherit + spark.kickX * height) * age;
+                const y =
+                  origin.y + (origin.vy * spark.inherit + spark.kickY * height) * age + 0.5 * sparkGravity * age * age;
                 return (
                   <div
                     key={`spark-${index}`}
@@ -245,10 +254,10 @@ export const GachaComposition = (props) => {
                       borderRadius: '50%',
                       boxShadow: `0 0 ${size * 2}px ${palette.glow}`,
                       height: size,
-                      left: origin.x + spark.driftX * width * age,
-                      opacity: 1 - age,
+                      left: x,
+                      opacity: 1 - life,
                       position: 'absolute',
-                      top: origin.y + spark.driftY * height * age,
+                      top: y,
                       width: size,
                     }}
                   />
@@ -283,6 +292,7 @@ export const GachaComposition = (props) => {
                   left: head.x - headRadius * 2,
                   position: 'absolute',
                   top: head.y - headRadius * 2,
+                  transform: `rotate(${headAngle}deg) scale(${headStretch}, ${1 / Math.sqrt(headStretch)})`,
                   width: headRadius * 4,
                 }}
               />

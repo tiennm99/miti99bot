@@ -4,7 +4,7 @@ import {
   gachaTimeline,
   gachaTotalSeconds,
   getLabelFontSize,
-  getMeteorPoint,
+  getMeteorState,
   getRankLetter,
   getRarityPalette,
   getShakeOffset,
@@ -38,15 +38,40 @@ describe('gacha timeline', () => {
     expect(new Set(glows).size).toBe(3);
   });
 
-  test('meteor falls from off-screen upper right toward the lower left', () => {
-    const start = getMeteorPoint(0, 640, 360);
-    const end = getMeteorPoint(1, 640, 360);
+  test('meteor follows a ballistic arc from off-screen upper right to the impact point', () => {
+    const duration = gachaTimeline.meteorEnd - gachaTimeline.meteorStart;
+    const start = getMeteorState(0, 640, 360);
+    const end = getMeteorState(duration, 640, 360);
     expect(start.x).toBeGreaterThan(640);
-    expect(start.y).toBeLessThan(0);
-    expect(end.x).toBeLessThan(start.x);
-    expect(end.y).toBeGreaterThan(start.y);
-    expect(getMeteorPoint(2, 640, 360)).toEqual(end);
-    expect(getMeteorPoint(-1, 640, 360)).toEqual(start);
+    expect(start.vy).toBeLessThan(0);
+    expect(end.x).toBeCloseTo(640 * 0.4);
+    expect(end.y).toBeCloseTo(360 * 0.72);
+    expect(getMeteorState(duration + 1, 640, 360)).toEqual(end);
+    expect(getMeteorState(-1, 640, 360)).toEqual(start);
+  });
+
+  test('meteor keeps horizontal speed and gains vertical speed at a constant rate', () => {
+    const step = 0.2;
+    const samples = [0, 1, 2, 3, 4, 5].map((index) => getMeteorState(index * step, 640, 360));
+    for (const sample of samples) {
+      expect(sample.vx).toBeCloseTo(samples[0]?.vx ?? NaN);
+      expect(sample.vx).toBeLessThan(0);
+    }
+    const gravity = ((samples[1]?.vy ?? 0) - (samples[0]?.vy ?? 0)) / step;
+    expect(gravity).toBeGreaterThan(0);
+    for (let index = 1; index < samples.length; index += 1) {
+      expect(((samples[index]?.vy ?? 0) - (samples[index - 1]?.vy ?? 0)) / step).toBeCloseTo(gravity);
+    }
+  });
+
+  test('meteor bends from a slight climb into a steep dive', () => {
+    const duration = gachaTimeline.meteorEnd - gachaTimeline.meteorStart;
+    const early = getMeteorState(0, 640, 360);
+    const late = getMeteorState(duration, 640, 360);
+    const climbDegrees = (Math.atan2(-early.vy, Math.abs(early.vx)) * 180) / Math.PI;
+    const diveDegrees = (Math.atan2(late.vy, Math.abs(late.vx)) * 180) / Math.PI;
+    expect(climbDegrees).toBeGreaterThan(10);
+    expect(diveDegrees).toBeGreaterThan(45);
   });
 
   test('starfield is deterministic per seed', () => {

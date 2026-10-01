@@ -51,23 +51,43 @@ const palettes = {
 export const getRarityPalette = (rarity) => palettes[rarity];
 
 /**
- * Point on the meteor's curved fall from the upper right toward the lower
- * left of the frame, as a quadratic Bézier.
+ * @typedef {object} MeteorState
+ * @property {number} x   Pixels.
+ * @property {number} y   Pixels.
+ * @property {number} vx  Pixels per second.
+ * @property {number} vy  Pixels per second.
+ */
+
+/**
+ * Initial vertical speed as a fraction of horizontal speed. Negative launches
+ * slightly upward, so gravity visibly bends the path over into a dive.
+ */
+const meteorEntrySlope = -0.3;
+
+/**
+ * Ballistic flight under constant gravity. Horizontal speed stays constant and
+ * vertical speed grows linearly, so the path is a true parabola that rises a
+ * touch, then bends over and steepens into a dive as the meteor speeds up. Gravity is solved so the
+ * meteor lands exactly at the impact point when the fall ends.
  *
- * @param {number} progress 0 at launch, 1 at landing; values outside clamp.
+ * @param {number} elapsed Seconds since launch; clamped to the fall.
  * @param {number} width
  * @param {number} height
- * @returns {{x: number, y: number}}
+ * @returns {MeteorState}
  */
-export const getMeteorPoint = (progress, width, height) => {
-  const t = Math.min(1, Math.max(0, progress));
-  const start = {x: width * 1.08, y: -height * 0.18};
-  const control = {x: width * 0.8, y: height * 0.3};
-  const end = {x: width * 0.42, y: height * 0.6};
-  const u = 1 - t;
+export const getMeteorState = (elapsed, width, height) => {
+  const duration = gachaTimeline.meteorEnd - gachaTimeline.meteorStart;
+  const t = Math.min(duration, Math.max(0, elapsed));
+  const start = {x: width * 1.05, y: height * 0.1};
+  const end = {x: width * 0.4, y: height * 0.72};
+  const vx = (end.x - start.x) / duration;
+  const vy0 = Math.abs(vx) * meteorEntrySlope;
+  const gravity = (2 * (end.y - start.y - vy0 * duration)) / duration ** 2;
   return {
-    x: u * u * start.x + 2 * u * t * control.x + t * t * end.x,
-    y: u * u * start.y + 2 * u * t * control.y + t * t * end.y,
+    x: start.x + vx * t,
+    y: start.y + vy0 * t + 0.5 * gravity * t * t,
+    vx,
+    vy: vy0 + gravity * t,
   };
 };
 
