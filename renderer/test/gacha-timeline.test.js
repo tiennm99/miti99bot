@@ -3,11 +3,13 @@ import {
   createStarfield,
   gachaTimeline,
   gachaTotalSeconds,
-  getEmblemGlyph,
   getLabelFontSize,
   getMeteorPoint,
+  getRankLetter,
   getRarityPalette,
+  getShakeOffset,
   getStarRevealTimes,
+  getTierEffects,
 } from '../src/remotion/gacha-timeline.js';
 
 describe('gacha timeline', () => {
@@ -56,9 +58,39 @@ describe('gacha timeline', () => {
     expect(getLabelFontSize('Pizza', 360)).toBeGreaterThan(getLabelFontSize('x'.repeat(40), 360));
   });
 
-  test('emblem glyph keeps multi-unit characters whole', () => {
-    expect(getEmblemGlyph(' pizza')).toBe('P');
-    expect(getEmblemGlyph('🍕 time')).toBe('🍕');
-    expect(getEmblemGlyph('ăn')).toBe('Ă');
+  test('emblem shows B, A, S rank letters by rarity', () => {
+    expect([3, 4, 5].map((rarity) => getRankLetter(/** @type {3 | 4 | 5} */ (rarity)))).toEqual(['B', 'A', 'S']);
+  });
+
+  test('every numeric effect grows with rarity and 5★ unlocks the extras', () => {
+    const [three, four, five] = [3, 4, 5].map((rarity) => getTierEffects(/** @type {3 | 4 | 5} */ (rarity)));
+    for (const key of /** @type {const} */ ([
+      'headScale',
+      'trailSamples',
+      'sparks',
+      'shockwaves',
+      'raysOpacity',
+      'motes',
+      'starFlare',
+    ])) {
+      expect(four?.[key], key).toBeGreaterThan(three?.[key] ?? Infinity);
+      expect(five?.[key], key).toBeGreaterThan(four?.[key] ?? Infinity);
+    }
+    expect(four?.shake).toBeGreaterThan(three?.shake ?? Infinity);
+    expect(five?.shake).toBeGreaterThan(four?.shake ?? Infinity);
+    expect(five?.skyFlood).toBeGreaterThan(four?.skyFlood ?? Infinity);
+    expect([three?.halo, four?.halo, five?.halo]).toEqual([false, false, true]);
+    expect(five).toMatchObject({starburst: true, counterRays: true, sheen: true});
+    expect(three?.sparkleRain).toBe(0);
+    expect(five?.sparkleRain).toBeGreaterThan(0);
+  });
+
+  test('impact shake decays to rest', () => {
+    expect(getShakeOffset(1, 2, 10)).toEqual({x: 0, y: 0});
+    expect(getShakeOffset(3, 2, 10)).toEqual({x: 0, y: 0});
+    expect(getShakeOffset(2.1, 2, 0)).toEqual({x: 0, y: 0});
+    const early = getShakeOffset(2.05, 2, 10);
+    const late = getShakeOffset(2.7, 2, 10);
+    expect(Math.hypot(early.x, early.y)).toBeGreaterThan(Math.hypot(late.x, late.y));
   });
 });

@@ -143,11 +143,110 @@ export const getLabelFontSize = (label, height) => {
   return Math.round(height * 0.055);
 };
 
+/** Rank letter shown on the emblem for each rarity. */
+const rankLetters = {3: 'B', 4: 'A', 5: 'S'};
+
 /**
- * The emblem shows the label's first character, keeping emoji and other
- * multi-unit code points intact.
- *
- * @param {string} label
- * @returns {string}
+ * @param {GachaRarity} rarity
+ * @returns {'B' | 'A' | 'S'}
  */
-export const getEmblemGlyph = (label) => (Array.from(label.trim())[0] ?? '?').toUpperCase();
+export const getRankLetter = (rarity) => /** @type {'B' | 'A' | 'S'} */ (rankLetters[rarity]);
+
+/**
+ * @typedef {object} TierEffects
+ * @property {number} headScale     Meteor head size multiplier.
+ * @property {number} trailSamples  Glow blobs drawn along the meteor trail.
+ * @property {number} sparks        Sparks shed by the meteor.
+ * @property {boolean} halo         Rainbow ring forming around the meteor before landing.
+ * @property {number} skyFlood      Peak opacity of the sky tint as the meteor lands.
+ * @property {number} shake         Impact camera shake amplitude, as a fraction of height.
+ * @property {number} shockwaves    Rings bursting from the emblem on reveal.
+ * @property {boolean} starburst    Long light spikes behind the emblem.
+ * @property {number} raysOpacity   Peak opacity of the rotating light rays.
+ * @property {boolean} counterRays  Second ray layer rotating the other way.
+ * @property {number} motes         Glowing motes floating up behind the reveal.
+ * @property {number} sparkleRain   Sparkles falling across the reveal.
+ * @property {boolean} sheen        Light sweep across the emblem and rank letter.
+ * @property {number} starFlare     Size multiplier of each star's pop flare.
+ */
+
+/**
+ * How loud each tier is. Every beat exists at every tier; higher tiers get
+ * more of it, so 4★ clearly beats 3★ and 5★ clearly beats both.
+ *
+ * @type {Record<GachaRarity, TierEffects>}
+ */
+const tierEffects = {
+  3: {
+    headScale: 1,
+    trailSamples: 22,
+    sparks: 12,
+    halo: false,
+    skyFlood: 0,
+    shake: 0,
+    shockwaves: 1,
+    starburst: false,
+    raysOpacity: 0.16,
+    counterRays: false,
+    motes: 14,
+    sparkleRain: 0,
+    sheen: false,
+    starFlare: 1,
+  },
+  4: {
+    headScale: 1.3,
+    trailSamples: 34,
+    sparks: 36,
+    halo: false,
+    skyFlood: 0.25,
+    shake: 0.012,
+    shockwaves: 2,
+    starburst: false,
+    raysOpacity: 0.42,
+    counterRays: false,
+    motes: 32,
+    sparkleRain: 0,
+    sheen: false,
+    starFlare: 1.4,
+  },
+  5: {
+    headScale: 1.75,
+    trailSamples: 48,
+    sparks: 80,
+    halo: true,
+    skyFlood: 0.7,
+    shake: 0.03,
+    shockwaves: 3,
+    starburst: true,
+    raysOpacity: 0.7,
+    counterRays: true,
+    motes: 56,
+    sparkleRain: 40,
+    sheen: true,
+    starFlare: 2,
+  },
+};
+
+/**
+ * @param {GachaRarity} rarity
+ * @returns {TierEffects}
+ */
+export const getTierEffects = (rarity) => tierEffects[rarity];
+
+/**
+ * Decaying impact shake offset in pixels, zero before `start` and after it
+ * settles.
+ *
+ * @param {number} seconds
+ * @param {number} start
+ * @param {number} amplitude Pixels at the moment of impact.
+ * @returns {{x: number, y: number}}
+ */
+export const getShakeOffset = (seconds, start, amplitude) => {
+  const elapsed = seconds - start;
+  if (amplitude <= 0 || elapsed < 0 || elapsed > 0.8) {
+    return {x: 0, y: 0};
+  }
+  const decay = amplitude * (1 - elapsed / 0.8) ** 2;
+  return {x: Math.sin(elapsed * 71) * decay, y: Math.cos(elapsed * 53) * decay};
+};

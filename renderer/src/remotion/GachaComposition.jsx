@@ -3,11 +3,13 @@ import {
   createRandom,
   createStarfield,
   gachaTimeline,
-  getEmblemGlyph,
   getLabelFontSize,
   getMeteorPoint,
+  getRankLetter,
   getRarityPalette,
+  getShakeOffset,
   getStarRevealTimes,
+  getTierEffects,
   starColor,
 } from './gacha-timeline.js';
 
@@ -17,32 +19,44 @@ const baseFont =
 const clamp = /** @type {const} */ ({extrapolateLeft: 'clamp', extrapolateRight: 'clamp'});
 
 const skyStars = createStarfield(70, 7);
-const trailSamples = 34;
-const trailSpacing = 0.014;
+const trailSpacing = 0.011;
+const starburstSpikes = 10;
 
 /**
  * Sparks shed by the meteor. Each is born at a point along the fall and
- * drifts away from it while fading.
+ * drifts away from it while fading. Tiers draw a prefix of this pool.
  */
 const meteorSparks = (() => {
   const random = createRandom(11);
-  return Array.from({length: 40}, () => ({
+  return Array.from({length: 80}, () => ({
     born: random(),
-    driftX: (random() - 0.5) * 0.08,
-    driftY: (random() - 0.2) * 0.08,
-    size: 0.006 + random() * 0.01,
+    driftX: (random() - 0.5) * 0.1,
+    driftY: (random() - 0.2) * 0.1,
+    size: 0.006 + random() * 0.012,
   }));
 })();
 
 /** Motes that float upward behind the revealed item. */
 const revealMotes = (() => {
   const random = createRandom(23);
-  return Array.from({length: 36}, () => ({
+  return Array.from({length: 56}, () => ({
     x: random(),
     y: random(),
-    speed: 0.03 + random() * 0.06,
-    size: 0.004 + random() * 0.008,
+    speed: 0.03 + random() * 0.07,
+    size: 0.004 + random() * 0.009,
     phase: random() * Math.PI * 2,
+  }));
+})();
+
+/** Sparkles that rain down across the 5★ reveal. */
+const rainSparkles = (() => {
+  const random = createRandom(31);
+  return Array.from({length: 40}, () => ({
+    x: random(),
+    offset: random(),
+    speed: 0.25 + random() * 0.35,
+    size: 0.025 + random() * 0.03,
+    spin: (random() - 0.5) * 360,
   }));
 })();
 
@@ -76,7 +90,8 @@ const StarIcon = ({size}) => (
 
 /**
  * Wish animation: a meteor coloured by rarity falls across a night sky, lands
- * in a white flash, and the result is revealed with its stars popping in.
+ * in a white flash, and the result is revealed with its rank letter and stars.
+ * Every beat scales with the tier's effects so higher rarities are louder.
  *
  * @param {GachaRenderRequest} props
  */
@@ -85,6 +100,7 @@ export const GachaComposition = (props) => {
   const {fps, width, height} = useVideoConfig();
   const seconds = frame / fps;
   const palette = getRarityPalette(props.rarity);
+  const fx = getTierEffects(props.rarity);
   const tl = gachaTimeline;
 
   const meteorProgress = interpolate(seconds, [tl.meteorStart, tl.meteorEnd], [0, 1], {
@@ -93,7 +109,9 @@ export const GachaComposition = (props) => {
   });
   const meteorVisible = seconds >= tl.meteorStart && seconds < tl.flashHoldEnd;
   const head = getMeteorPoint(meteorProgress, width, height);
-  const headRadius = height * interpolate(meteorProgress, [0, 1], [0.025, 0.085], clamp);
+  const headRadius = height * interpolate(meteorProgress, [0, 1], [0.025, 0.085], clamp) * fx.headScale;
+  const haloOpacity = fx.halo ? interpolate(meteorProgress, [0.45, 0.8], [0, 1], clamp) : 0;
+  const skyFlood = interpolate(seconds, [tl.meteorStart + 1.2, tl.meteorEnd], [0, fx.skyFlood], clamp);
 
   const flashOpacity = interpolate(seconds, [tl.flashStart, tl.flashPeak, tl.flashHoldEnd, tl.flashEnd], [0, 1, 1, 0], {
     ...clamp,
@@ -103,25 +121,38 @@ export const GachaComposition = (props) => {
   const bloomRadius = interpolate(seconds, [tl.flashStart, tl.flashPeak], [0.1, 2.2], clamp) * width;
 
   const revealed = seconds >= tl.revealStart;
+  const shake = getShakeOffset(seconds, tl.revealStart, fx.shake * height);
   const emblemSize = height * 0.52;
   const emblemX = width * 0.66;
   const emblemY = height * 0.47;
-  const emblemScale = interpolate(seconds, [tl.revealStart, tl.revealStart + 0.45, tl.emblemSettled], [0.72, 1.06, 1], {
+  const emblemScale = interpolate(
+    seconds,
+    [tl.revealStart, tl.revealStart + 0.45, tl.emblemSettled],
+    [0.72, 1 + 0.04 * fx.headScale, 1],
+    {...clamp, easing: Easing.out(Easing.cubic)},
+  );
+  const silhouette = interpolate(seconds, [tl.revealStart + 0.2, tl.emblemSettled], [1, 0], clamp);
+  const raysOpacity = interpolate(seconds, [tl.revealStart, tl.emblemSettled], [0, fx.raysOpacity], clamp);
+  const starburstScale = interpolate(seconds, [tl.revealStart, tl.emblemSettled + 0.3], [0.2, 1], {
     ...clamp,
     easing: Easing.out(Easing.cubic),
   });
-  const silhouette = interpolate(seconds, [tl.revealStart + 0.2, tl.emblemSettled], [1, 0], clamp);
-  const ringProgress = interpolate(seconds, [tl.revealStart, tl.revealStart + 0.9], [0, 1], {
-    ...clamp,
-    easing: Easing.out(Easing.quad),
-  });
-  const raysOpacity = interpolate(
-    seconds,
-    [tl.revealStart, tl.emblemSettled],
-    [0, props.rarity === 3 ? 0.22 : 0.4],
-    clamp,
-  );
   const emblemPulse = 0.5 + 0.5 * Math.sin(seconds * 3);
+  const sheenProgress = ((((seconds - tl.emblemSettled) / 1.8) % 1) + 1) % 1;
+  const rankLetter = getRankLetter(props.rarity);
+  const rankLetterStyle =
+    props.rarity === 5
+      ? {
+          background: 'linear-gradient(180deg, #ffffff 0%, #fff6d0 55%, #ffd36b 100%)',
+          color: 'transparent',
+          filter: `drop-shadow(0 0 ${height * 0.006}px #8a4b00) drop-shadow(0 0 ${height * 0.006}px #8a4b00) drop-shadow(0 0 ${height * 0.03}px ${palette.glow})`,
+          WebkitBackgroundClip: 'text',
+          backgroundClip: 'text',
+        }
+      : {
+          color: '#ffffff',
+          textShadow: `0 2px ${height * 0.01}px rgba(0, 0, 0, 0.45), 0 0 ${height * 0.03}px ${palette.glow}`,
+        };
 
   const nameProgress = interpolate(seconds, [tl.nameIn, tl.nameSettled], [0, 1], {
     ...clamp,
@@ -129,6 +160,7 @@ export const GachaComposition = (props) => {
   });
   const starSize = height * 0.09;
   const starTimes = getStarRevealTimes(props.rarity);
+  const rayMask = 'radial-gradient(circle, black 8%, transparent 55%)';
 
   return (
     <AbsoluteFill style={{background: '#05060f', fontFamily: baseFont, overflow: 'hidden'}}>
@@ -159,14 +191,24 @@ export const GachaComposition = (props) => {
             />
           ))}
 
+          {skyFlood > 0 ? (
+            <AbsoluteFill
+              style={{
+                background: `radial-gradient(circle at ${(impact.x / width) * 100}% ${(impact.y / height) * 100}%, ${withAlpha(palette.glow, 0.95)} 0%, ${withAlpha(palette.glow, 0.4)} 40%, transparent 80%)`,
+                mixBlendMode: 'screen',
+                opacity: skyFlood,
+              }}
+            />
+          ) : null}
+
           {meteorVisible
-            ? Array.from({length: trailSamples}, (_, index) => {
+            ? Array.from({length: fx.trailSamples}, (_, index) => {
                 const sampleProgress = meteorProgress - index * trailSpacing;
                 if (sampleProgress <= 0) {
                   return null;
                 }
                 const point = getMeteorPoint(sampleProgress, width, height);
-                const fade = 1 - index / trailSamples;
+                const fade = 1 - index / fx.trailSamples;
                 const radius = headRadius * (0.25 + 0.75 * fade ** 1.3);
                 return (
                   <div
@@ -185,7 +227,7 @@ export const GachaComposition = (props) => {
             : null}
 
           {meteorVisible
-            ? meteorSparks.map((spark, index) => {
+            ? meteorSparks.slice(0, fx.sparks).map((spark, index) => {
                 if (spark.born > meteorProgress) {
                   return null;
                 }
@@ -194,7 +236,7 @@ export const GachaComposition = (props) => {
                   return null;
                 }
                 const origin = getMeteorPoint(spark.born, width, height);
-                const size = spark.size * height * (1 - age);
+                const size = spark.size * height * (1 - age) * fx.headScale;
                 return (
                   <div
                     key={`spark-${index}`}
@@ -214,6 +256,24 @@ export const GachaComposition = (props) => {
               })
             : null}
 
+          {meteorVisible && haloOpacity > 0 ? (
+            <div
+              style={{
+                background: 'conic-gradient(from 0deg, #ff6b6b, #ffd36b, #8cff9a, #6bd6ff, #b48cff, #ff8cd8, #ff6b6b)',
+                borderRadius: '50%',
+                height: headRadius * 6,
+                left: head.x - headRadius * 3,
+                maskImage: 'radial-gradient(circle, transparent 52%, black 58%, black 64%, transparent 72%)',
+                opacity: haloOpacity * 0.9,
+                position: 'absolute',
+                top: head.y - headRadius * 3,
+                transform: `rotate(${seconds * 240}deg) scale(${0.7 + 0.3 * haloOpacity})`,
+                WebkitMaskImage: 'radial-gradient(circle, transparent 52%, black 58%, black 64%, transparent 72%)',
+                width: headRadius * 6,
+              }}
+            />
+          ) : null}
+
           {meteorVisible ? (
             <>
               <div
@@ -226,25 +286,25 @@ export const GachaComposition = (props) => {
                   width: headRadius * 4,
                 }}
               />
-              {props.rarity === 5 ? (
+              {props.rarity >= 4 ? (
                 <>
                   <div
                     style={{
                       background: `linear-gradient(90deg, transparent, ${withAlpha(palette.core, 0.9)}, transparent)`,
                       height: Math.max(2, headRadius * 0.12),
-                      left: head.x - headRadius * 5,
+                      left: head.x - headRadius * (props.rarity === 5 ? 6 : 3.5),
                       position: 'absolute',
                       top: head.y - Math.max(1, headRadius * 0.06),
-                      width: headRadius * 10,
+                      width: headRadius * (props.rarity === 5 ? 12 : 7),
                     }}
                   />
                   <div
                     style={{
                       background: `linear-gradient(180deg, transparent, ${withAlpha(palette.core, 0.9)}, transparent)`,
-                      height: headRadius * 6,
+                      height: headRadius * (props.rarity === 5 ? 8 : 4.5),
                       left: head.x - Math.max(1, headRadius * 0.06),
                       position: 'absolute',
-                      top: head.y - headRadius * 3,
+                      top: head.y - headRadius * (props.rarity === 5 ? 4 : 2.25),
                       width: Math.max(2, headRadius * 0.12),
                     }}
                   />
@@ -259,6 +319,7 @@ export const GachaComposition = (props) => {
         <AbsoluteFill
           style={{
             background: `radial-gradient(ellipse 70% 90% at 66% 47%, ${palette.deep} 0%, #0d0b1f 62%, #05060f 100%)`,
+            transform: `translate(${shake.x}px, ${shake.y}px) scale(1.04)`,
           }}
         >
           <div
@@ -267,17 +328,56 @@ export const GachaComposition = (props) => {
               borderRadius: '50%',
               height: width * 1.6,
               left: emblemX - width * 0.8,
-              maskImage: 'radial-gradient(circle, black 8%, transparent 55%)',
+              maskImage: rayMask,
               opacity: raysOpacity,
               position: 'absolute',
               top: emblemY - width * 0.8,
               transform: `rotate(${seconds * 9}deg)`,
-              WebkitMaskImage: 'radial-gradient(circle, black 8%, transparent 55%)',
+              WebkitMaskImage: rayMask,
               width: width * 1.6,
             }}
           />
+          {fx.counterRays ? (
+            <div
+              style={{
+                background: `repeating-conic-gradient(from 9deg, ${withAlpha(palette.core, 0.8)} 0deg 2deg, transparent 2deg 24deg)`,
+                borderRadius: '50%',
+                height: width * 1.6,
+                left: emblemX - width * 0.8,
+                maskImage: rayMask,
+                opacity: raysOpacity * 0.8,
+                position: 'absolute',
+                top: emblemY - width * 0.8,
+                transform: `rotate(${-seconds * 14}deg)`,
+                WebkitMaskImage: rayMask,
+                width: width * 1.6,
+              }}
+            />
+          ) : null}
 
-          {revealMotes.map((mote, index) => {
+          {fx.starburst
+            ? Array.from({length: starburstSpikes}, (_, index) => {
+                const long = index % 2 === 0;
+                const length = height * (long ? 1.1 : 0.7) * starburstScale;
+                return (
+                  <div
+                    key={`spike-${index}`}
+                    style={{
+                      background: `linear-gradient(90deg, ${withAlpha(palette.core, 0.95)}, ${withAlpha(palette.glow, 0.5)} 40%, transparent)`,
+                      height: Math.max(2, height * (long ? 0.012 : 0.007)),
+                      left: emblemX,
+                      position: 'absolute',
+                      top: emblemY,
+                      transform: `rotate(${(360 / starburstSpikes) * index + seconds * 6}deg)`,
+                      transformOrigin: '0 50%',
+                      width: length,
+                    }}
+                  />
+                );
+              })
+            : null}
+
+          {revealMotes.slice(0, fx.motes).map((mote, index) => {
             const y = (((mote.y - (seconds - tl.revealStart) * mote.speed) % 1) + 1) % 1;
             const size = mote.size * height;
             return (
@@ -298,22 +398,55 @@ export const GachaComposition = (props) => {
             );
           })}
 
-          {ringProgress < 1 ? (
-            <div
-              style={{
-                border: `${Math.max(2, height * 0.008)}px solid ${palette.glow}`,
-                borderRadius: '50%',
-                boxShadow: `0 0 ${height * 0.04}px ${palette.glow}, inset 0 0 ${height * 0.04}px ${palette.glow}`,
-                height: emblemSize,
-                left: emblemX - emblemSize / 2,
-                opacity: 1 - ringProgress,
-                position: 'absolute',
-                top: emblemY - emblemSize / 2,
-                transform: `scale(${0.4 + ringProgress * 2.6})`,
-                width: emblemSize,
-              }}
-            />
-          ) : null}
+          {rainSparkles.slice(0, fx.sparkleRain).map((sparkle, index) => {
+            const y = ((sparkle.offset + (seconds - tl.revealStart) * sparkle.speed) % 1.2) - 0.1;
+            const size = sparkle.size * height;
+            return (
+              <div
+                key={`rain-${index}`}
+                style={{
+                  background: `linear-gradient(135deg, #fffbe6, ${palette.glow})`,
+                  boxShadow: `0 0 ${size}px ${palette.glow}`,
+                  height: size,
+                  left: sparkle.x * width,
+                  opacity: 0.85,
+                  position: 'absolute',
+                  top: y * height,
+                  clipPath: 'polygon(50% 0%, 61% 39%, 100% 50%, 61% 61%, 50% 100%, 39% 61%, 0% 50%, 39% 39%)',
+                  transform: `rotate(${seconds * sparkle.spin}deg)`,
+                  width: size,
+                }}
+              />
+            );
+          })}
+
+          {Array.from({length: fx.shockwaves}, (_, index) => {
+            const start = tl.revealStart + index * 0.16;
+            const progress = interpolate(seconds, [start, start + 0.9], [0, 1], {
+              ...clamp,
+              easing: Easing.out(Easing.quad),
+            });
+            if (progress <= 0 || progress >= 1) {
+              return null;
+            }
+            return (
+              <div
+                key={`wave-${index}`}
+                style={{
+                  border: `${Math.max(2, height * (0.01 - index * 0.002))}px solid ${index === 0 ? palette.glow : palette.core}`,
+                  borderRadius: '50%',
+                  boxShadow: `0 0 ${height * 0.04}px ${palette.glow}, inset 0 0 ${height * 0.04}px ${palette.glow}`,
+                  height: emblemSize,
+                  left: emblemX - emblemSize / 2,
+                  opacity: 1 - progress,
+                  position: 'absolute',
+                  top: emblemY - emblemSize / 2,
+                  transform: `scale(${0.4 + progress * (2.4 + index * 0.8)})`,
+                  width: emblemSize,
+                }}
+              />
+            );
+          })}
 
           <div
             style={{
@@ -328,9 +461,9 @@ export const GachaComposition = (props) => {
             <div
               style={{
                 background: `linear-gradient(135deg, ${palette.emblem})`,
-                border: `${Math.max(2, height * 0.008)}px solid rgba(255, 255, 255, 0.85)`,
+                border: `${Math.max(2, height * (props.rarity === 5 ? 0.014 : 0.008))}px solid ${props.rarity === 5 ? '#fff0b8' : 'rgba(255, 255, 255, 0.85)'}`,
                 borderRadius: emblemSize * 0.12,
-                boxShadow: `0 0 ${height * (0.05 + 0.03 * emblemPulse)}px ${palette.glow}, inset 0 0 ${height * 0.04}px rgba(255, 255, 255, 0.55)`,
+                boxShadow: `0 0 ${height * (0.04 + 0.03 * fx.headScale * emblemPulse)}px ${palette.glow}, inset 0 0 ${height * 0.04}px rgba(255, 255, 255, 0.55)`,
                 height: emblemSize * 0.72,
                 left: emblemSize * 0.14,
                 overflow: 'hidden',
@@ -347,23 +480,34 @@ export const GachaComposition = (props) => {
                   position: 'absolute',
                 }}
               />
+              {fx.sheen && seconds >= tl.emblemSettled ? (
+                <div
+                  style={{
+                    background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.75), transparent)',
+                    height: '100%',
+                    left: `${-60 + sheenProgress * 220}%`,
+                    position: 'absolute',
+                    top: 0,
+                    width: '40%',
+                  }}
+                />
+              ) : null}
               <div style={{background: '#ffffff', inset: 0, opacity: silhouette, position: 'absolute'}} />
             </div>
             <div
               style={{
                 alignItems: 'center',
-                color: '#ffffff',
                 display: 'flex',
-                fontSize: emblemSize * 0.36,
-                fontWeight: 800,
+                fontSize: emblemSize * 0.42,
+                fontStyle: 'italic',
+                fontWeight: 900,
                 inset: 0,
                 justifyContent: 'center',
                 opacity: 1 - silhouette,
                 position: 'absolute',
-                textShadow: `0 2px ${height * 0.01}px rgba(0, 0, 0, 0.45), 0 0 ${height * 0.03}px ${palette.glow}`,
               }}
             >
-              {getEmblemGlyph(props.label)}
+              <span style={{paddingRight: emblemSize * 0.03, ...rankLetterStyle}}>{rankLetter}</span>
             </div>
           </div>
 
@@ -397,6 +541,7 @@ export const GachaComposition = (props) => {
               {starTimes.map((time, index) => {
                 const pop = interpolate(seconds, [time, time + 0.12, time + 0.24], [0, 1.6, 1], clamp);
                 const flare = interpolate(seconds, [time, time + 0.3], [1, 0], clamp);
+                const flareSize = starSize * 2.4 * fx.starFlare;
                 return (
                   <div
                     key={`star-${index}`}
@@ -411,11 +556,11 @@ export const GachaComposition = (props) => {
                     <div
                       style={{
                         background: `radial-gradient(circle, ${withAlpha('#fff4c2', 0.9 * flare)} 0%, transparent 65%)`,
-                        height: starSize * 2.4,
-                        left: -starSize * 0.7,
+                        height: flareSize,
+                        left: (starSize - flareSize) / 2,
                         position: 'absolute',
-                        top: -starSize * 0.7,
-                        width: starSize * 2.4,
+                        top: (starSize - flareSize) / 2,
+                        width: flareSize,
                       }}
                     />
                     <StarIcon size={starSize} />
@@ -440,7 +585,7 @@ export const GachaComposition = (props) => {
               width: bloomRadius * 2,
             }}
           />
-          <AbsoluteFill style={{background: '#ffffff', opacity: flashOpacity}} />
+          <AbsoluteFill style={{background: props.rarity === 5 ? '#fff6dc' : '#ffffff', opacity: flashOpacity}} />
         </AbsoluteFill>
       ) : null}
     </AbsoluteFill>
