@@ -59,16 +59,23 @@ export const getRarityPalette = (rarity) => palettes[rarity];
  */
 
 /**
- * Initial vertical speed as a fraction of horizontal speed. Negative launches
- * slightly upward, so gravity visibly bends the path over into a dive.
+ * Approach rate of the glide, per second. Fitted to reference footage of the
+ * source game: after a fast entry the meteor covers about 88% of the
+ * remaining distance in half a second, then hovers above the horizon.
  */
-const meteorEntrySlope = -0.3;
+export const meteorApproachRate = 4.2;
+
+/** Glide direction: down and to the right, measured in the footage. */
+export const meteorAngleDegrees = 23;
+
+/** Where the meteor comes to hover, as fractions of the frame. */
+const meteorHover = {x: 0.55, y: 0.55};
 
 /**
- * Ballistic flight under constant gravity. Horizontal speed stays constant and
- * vertical speed grows linearly, so the path is a true parabola that rises a
- * touch, then bends over and steepens into a dive as the meteor speeds up. Gravity is solved so the
- * meteor lands exactly at the impact point when the fall ends.
+ * Exponential ease-out glide along a straight line from off-screen upper left
+ * to the hover point, matching how the source game's meteor sweeps in fast
+ * and then slows to a near stop. The curve is normalised so the meteor is
+ * exactly at the hover point when the fall ends.
  *
  * @param {number} elapsed Seconds since launch; clamped to the fall.
  * @param {number} width
@@ -78,16 +85,19 @@ const meteorEntrySlope = -0.3;
 export const getMeteorState = (elapsed, width, height) => {
   const duration = gachaTimeline.meteorEnd - gachaTimeline.meteorStart;
   const t = Math.min(duration, Math.max(0, elapsed));
-  const start = {x: width * 1.05, y: height * 0.1};
-  const end = {x: width * 0.4, y: height * 0.72};
-  const vx = (end.x - start.x) / duration;
-  const vy0 = Math.abs(vx) * meteorEntrySlope;
-  const gravity = (2 * (end.y - start.y - vy0 * duration)) / duration ** 2;
+  const angle = (meteorAngleDegrees * Math.PI) / 180;
+  const ux = Math.cos(angle);
+  const uy = Math.sin(angle);
+  const hover = {x: width * meteorHover.x, y: height * meteorHover.y};
+  const distance = (hover.x + width * 0.15) / ux;
+  const norm = 1 - Math.exp(-meteorApproachRate * duration);
+  const remaining = 1 - (1 - Math.exp(-meteorApproachRate * t)) / norm;
+  const speed = (distance * meteorApproachRate * Math.exp(-meteorApproachRate * t)) / norm;
   return {
-    x: start.x + vx * t,
-    y: start.y + vy0 * t + 0.5 * gravity * t * t,
-    vx,
-    vy: vy0 + gravity * t,
+    x: hover.x - ux * distance * remaining,
+    y: hover.y - uy * distance * remaining,
+    vx: ux * speed,
+    vy: uy * speed,
   };
 };
 
@@ -175,7 +185,7 @@ export const getRankLetter = (rarity) => /** @type {'B' | 'A' | 'S'} */ (rankLet
 /**
  * @typedef {object} TierEffects
  * @property {number} headScale     Meteor head size multiplier.
- * @property {number} trailSamples  Glow blobs drawn along the meteor trail.
+ * @property {number} ribbons       Light ribbons fanning out along the trail beam.
  * @property {number} sparks        Sparks shed by the meteor.
  * @property {boolean} halo         Rainbow ring forming around the meteor before landing.
  * @property {number} skyFlood      Peak opacity of the sky tint as the meteor lands.
@@ -199,7 +209,7 @@ export const getRankLetter = (rarity) => /** @type {'B' | 'A' | 'S'} */ (rankLet
 const tierEffects = {
   3: {
     headScale: 1,
-    trailSamples: 22,
+    ribbons: 1,
     sparks: 12,
     halo: false,
     skyFlood: 0,
@@ -215,7 +225,7 @@ const tierEffects = {
   },
   4: {
     headScale: 1.3,
-    trailSamples: 34,
+    ribbons: 3,
     sparks: 36,
     halo: false,
     skyFlood: 0.25,
@@ -231,7 +241,7 @@ const tierEffects = {
   },
   5: {
     headScale: 1.75,
-    trailSamples: 48,
+    ribbons: 5,
     sparks: 80,
     halo: true,
     skyFlood: 0.7,

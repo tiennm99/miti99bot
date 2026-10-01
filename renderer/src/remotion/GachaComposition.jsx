@@ -5,6 +5,7 @@ import {
   gachaTimeline,
   getLabelFontSize,
   getMeteorState,
+  meteorAngleDegrees,
   getRankLetter,
   getRarityPalette,
   getShakeOffset,
@@ -19,9 +20,7 @@ const baseFont =
 const clamp = /** @type {const} */ ({extrapolateLeft: 'clamp', extrapolateRight: 'clamp'});
 
 const skyStars = createStarfield(70, 7);
-/** Seconds between motion-streak samples; the streak is the meteor's recent path. */
-const trailStep = 0.016;
-const sparkLifetime = 0.55;
+const sparkLifetime = 1;
 const meteorDuration = gachaTimeline.meteorEnd - gachaTimeline.meteorStart;
 const starburstSpikes = 10;
 
@@ -35,8 +34,8 @@ const meteorSparks = (() => {
   return Array.from({length: 80}, () => ({
     born: random() * meteorDuration,
     inherit: 0.15 + random() * 0.3,
-    kickX: (random() - 0.5) * 0.5,
-    kickY: (random() - 0.7) * 0.5,
+    kickX: (random() - 0.6) * 0.3,
+    kickY: (random() - 0.85) * 0.35,
     size: 0.006 + random() * 0.012,
   }));
 })();
@@ -112,7 +111,9 @@ export const GachaComposition = (props) => {
   const meteorProgress = Math.min(1, Math.max(0, meteorElapsed / meteorDuration));
   const meteorVisible = seconds >= tl.meteorStart && seconds < tl.flashHoldEnd;
   const head = getMeteorState(meteorElapsed, width, height);
-  const headRadius = height * interpolate(meteorProgress, [0, 1], [0.025, 0.085], clamp) * fx.headScale;
+  const headRadius = height * interpolate(meteorProgress, [0, 0.5], [0.02, 0.045], clamp) * fx.headScale;
+  // The beam reaches back past the frame edge, the way it trails in from off-screen.
+  const trailLength = width * 1.4;
   // Stretch the head along its velocity like motion blur, keeping its area.
   const headSpeed = Math.hypot(head.vx, head.vy);
   const headStretch = 1 + Math.min(0.9, headSpeed / (height * 1.6));
@@ -208,30 +209,49 @@ export const GachaComposition = (props) => {
             />
           ) : null}
 
-          {meteorVisible
-            ? Array.from({length: fx.trailSamples}, (_, index) => {
-                const sampleElapsed = Math.min(meteorElapsed, meteorDuration) - index * trailStep;
-                if (sampleElapsed <= 0) {
-                  return null;
-                }
-                const point = getMeteorState(sampleElapsed, width, height);
-                const fade = 1 - index / fx.trailSamples;
-                const radius = headRadius * (0.25 + 0.75 * fade ** 1.3);
+          {meteorVisible ? (
+            <div
+              style={{
+                height: 0,
+                left: head.x,
+                position: 'absolute',
+                top: head.y,
+                transform: `rotate(${meteorAngleDegrees}deg)`,
+                width: 0,
+              }}
+            >
+              <div
+                style={{
+                  background: `linear-gradient(90deg, transparent 0%, ${withAlpha(palette.deep, 0.35)} 35%, ${withAlpha(palette.glow, 0.75)} 85%, ${palette.core} 100%)`,
+                  clipPath: 'polygon(0% 0%, 100% 42%, 100% 58%, 0% 100%)',
+                  filter: `blur(${Math.max(1, headRadius * 0.3)}px)`,
+                  height: headRadius * 6,
+                  left: -trailLength,
+                  position: 'absolute',
+                  top: -headRadius * 3,
+                  width: trailLength,
+                }}
+              />
+              {Array.from({length: fx.ribbons}, (_, index) => {
+                const spread = fx.ribbons > 1 ? index / (fx.ribbons - 1) - 0.5 : 0;
                 return (
                   <div
-                    key={`trail-${index}`}
+                    key={`ribbon-${index}`}
                     style={{
-                      background: `radial-gradient(circle, ${withAlpha(palette.glow, 0.85 * fade ** 1.4)} 0%, transparent 70%)`,
-                      height: radius * 2,
-                      left: point.x - radius,
+                      background: `linear-gradient(90deg, transparent 0%, ${withAlpha(palette.glow, 0.5)} 55%, ${withAlpha(palette.core, 0.95)} 100%)`,
+                      height: Math.max(1.5, headRadius * 0.16),
+                      left: -trailLength * (0.75 + 0.25 * (1 - Math.abs(spread))),
                       position: 'absolute',
-                      top: point.y - radius,
-                      width: radius * 2,
+                      top: -Math.max(0.75, headRadius * 0.08),
+                      transform: `rotate(${spread * 11}deg)`,
+                      transformOrigin: '100% 50%',
+                      width: trailLength * (0.75 + 0.25 * (1 - Math.abs(spread))),
                     }}
                   />
                 );
-              })
-            : null}
+              })}
+            </div>
+          ) : null}
 
           {meteorVisible
             ? meteorSparks.slice(0, fx.sparks).map((spark, index) => {
@@ -242,7 +262,7 @@ export const GachaComposition = (props) => {
                 const origin = getMeteorState(spark.born, width, height);
                 const life = age / sparkLifetime;
                 const size = spark.size * height * (1 - life) * fx.headScale;
-                const sparkGravity = height * 0.9;
+                const sparkGravity = height * 0.25;
                 const x = origin.x + (origin.vx * spark.inherit + spark.kickX * height) * age;
                 const y =
                   origin.y + (origin.vy * spark.inherit + spark.kickY * height) * age + 0.5 * sparkGravity * age * age;
@@ -296,29 +316,27 @@ export const GachaComposition = (props) => {
                   width: headRadius * 4,
                 }}
               />
+              <div
+                style={{
+                  background: `linear-gradient(90deg, transparent, ${withAlpha(palette.core, 0.95)}, transparent)`,
+                  height: Math.max(2, headRadius * 0.14),
+                  left: head.x - headRadius * 4 * fx.headScale,
+                  position: 'absolute',
+                  top: head.y - Math.max(1, headRadius * 0.07),
+                  width: headRadius * 8 * fx.headScale,
+                }}
+              />
               {props.rarity >= 4 ? (
-                <>
-                  <div
-                    style={{
-                      background: `linear-gradient(90deg, transparent, ${withAlpha(palette.core, 0.9)}, transparent)`,
-                      height: Math.max(2, headRadius * 0.12),
-                      left: head.x - headRadius * (props.rarity === 5 ? 6 : 3.5),
-                      position: 'absolute',
-                      top: head.y - Math.max(1, headRadius * 0.06),
-                      width: headRadius * (props.rarity === 5 ? 12 : 7),
-                    }}
-                  />
-                  <div
-                    style={{
-                      background: `linear-gradient(180deg, transparent, ${withAlpha(palette.core, 0.9)}, transparent)`,
-                      height: headRadius * (props.rarity === 5 ? 8 : 4.5),
-                      left: head.x - Math.max(1, headRadius * 0.06),
-                      position: 'absolute',
-                      top: head.y - headRadius * (props.rarity === 5 ? 4 : 2.25),
-                      width: Math.max(2, headRadius * 0.12),
-                    }}
-                  />
-                </>
+                <div
+                  style={{
+                    background: `linear-gradient(180deg, transparent, ${withAlpha(palette.core, 0.9)}, transparent)`,
+                    height: headRadius * 2.5 * fx.headScale,
+                    left: head.x - Math.max(1, headRadius * 0.06),
+                    position: 'absolute',
+                    top: head.y - headRadius * 1.25 * fx.headScale,
+                    width: Math.max(2, headRadius * 0.12),
+                  }}
+                />
               ) : null}
             </>
           ) : null}

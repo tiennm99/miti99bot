@@ -5,6 +5,7 @@ import {
   gachaTotalSeconds,
   getLabelFontSize,
   getMeteorState,
+  meteorAngleDegrees,
   getRankLetter,
   getRarityPalette,
   getShakeOffset,
@@ -38,40 +39,43 @@ describe('gacha timeline', () => {
     expect(new Set(glows).size).toBe(3);
   });
 
-  test('meteor follows a ballistic arc from off-screen upper right to the impact point', () => {
+  test('meteor glides in from off-screen upper left and comes to hover', () => {
     const duration = gachaTimeline.meteorEnd - gachaTimeline.meteorStart;
     const start = getMeteorState(0, 640, 360);
     const end = getMeteorState(duration, 640, 360);
-    expect(start.x).toBeGreaterThan(640);
-    expect(start.vy).toBeLessThan(0);
-    expect(end.x).toBeCloseTo(640 * 0.4);
-    expect(end.y).toBeCloseTo(360 * 0.72);
+    expect(start.x).toBeLessThan(0);
+    expect(end.x).toBeCloseTo(640 * 0.55);
+    expect(end.y).toBeCloseTo(360 * 0.55);
     expect(getMeteorState(duration + 1, 640, 360)).toEqual(end);
     expect(getMeteorState(-1, 640, 360)).toEqual(start);
   });
 
-  test('meteor keeps horizontal speed and gains vertical speed at a constant rate', () => {
-    const step = 0.2;
-    const samples = [0, 1, 2, 3, 4, 5].map((index) => getMeteorState(index * step, 640, 360));
-    for (const sample of samples) {
-      expect(sample.vx).toBeCloseTo(samples[0]?.vx ?? NaN);
-      expect(sample.vx).toBeLessThan(0);
-    }
-    const gravity = ((samples[1]?.vy ?? 0) - (samples[0]?.vy ?? 0)) / step;
-    expect(gravity).toBeGreaterThan(0);
-    for (let index = 1; index < samples.length; index += 1) {
-      expect(((samples[index]?.vy ?? 0) - (samples[index - 1]?.vy ?? 0)) / step).toBeCloseTo(gravity);
+  test('meteor moves along a straight line at the measured angle', () => {
+    const duration = gachaTimeline.meteorEnd - gachaTimeline.meteorStart;
+    const start = getMeteorState(0, 640, 360);
+    for (const t of [0.2, 0.5, 1, duration]) {
+      const point = getMeteorState(t, 640, 360);
+      const degrees = (Math.atan2(point.y - start.y, point.x - start.x) * 180) / Math.PI;
+      expect(degrees).toBeCloseTo(meteorAngleDegrees);
     }
   });
 
-  test('meteor bends from a slight climb into a steep dive', () => {
+  test('meteor sweeps in fast and decelerates exponentially', () => {
     const duration = gachaTimeline.meteorEnd - gachaTimeline.meteorStart;
-    const early = getMeteorState(0, 640, 360);
-    const late = getMeteorState(duration, 640, 360);
-    const climbDegrees = (Math.atan2(-early.vy, Math.abs(early.vx)) * 180) / Math.PI;
-    const diveDegrees = (Math.atan2(late.vy, Math.abs(late.vx)) * 180) / Math.PI;
-    expect(climbDegrees).toBeGreaterThan(10);
-    expect(diveDegrees).toBeGreaterThan(45);
+    const start = getMeteorState(0, 640, 360);
+    const end = getMeteorState(duration, 640, 360);
+    const half = getMeteorState(0.5, 640, 360);
+    const covered = (half.x - start.x) / (end.x - start.x);
+    expect(covered).toBeGreaterThan(0.85);
+    expect(covered).toBeLessThan(0.9);
+    const speeds = [0, 0.25, 0.5, 1, 2].map((t) => {
+      const state = getMeteorState(t, 640, 360);
+      return Math.hypot(state.vx, state.vy);
+    });
+    for (let index = 1; index < speeds.length; index += 1) {
+      expect(speeds[index]).toBeLessThan(speeds[index - 1] ?? 0);
+    }
+    expect((speeds[0] ?? 0) / (speeds.at(-1) ?? 1)).toBeGreaterThan(1000);
   });
 
   test('starfield is deterministic per seed', () => {
@@ -91,7 +95,7 @@ describe('gacha timeline', () => {
     const [three, four, five] = [3, 4, 5].map((rarity) => getTierEffects(/** @type {3 | 4 | 5} */ (rarity)));
     for (const key of /** @type {const} */ ([
       'headScale',
-      'trailSamples',
+      'ribbons',
       'sparks',
       'shockwaves',
       'raysOpacity',
