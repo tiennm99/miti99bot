@@ -1,7 +1,7 @@
 // Package random groups the commands that pick one option at random: /random
 // (plain text pick), /wheelofnames (wheel GIF when a renderer is configured),
-// /gacha (Genshin-style wish MP4), and the unlisted /gachabeta (toon-shaded
-// beta wish). The animated commands share the optional wheelofnames renderer
+// /gacha (Genshin-style wish MP4), and the unlisted /gachabeta (beta version
+// of the gacha wish). The animated commands share the optional wheelofnames renderer
 // and fall back to a text reply without it.
 package random
 

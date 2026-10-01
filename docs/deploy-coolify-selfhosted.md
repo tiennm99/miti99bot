@@ -93,10 +93,9 @@ option is equally likely, as with `/random`; the rarity only sets what the
 animation and reply show. Options are 5★ by default; prefix `4*` or `3*` to
 lower one, e.g. `/gacha Pizza, 4* Pho, 3* Rice`.
 
-The unlisted `/gachabeta` takes the same input and renders the 8-second beta
-style from `.../api/gachabeta` on the same service (a toon-shaded sky, a comet
-bursting through a cloud, and an `S`/`SS`/`SSS` rank for 3★/4★/5★), with the
-same text fallback.
+The unlisted `/gachabeta` takes the same input and renders the beta version
+of the wish from `.../api/gachabeta` on the same service, with the same text
+fallback.
 
 ## 1. MongoDB Atlas (M0)
 

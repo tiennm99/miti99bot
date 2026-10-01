@@ -65,11 +65,11 @@ func gachaCommand() modules.Command {
 		gachaUsage, gachaStyleWish)
 }
 
-// gachaBetaCommand trials the toon-shaded beta wish. It is unlisted: anyone
-// can run it, but it stays out of the command menu and /help.
+// gachaBetaCommand trials the beta version of the wish animation. It is
+// unlisted: anyone can run it, but it stays out of the command menu and /help.
 func gachaBetaCommand() modules.Command {
 	return newGachaCommand("gachabeta", modules.VisibilityUnlisted,
-		"Beta wish: toon sky, comet through a cloud, S/SS/SSS rank; 5* by default, prefix 4* or 3*",
+		"Gacha (beta version); 5* by default, prefix 4* or 3*",
 		gachaBetaUsage, gachaStyleBeta)
 }
 
