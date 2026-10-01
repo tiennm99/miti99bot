@@ -5,7 +5,6 @@ import {bakeCloudLayer} from './gacha-beta-paint.js';
 import {
   createShards,
   gachaBetaTimeline,
-  getBetaRank,
   getBurstState,
   getFlash,
   getHaloState,
@@ -19,7 +18,14 @@ import {
   progress,
   volleyComets,
 } from './gacha-beta-scene.js';
-import {createRandom, createStarfield, getRarityPalette, getTwinkle, starColor} from './gacha-timeline.js';
+import {
+  createRandom,
+  createStarfield,
+  getRankLetter,
+  getRarityPalette,
+  getTwinkle,
+  starColor,
+} from './gacha-timeline.js';
 
 const sansFont =
   'Quicksand, Inter, "Noto Sans", "Noto Sans Vietnamese", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
@@ -149,7 +155,15 @@ const createBetaLayout = (seed, width, height) => {
 };
 
 /** @typedef {ReturnType<typeof createBetaLayout>} BetaLayout */
-/** @typedef {{seconds: number, width: number, height: number, layout: BetaLayout, palette: import('./gacha-timeline.js').RarityPalette}} ShotProps */
+/**
+ * @typedef {object} ShotProps
+ * @property {number} seconds
+ * @property {number} width
+ * @property {number} height
+ * @property {BetaLayout} layout
+ * @property {import('./gacha-timeline.js').RarityPalette} palette
+ * @property {'B' | 'A' | 'S'} rank  Rank for the request's rarity, as on /api/gacha.
+ */
 
 /**
  * Four-point star glint with a soft core, used for meteor heads.
@@ -611,9 +625,9 @@ const VolleyShot = ({seconds, width, height, layout}) => {
  * The rank emblem: a faceted rhombus crystal around the rank letters. Drawn
  * solid black for the silhouette and in the rarity colours on the card.
  *
- * @param {{size: number, silhouette: boolean, palette: import('./gacha-timeline.js').RarityPalette}} props
+ * @param {{size: number, silhouette: boolean, palette: import('./gacha-timeline.js').RarityPalette, rank: string}} props
  */
-const Emblem = ({size, silhouette, palette}) => {
+const Emblem = ({size, silhouette, palette, rank}) => {
   const fill = silhouette ? '#050305' : `linear-gradient(135deg, #ffffff 0%, ${palette.emblem} 100%)`;
   return (
     <div style={{height: size, position: 'relative', width: size}}>
@@ -651,14 +665,14 @@ const Emblem = ({size, silhouette, palette}) => {
           textShadow: silhouette ? undefined : `0 0 ${size * 0.06}px ${palette.glow}`,
         }}
       >
-        {getBetaRank()}
+        {rank}
       </div>
     </div>
   );
 };
 
 /** @param {ShotProps} props */
-const SilhouetteShot = ({seconds, width, height, layout, palette}) => {
+const SilhouetteShot = ({seconds, width, height, layout, palette, rank}) => {
   const tl = gachaBetaTimeline;
   const t = progress(seconds, tl.volleyEnd, tl.silhouetteEnd);
   const cx = width / 2;
@@ -741,16 +755,16 @@ const SilhouetteShot = ({seconds, width, height, layout, palette}) => {
           top: cy - emblem / 2,
         }}
       >
-        <Emblem palette={palette} silhouette size={emblem} />
+        <Emblem palette={palette} rank={rank} silhouette size={emblem} />
       </div>
     </AbsoluteFill>
   );
 };
 
 /**
- * @param {{seconds: number, width: number, height: number, layout: BetaLayout, palette: import('./gacha-timeline.js').RarityPalette, label: string}} props
+ * @param {ShotProps & {label: string, rarity: import('./gacha-timeline.js').GachaRarity}} props
  */
-const RevealShot = ({seconds, width, height, layout, palette, label}) => {
+const RevealShot = ({seconds, width, height, layout, palette, rank, label, rarity}) => {
   const tl = gachaBetaTimeline;
   const settle = progress(seconds, tl.silhouetteEnd, gachaBetaTimeline.silhouetteEnd + 2.5);
   const plateIn = interpolate(seconds, [tl.plateIn, tl.plateIn + 0.4], [0, 1], {
@@ -828,7 +842,7 @@ const RevealShot = ({seconds, width, height, layout, palette, label}) => {
             top: height * 0.46 - emblem / 2 + Math.sin(seconds * 1.5) * height * 0.008,
           }}
         >
-          <Emblem palette={palette} silhouette={false} size={emblem} />
+          <Emblem palette={palette} rank={rank} silhouette={false} size={emblem} />
         </div>
       </AbsoluteFill>
       <div
@@ -873,7 +887,7 @@ const RevealShot = ({seconds, width, height, layout, palette, label}) => {
                 textShadow: `0 ${height * 0.004}px ${height * 0.012}px rgba(0,0,0,0.7)`,
               }}
             >
-              {`Rank ${getBetaRank()}`}
+              {`Rank ${rank}`}
             </div>
           </div>
         </div>
@@ -885,7 +899,7 @@ const RevealShot = ({seconds, width, height, layout, palette, label}) => {
             marginTop: height * 0.012,
           }}
         >
-          {getStarRevealTimes().map((time, index) => {
+          {getStarRevealTimes(rarity).map((time, index) => {
             const pop = interpolate(seconds, [time, time + 0.12, time + 0.24], [0, 1.4, 1], clamp);
             return (
               <div
@@ -925,7 +939,7 @@ export const GachaBetaComposition = (props) => {
   const palette = getRarityPalette(props.rarity);
   const shot = getShot(seconds);
   const flash = getFlash(seconds);
-  const shared = {seconds, width, height, layout, palette};
+  const shared = {seconds, width, height, layout, palette, rank: getRankLetter(props.rarity)};
 
   return (
     <AbsoluteFill
@@ -941,7 +955,7 @@ export const GachaBetaComposition = (props) => {
       {shot === 'sky' ? <SkyShot {...shared} /> : null}
       {shot === 'volley' ? <VolleyShot {...shared} /> : null}
       {shot === 'silhouette' ? <SilhouetteShot {...shared} /> : null}
-      {shot === 'reveal' ? <RevealShot {...shared} label={props.label} /> : null}
+      {shot === 'reveal' ? <RevealShot {...shared} label={props.label} rarity={props.rarity} /> : null}
       {flash.opacity > 0 ? <AbsoluteFill style={{background: flash.color, opacity: flash.opacity}} /> : null}
       {flash.opacity > 0 && flash.color !== '#ffffff' && shot === 'sky' ? (
         <AbsoluteFill

@@ -4,7 +4,7 @@
  * pass, a meteor that slows over a sea of clouds inside a rainbow halo and
  * bursts, a red flash, a volley of falling crystal comets joined by a red
  * one, a black silhouette on a red disc that sheds shards, and the splash
- * card with its name plate and six stars. Kept free of React so the
+ * card with its name plate, rank, and stars. Kept free of React so the
  * choreography can be unit tested.
  */
 
@@ -26,8 +26,7 @@ export const gachaBetaTimeline = Object.freeze({
   starStep: 0.14,
 });
 
-/** The beta always reveals six stars and rank SSS. */
-export const betaStarCount = 6;
+/** @typedef {import('./gacha-timeline.js').GachaRarity} GachaRarity */
 
 /** @typedef {'vortex' | 'beam' | 'sky' | 'volley' | 'silhouette' | 'reveal'} BetaShot */
 
@@ -273,12 +272,11 @@ export const getShardOffset = (shard, seconds) => {
 };
 
 /**
- * Seconds at which each reveal star pops in, left to right.
+ * Seconds at which each reveal star pops in, left to right: one star per
+ * rarity level.
  *
+ * @param {GachaRarity} rarity
  * @returns {number[]}
  */
-export const getStarRevealTimes = () =>
-  Array.from({length: betaStarCount}, (_, index) => gachaBetaTimeline.starsStart + index * gachaBetaTimeline.starStep);
-
-/** The beta food wish always reveals SSS; rarity tints the meteor and splash. */
-export const getBetaRank = () => 'SSS';
+export const getStarRevealTimes = (rarity) =>
+  Array.from({length: rarity}, (_, index) => gachaBetaTimeline.starsStart + index * gachaBetaTimeline.starStep);

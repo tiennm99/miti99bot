@@ -77,13 +77,13 @@ gacha game's six-star wish:
 3. Crystal comets fall through the daytime sky while a red star joins them
    and strikes in a white flash.
 4. A black silhouette of the rank emblem sheds shards on a red disc, then the
-   splash card shows the emblem, a name plate with the label and `Rank SSS`,
-   and six stars popping in.
+   splash card shows the emblem, a name plate with the request's `label` and
+   rank, and one star per rarity level popping in.
 
 The caller randomly chooses the food and sends it as `label` (for example,
-`"Bún bò"`). The beta reveal always shows `SSS`; `rarity` tints the meteor
-head and the splash card's emblem (blue 3★, purple 4★, gold 5★). `/api/gacha`
-keeps its existing ranks.
+`"Bún bò"`). As on `/api/gacha`, `rarity` picks the rank (`B` for 3★, `A` for
+4★, `S` for 5★), the star count, and the tint of the meteor head and emblem
+(blue, purple, gold).
 
 Response is a silent H.264 `video/mp4` (Telegram plays it as an animation)
 with `X-Gacha-Rarity` and `X-Render-Duration-Ms` headers. Both routes share the

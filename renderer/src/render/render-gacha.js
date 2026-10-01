@@ -24,5 +24,5 @@ const createGachaRenderer = (compositionId) => (inputProps, options) =>
 
 export const renderGachaVideo = createGachaRenderer('GachaWish');
 
-/** The beta wish: a six-star style wish sequence ending in an SSS splash card. */
+/** The beta wish: a six-star style wish sequence ending in a ranked splash card. */
 export const renderGachaBetaVideo = createGachaRenderer('GachaBetaWish');

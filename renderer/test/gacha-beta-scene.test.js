@@ -1,10 +1,8 @@
 import {describe, expect, test} from 'vitest';
 import {
-  betaStarCount,
   createShards,
   gachaBetaTimeline,
   gachaBetaTotalSeconds,
-  getBetaRank,
   getFlash,
   getHaloState,
   getMeteorHead,
@@ -35,12 +33,13 @@ describe('gacha beta wish scene', () => {
     expect(tl.redStarIn).toBeLessThan(tl.volleyEnd);
   });
 
-  test('the six stars finish popping with time to hold the card', () => {
-    const times = getStarRevealTimes();
-    expect(times).toHaveLength(betaStarCount);
-    expect(betaStarCount).toBe(6);
-    expect(times[0]).toBeGreaterThan(gachaBetaTimeline.plateIn);
-    expect((times.at(-1) ?? Infinity) + 1).toBeLessThan(gachaBetaTotalSeconds);
+  test('one star per rarity level, finishing with time to hold the card', () => {
+    for (const rarity of /** @type {const} */ ([3, 4, 5])) {
+      const times = getStarRevealTimes(rarity);
+      expect(times).toHaveLength(rarity);
+      expect(times[0]).toBeGreaterThan(gachaBetaTimeline.plateIn);
+      expect((times.at(-1) ?? Infinity) + 1).toBeLessThan(gachaBetaTotalSeconds);
+    }
   });
 
   test('flashes open the clip, cover the burst in red, and hand over at each loud cut', () => {
@@ -101,9 +100,5 @@ describe('gacha beta wish scene', () => {
       expect(Math.hypot(end.dx, end.dy)).toBeGreaterThanOrEqual(Math.hypot(mid.dx, mid.dy));
       expect(Math.hypot(end.dx, end.dy)).toBeCloseTo(shard.reach);
     }
-  });
-
-  test('beta food reveal displays SSS', () => {
-    expect(getBetaRank()).toBe('SSS');
   });
 });
