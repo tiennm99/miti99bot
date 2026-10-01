@@ -55,13 +55,22 @@ const createFace = () => {
  * library: the rise out of the pack eases exponentially in and out,
  * everything after the card clears the pack is stretched so the flip has time
  * for three extra turns, and the flip eases out like a flicked card slowing to
- * a stop while sparkles burst around it.
+ * a stop while sparkles burst around it. The spin lands flat a moment before
+ * the card stops gliding: Chrome redraws text on a slightly tilted card
+ * differently from a flat one, so ending both together made the text hop
+ * after the card looked still.
  */
-const flight = Object.freeze({duration: 1750, clearAt: 900});
+/**
+ * The flight reaches its final pose `settleMs` (of the original 1750ms)
+ * early, skipping a sub-pixel creep: the text drawn on the card's last scaled
+ * frames differs from the text once the card is laid out at rest, so it
+ * visibly hopped when the card landed.
+ */
+const flight = Object.freeze({duration: 1750, clearAt: 900, settleMs: 60});
 /** Exponential ease-in-out, as a CSS timing function. */
 const easeInOutExpo = 'cubic-bezier(.87, 0, .13, 1)';
 const afterClearStretch = 1.65;
-const flip = Object.freeze({startDegrees: 180 + 3 * 360, easing: 'cubic-bezier(.3, .4, .25, 1)'});
+const flip = Object.freeze({startDegrees: 180 + 3 * 360, easing: 'cubic-bezier(.3, .4, .25, 1)', flatAt: 0.8});
 
 /**
  * Maps a time in the original flight to the stretched one.
@@ -148,8 +157,10 @@ Element.prototype.animate = function (keyframes, options) {
     const [start] = keyframes;
     const eased =
       start && cleared > 1 ? [{...start, easing: easeInOutExpo}, ...keyframes.slice(cleared - 1)] : keyframes;
+    const rest = eased.at(-1);
     const stretched = eased.map((frame) => ({
       ...frame,
+      ...(rest && at(frame) >= flight.duration - flight.settleMs ? {transform: rest.transform} : {}),
       offset: stretch(at(frame)) / total,
     }));
     return animate.call(this, stretched, {...options, duration: total});
@@ -167,11 +178,12 @@ Element.prototype.animate = function (keyframes, options) {
     if (this.parentElement) {
       burstSparkles(this.parentElement, flight.clearAt, duration);
     }
-    return animate.call(this, [{transform: `rotateY(${flip.startDegrees}deg)`}, keyframes[1] ?? {}], {
-      ...options,
-      duration,
-      easing: flip.easing,
-    });
+    const flat = keyframes[1] ?? {};
+    return animate.call(
+      this,
+      [{transform: `rotateY(${flip.startDegrees}deg)`, easing: flip.easing}, {...flat, offset: flip.flatAt}, flat],
+      {...options, duration, easing: 'linear'},
+    );
   }
   return animate.call(this, keyframes, options);
 };

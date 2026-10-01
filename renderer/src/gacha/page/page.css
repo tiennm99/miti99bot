@@ -19,8 +19,15 @@ body {
   justify-content: center;
 }
 
+/*
+ * Whole-pixel card size. pack-cards flies the card at its rounded layout size
+ * scaled to the real one, then lays it out again when it lands; a fractional
+ * size made the text re-layout and jump once the card had stopped.
+ */
 #stage .recap-deck {
-  width: min(52vh, 78vw);
+  aspect-ratio: auto;
+  height: round(down, calc(min(52vh, 78vw) * 88 / 63), 1px);
+  width: round(down, min(52vh, 78vw), 1px);
 }
 
 #stage .recap-pack-scene {
