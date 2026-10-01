@@ -9,7 +9,7 @@ Atlas via long polling and an in-process cron scheduler.
 |---|---|
 | `util` | `/help`, `/info` (admin), `/stickerid` (owner) |
 | `misc` | `/ping`, `/ping_stats` (admin), `/ff` (admin), `/xlt1`, `/giaxang` (Petrolimex retail fuel prices), `/the_answer` (owner), `/trongtruonghop` + `/tth`, `/trongtruonghopvng` + `/tthvng` disclaimers |
-| `random` | Pick one comma-separated option at random: `/random` (text), `/wheelofnames` (wheel GIF), `/gacha` (card-pack wish MP4; options are 5★ by default, prefix `4*` or `3*`). The animations use the optional wheelofnames renderer |
+| `random` | Pick one comma-separated option at random: `/random` (text), `/wheelofnames` (wheel GIF), `/gacha` (card-pack wish MP4; options are 5★ by default, prefix `4*` or `3*`), `/genshin` (unlisted; the same wish as a Genshin-style meteor). The animations use the optional wheelofnames renderer |
 | `amlich` | Vietnamese lunar calendar: `/amlich` (dương lịch → âm lịch, defaults to today), `/duonglich` (âm lịch → dương lịch, `nhuan` flag for leap months); dates accept `d`, `d/m`, or `d/m/yyyy` — missing parts fill from today in the input's calendar. Years 1800–2199 only |
 | `wordle` | Daily Wordle game: `/wordle [word]`, `/wordle_new`, `/wordle_giveup`, `/wordle_stats` |
 | `loldle` | League-of-Legends "guess the champion": `/loldle [champion]`, `/loldle_giveup`, `/loldle_stats`, `/loldle_setmax` (owner) |

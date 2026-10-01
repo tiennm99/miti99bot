@@ -93,6 +93,10 @@ option is equally likely, as with `/random`; the rarity only sets what the
 animation and reply show. Options are 5★ by default; prefix `4*` or `3*` to
 lower one, e.g. `/gacha Pizza, 4* Pho, 3* Rice`.
 
+The unlisted `/genshin` takes the same input and renders the Genshin-style
+meteor wish from `.../api/genshin` on the same service as a 7-second `640x360`
+MP4, with the same text fallback.
+
 ## 1. MongoDB Atlas (M0)
 
 1. Create a free **M0** cluster (512 MB — ample for the tiny paper-trading KV).
