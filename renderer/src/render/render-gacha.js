@@ -276,6 +276,11 @@ const captureFrames = async (cdp, sessionId, request, dir, guard) => {
     } else if (pressed) {
       mouse({type: 'mouseReleased', button: 'left', clickCount: 1});
       pressed = false;
+      // Park the pointer in the corner, off the card. Left where the drag ended,
+      // it sits over the card once the card lands, and pack-cards tilts a
+      // hovered card toward the pointer, nudging the face after the spin stops.
+      pointer = {x: 0, y: 0};
+      mouse({type: 'mouseMoved'});
     }
     // Input is acknowledged only once a frame consumes it, so draw before
     // awaiting it. BeginFrame omits the screenshot when nothing changed.
