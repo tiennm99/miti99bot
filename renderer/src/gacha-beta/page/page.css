@@ -48,9 +48,66 @@ body {
   text-align: center;
 }
 
+/*
+ * Polychrome: a rainbow band pattern glazed over the card under the print,
+ * sliding diagonally so the colours shift. Only a transform animates, which
+ * the compositor moves without repainting the foil each frame.
+ */
+.wish-polychrome {
+  border-radius: inherit;
+  inset: 0;
+  mix-blend-mode: screen;
+  opacity: var(--wish-polychrome);
+  overflow: hidden;
+  pointer-events: none;
+  position: absolute;
+}
+
+.wish-polychrome::before {
+  animation: wish-polychrome 2.4s ease-in-out infinite alternate;
+  background: repeating-linear-gradient(
+    125deg,
+    #ff5f9e 0%,
+    #ffb347 6%,
+    #fff275 12%,
+    #6dffb0 18%,
+    #5fd4ff 24%,
+    #9a7bff 30%,
+    #ff5f9e 36%
+  );
+  content: '';
+  height: 300%;
+  left: -100%;
+  position: absolute;
+  top: -100%;
+  width: 300%;
+}
+
+/* The band overhangs the card by a third of its size on each side, so it may slide at most that far. */
+@keyframes wish-polychrome {
+  to {
+    transform: translate(30%, 30%);
+  }
+}
+
+.wish-card > :not(.wish-polychrome) {
+  position: relative;
+}
+
+/*
+ * The spectrum foil sets --accent inline on the card to its own colour; the
+ * print inside keeps the rarity colour.
+ */
+.wish-card > * {
+  --accent: var(--wish-accent);
+}
+
 .wish-rank {
   color: var(--accent);
-  font: italic 700 13vh/1.1 'Noto Serif', Georgia, serif;
+  font:
+    italic 700 13vh/1.1 'Noto Serif',
+    Georgia,
+    serif;
 }
 
 .wish-label {
