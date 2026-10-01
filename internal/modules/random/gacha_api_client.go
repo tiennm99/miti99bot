@@ -16,15 +16,19 @@ const (
 )
 
 // gachaStyle is one wish animation the renderer serves: its path next to
-// /api/gif and the clip length in seconds.
+// /api/gif, the clip length in seconds, and the frame size it renders for a
+// gachaRemoteWidth request.
 type gachaStyle struct {
 	Path     string
 	Duration int
+	Width    int
+	Height   int
 }
 
 var (
-	gachaStyleWish = gachaStyle{Path: "gacha", Duration: 7}
-	gachaStyleBeta = gachaStyle{Path: "gachabeta", Duration: 6}
+	gachaStyleWish = gachaStyle{Path: "gacha", Duration: 7, Width: gachaRemoteWidth, Height: gachaRemoteHeight}
+	// The beta wish is portrait: the requested width is its long edge.
+	gachaStyleBeta = gachaStyle{Path: "gachabeta", Duration: 6, Width: gachaRemoteHeight, Height: gachaRemoteWidth}
 )
 
 type gachaAPIRequest struct {
@@ -87,7 +91,7 @@ func renderGachaAnimation(ctx context.Context, style gachaStyle, label string, r
 	return wheelAnimation{
 		Data:     data,
 		Duration: style.Duration,
-		Width:    gachaRemoteWidth,
-		Height:   gachaRemoteHeight,
+		Width:    style.Width,
+		Height:   style.Height,
 	}, nil
 }

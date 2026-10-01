@@ -208,8 +208,10 @@ func TestGachaBeta_UsesBetaRendererAndAnyoneCanRunIt(t *testing.T) {
 	if animation == nil {
 		t.Fatalf("calls = %+v, want a sendAnimation", rb.Sent())
 	}
-	if got := animation.Form["duration"]; got != "6" {
-		t.Fatalf("duration = %q, want 6", got)
+	for field, want := range map[string]string{"duration": "6", "width": "360", "height": "640"} {
+		if got := animation.Form[field]; got != want {
+			t.Fatalf("%s = %q, want %s", field, got, want)
+		}
 	}
 }
 

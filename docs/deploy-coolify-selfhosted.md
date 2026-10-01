@@ -94,8 +94,8 @@ animation and reply show. Options are 5★ by default; prefix `4*` or `3*` to
 lower one, e.g. `/gacha Pizza, 4* Pho, 3* Rice`.
 
 The unlisted `/gachabeta` takes the same input and renders the beta version
-of the wish from `.../api/gachabeta` on the same service, with the same text
-fallback.
+of the wish from `.../api/gachabeta` on the same service as a `360x640`
+portrait MP4, with the same text fallback.
 
 ## 1. MongoDB Atlas (M0)
 
