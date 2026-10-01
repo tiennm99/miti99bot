@@ -47,7 +47,7 @@ The risks, roughly in order of severity:
   clip length, or renders would have to run with concurrency 1.
 - **Rendering speed.** The server has no GPU. WebGPU will fall back to WebGL2
   on SwiftShader, which is likely several times slower than our CSS frames.
-  The current beta already takes about 15s at 854px and 30fps against the
+  The gacha wish at the time already took about 15s at 854px and 30fps against the
   15s timeout.
 - **Maturity.** Version 0.1.0, first published this week, pinned to one three
   release (r186), and the API can still change.
@@ -60,7 +60,7 @@ The risks, roughly in order of severity:
 1. **Prototype one shot with rollshade.** Render the meteor and impact shot in
    a separate composition, measure the render time on this server, and check
    frame determinism before committing to a rewrite. About one session of
-   work, with no changes to `/api/gachabeta` until it proves out.
+   work, with no changes to `/api/gacha` until it proves out.
 2. **Keep our own code and borrow techniques.** Port ideas such as rollshade's
    seeded variations, bloom-like layering, and impact timing into the existing
    CSS and canvas renderer. No new dependencies, and no render-time risk.

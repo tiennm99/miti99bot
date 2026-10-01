@@ -1,19 +1,19 @@
 ---
-title: Open-source web gacha projects as a code source for /api/gachabeta
+title: Open-source web gacha projects as a code source for /api/gacha
 date: 2026-10-01 16:56 (Asia/Saigon)
 ---
 
-# Open-source web gacha projects as a code source for /api/gachabeta
+# Open-source web gacha projects as a code source for /api/gacha
 
 ## Answer
 
-No candidate offers reusable code that would make the beta look more like the
+No candidate offers reusable code that would make the gacha wish look more like the
 real game. The realistic simulators get their look by playing MP4/WebM clips
 recorded from the commercial games. Their code is often MIT-licensed, but the
 clips belong to the publisher (HoYoverse, Nexon, and others). Mantan21's README
 says so directly: "all assets used for this application belongs to Hoyoverse".
 The projects with their own art (original games) have simple pixel or HTML
-reveals that are weaker than the current beta. Copying either kind of code
+reveals that are weaker than the current gacha wish. Copying either kind of code
 would give us one of two things: a `<video>` player that needs copyrighted
 footage, or an animation worse than what we already render.
 

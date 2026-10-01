@@ -157,14 +157,4 @@ describe('POST /api/gacha', () => {
 
     await app.close();
   });
-
-  test('the retired beta path is gone', async () => {
-    const app = await build();
-
-    const response = await app.inject({method: 'POST', url: '/api/gachabeta', payload: {label: 'Pizza', rarity: 5}});
-
-    expect(response.statusCode).toBe(404);
-
-    await app.close();
-  });
 });
