@@ -52,9 +52,10 @@ body {
  * Polychrome engraving: the tooled lines (pack-cards' rarity-epic-contour,
  * rarity-legendary, and rarity-legendary-facets textures) are filled with a
  * fixed rainbow instead of the metallic glint, so the colours hold still.
+ * Scoped to the card, not #stage: pack-cards flies the card in an overlay on
+ * <body> and only moves it back into the stage once it lands.
  */
-#stage
-  .recap-card.recap-collectible:is([data-effect='engraved'], [data-effect='engraved-lettering'])
+.wish-card.recap-card.recap-collectible:is([data-effect='engraved'], [data-effect='engraved-lettering'])
   .recap-effect-texture::before {
   background: linear-gradient(
     125deg,
