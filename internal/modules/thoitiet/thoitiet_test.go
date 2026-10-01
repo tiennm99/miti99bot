@@ -15,7 +15,17 @@ import (
 
 // forecastFixture mirrors a live Open-Meteo response for Ho Chi Minh City.
 const forecastFixture = `{
-	"current":{"temperature_2m":29.0,"apparent_temperature":35.7,"relative_humidity_2m":78,"weather_code":3,"wind_speed_10m":3.2},
+	"current":{"time":"2026-10-01T10:30","temperature_2m":29.0,"apparent_temperature":35.7,"relative_humidity_2m":78,"weather_code":3,"wind_speed_10m":3.2},
+	"hourly":{
+		"time":["2026-10-01T10:00","2026-10-01T11:00","2026-10-01T12:00","2026-10-01T13:00","2026-10-01T14:00","2026-10-01T15:00","2026-10-01T16:00"],
+		"temperature_2m":[30.4,31.4,32.1,32.1,32.2,32.7,31.9],
+		"apparent_temperature":[38.1,40.2,41.3,40.9,40.2,38.2,36.6],
+		"weather_code":[3,3,3,3,51,1,2],
+		"precipitation_probability":[2,2,4,10,23,41,55],
+		"precipitation":[0.00,0.00,0.00,0.00,0.10,0.00,0.00],
+		"relative_humidity_2m":[73,71,68,68,64,57,60],
+		"wind_speed_10m":[3.0,2.4,1.6,1.1,1.4,2.8,5.7]
+	},
 	"daily":{
 		"time":["2026-10-01","2026-10-02","2026-10-03","2026-10-04","2026-10-05","2026-10-06","2026-10-07"],
 		"weather_code":[80,80,81,95,95,95,53],
@@ -123,7 +133,7 @@ func TestToday_DefaultsToHCMWithoutGeocoding(t *testing.T) {
 		"Khả năng mưa 70% (5,3 mm), UV 8,9\n" +
 		"Mặt trời mọc 05:42, lặn 17:44\n" +
 		"Nguồn: Open-Meteo"
-	for _, cmd := range []string{"/thoitiethomnay", "/thoitiet", "/thoitiet hcm", "/thoitiet Sài Gòn"} {
+	for _, cmd := range []string{"/thoitiethomnay", "/thoitiethomnay hcm", "/thoitiethomnay Sài Gòn"} {
 		if got := send(rb, cmd); got != want {
 			t.Errorf("%s reply =\n%s\nwant\n%s", cmd, got, want)
 		}
@@ -132,8 +142,43 @@ func TestToday_DefaultsToHCMWithoutGeocoding(t *testing.T) {
 		t.Errorf("geocode called with %v, want no calls", f.geocodeQueries)
 	}
 	if f.lastForecastQ["latitude"] != "10.82302" || f.lastForecastQ["timezone"] != "auto" ||
-		f.lastForecastQ["forecast_days"] != "7" {
+		f.lastForecastQ["forecast_days"] != "7" || f.lastForecastQ["forecast_hours"] != "7" {
 		t.Errorf("forecast query = %v", f.lastForecastQ)
+	}
+}
+
+func TestHourly_ListsNextSixHours(t *testing.T) {
+	f := &fakeOpenMeteo{forecastBody: forecastFixture}
+	stubOpenMeteo(t, f)
+	rb := installThoitiet(t)
+
+	want := "🕐 Thời tiết 6 giờ tới — Thành phố Hồ Chí Minh\n" +
+		"Hiện tại 10:30: 29°C (cảm giác 36°C), Nhiều mây ☁️\n" +
+		"\n11:00 ☁️ Nhiều mây, 31°C (cảm giác 40°C)\n" +
+		"Mưa 2% (0,0 mm), độ ẩm 71%, gió 2,4 km/h\n" +
+		"\n12:00 ☁️ Nhiều mây, 32°C (cảm giác 41°C)\n" +
+		"Mưa 4% (0,0 mm), độ ẩm 68%, gió 1,6 km/h\n" +
+		"\n13:00 ☁️ Nhiều mây, 32°C (cảm giác 41°C)\n" +
+		"Mưa 10% (0,0 mm), độ ẩm 68%, gió 1,1 km/h\n" +
+		"\n14:00 🌦️ Mưa phùn nhẹ, 32°C (cảm giác 40°C)\n" +
+		"Mưa 23% (0,1 mm), độ ẩm 64%, gió 1,4 km/h\n" +
+		"\n15:00 🌤️ Ít mây, 33°C (cảm giác 38°C)\n" +
+		"Mưa 41% (0,0 mm), độ ẩm 57%, gió 2,8 km/h\n" +
+		"\n16:00 ⛅ Mây rải rác, 32°C (cảm giác 37°C)\n" +
+		"Mưa 55% (0,0 mm), độ ẩm 60%, gió 5,7 km/h\n" +
+		"\nNguồn: Open-Meteo"
+	if got := send(rb, "/thoitiet"); got != want {
+		t.Errorf("reply =\n%s\nwant\n%s", got, want)
+	}
+}
+
+func TestHourly_NoUpcomingHoursRepliesError(t *testing.T) {
+	stale := strings.Replace(forecastFixture, `"time":"2026-10-01T10:30"`, `"time":"2026-10-01T16:30"`, 1)
+	stubOpenMeteo(t, &fakeOpenMeteo{forecastBody: stale})
+	rb := installThoitiet(t)
+
+	if got := send(rb, "/thoitiet"); got != fetchErrorText {
+		t.Errorf("reply = %q, want %q", got, fetchErrorText)
 	}
 }
 

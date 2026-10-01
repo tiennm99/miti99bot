@@ -59,6 +59,31 @@ func conditionFor(code int) condition {
 // vnWeekdays are the short Vietnamese weekday names, indexed by time.Weekday.
 var vnWeekdays = [...]string{"CN", "T2", "T3", "T4", "T5", "T6", "T7"}
 
+// hourlyViewHours is how many upcoming hours /thoitiet lists.
+const hourlyViewHours = 6
+
+// formatHourly renders current conditions followed by one block per upcoming
+// hour.
+func formatHourly(p place, f forecast) string {
+	c := f.Current
+	cur := conditionFor(c.WeatherCode)
+	h := f.Hourly
+	idx := f.upcomingHours(hourlyViewHours)
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "🕐 Thời tiết %d giờ tới — %s\n", len(idx), displayName(p))
+	fmt.Fprintf(&sb, "Hiện tại %s: %s (cảm giác %s), %s %s\n", clock(c.Time), temp(c.Temperature),
+		temp(c.ApparentTemperature), cur.label, cur.emoji)
+	for _, i := range idx {
+		hc := conditionFor(h.WeatherCode[i])
+		fmt.Fprintf(&sb, "\n%s %s %s, %s (cảm giác %s)\n", clock(h.Time[i]), hc.emoji, hc.label,
+			temp(h.Temperature[i]), temp(h.ApparentTemperature[i]))
+		fmt.Fprintf(&sb, "Mưa %d%% (%s mm), độ ẩm %d%%, gió %s km/h\n", round(h.PrecipitationProbability[i]),
+			decimal(h.Precipitation[i]), round(h.Humidity[i]), decimal(h.WindSpeed[i]))
+	}
+	sb.WriteString("\n" + sourceLine)
+	return sb.String()
+}
+
 // formatToday renders current conditions plus today's daily summary.
 func formatToday(p place, f forecast) string {
 	c := f.Current

@@ -28,10 +28,15 @@ const (
 	geocodeCount = 10
 	// forecastDays covers today plus the six days after it.
 	forecastDays = 7
+	// forecastHours is the hour in progress plus the six after it; hourly
+	// data starts at the current hour, which the hourly view skips.
+	forecastHours = 7
 
 	currentFields = "temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m"
 	dailyFields   = "weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum," +
 		"precipitation_probability_max,uv_index_max,sunrise,sunset"
+	hourlyFields = "temperature_2m,apparent_temperature,weather_code,precipitation_probability,precipitation," +
+		"relative_humidity_2m,wind_speed_10m"
 )
 
 // place is one geocoding result.
@@ -50,6 +55,7 @@ type geocodeResponse struct {
 
 // currentWeather is the "current" block of a forecast response.
 type currentWeather struct {
+	Time                string  `json:"time"`
 	Temperature         float64 `json:"temperature_2m"`
 	ApparentTemperature float64 `json:"apparent_temperature"`
 	Humidity            float64 `json:"relative_humidity_2m"`
@@ -71,9 +77,45 @@ type dailyWeather struct {
 	Sunset                   []string  `json:"sunset"`
 }
 
+// hourlyWeather holds parallel per-hour arrays in the location's local time,
+// starting at the hour in progress.
+type hourlyWeather struct {
+	Time                     []string  `json:"time"`
+	Temperature              []float64 `json:"temperature_2m"`
+	ApparentTemperature      []float64 `json:"apparent_temperature"`
+	WeatherCode              []int     `json:"weather_code"`
+	PrecipitationProbability []float64 `json:"precipitation_probability"`
+	Precipitation            []float64 `json:"precipitation"`
+	Humidity                 []float64 `json:"relative_humidity_2m"`
+	WindSpeed                []float64 `json:"wind_speed_10m"`
+}
+
 type forecast struct {
 	Current currentWeather `json:"current"`
+	Hourly  hourlyWeather  `json:"hourly"`
 	Daily   dailyWeather   `json:"daily"`
+}
+
+// hours reports how many complete hourly rows the response carries.
+func (h hourlyWeather) hours() int {
+	return min(len(h.Time), len(h.Temperature), len(h.ApparentTemperature), len(h.WeatherCode),
+		len(h.PrecipitationProbability), len(h.Precipitation), len(h.Humidity), len(h.WindSpeed))
+}
+
+// upcomingHours returns the indexes of the hourly rows that start after the
+// current observation time, up to limit. Both use the same local ISO format,
+// so they compare as strings.
+func (f forecast) upcomingHours(limit int) []int {
+	var idx []int
+	for i := range f.Hourly.hours() {
+		if len(idx) == limit {
+			break
+		}
+		if f.Hourly.Time[i] > f.Current.Time {
+			idx = append(idx, i)
+		}
+	}
+	return idx
 }
 
 // days reports how many complete daily rows the response carries, the length
@@ -98,7 +140,8 @@ func geocode(ctx context.Context, client *http.Client, name string) ([]place, er
 	return body.Results, nil
 }
 
-// fetchForecast returns current conditions and a 7-day daily forecast. The
+// fetchForecast returns current conditions, the next hours, and a 7-day daily
+// forecast. The
 // timezone is the location's own, so "today" is its local date.
 func fetchForecast(ctx context.Context, client *http.Client, p place) (forecast, error) {
 	q := url.Values{}
@@ -106,7 +149,9 @@ func fetchForecast(ctx context.Context, client *http.Client, p place) (forecast,
 	q.Set("longitude", strconv.FormatFloat(p.Longitude, 'f', -1, 64))
 	q.Set("timezone", "auto")
 	q.Set("forecast_days", strconv.Itoa(forecastDays))
+	q.Set("forecast_hours", strconv.Itoa(forecastHours))
 	q.Set("current", currentFields)
+	q.Set("hourly", hourlyFields)
 	q.Set("daily", dailyFields)
 	var body forecast
 	if err := getJSON(ctx, client, forecastURL+"?"+q.Encode(), &body); err != nil {
