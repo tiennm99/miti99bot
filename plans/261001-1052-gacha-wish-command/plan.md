@@ -12,7 +12,8 @@ with stars), rendered as a silent MP4 by the existing wheelofnames service.
 
 - Renderer lives in `tiennm99/wheelofnames` as `POST /api/gacha`; no new repo
   or deployment.
-- Rarity is user-tagged: `Pizza*5, Pho*4, Rice` (untagged = 3★).
+- Rarity is a user prefix: `Pizza, 4* Pho, 3* Rice` (unprefixed = 5★;
+  switched from the original `Pizza*5` suffix with a 3★ default on 2026-10-01).
 - Single pull only.
 - Output MP4 (H.264, no audio) sent via `sendAnimation`.
 
@@ -36,5 +37,5 @@ with stars), rendered as a silent MP4 by the existing wheelofnames service.
 ## Acceptance
 
 - Each rarity renders with the correct meteor/glow colour and star count.
-- `/gacha` with no options shows usage; untagged options behave like /random.
+- `/gacha` with no options shows usage; every option is equally likely, like /random.
 - Renderer failure falls back to text; thread IDs forwarded.
