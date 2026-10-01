@@ -138,9 +138,10 @@ func TestCommandDiscovery_AllPublicCommandsHaveSafeMetadata(t *testing.T) {
 		}
 	}
 
-	help := moduleutil.RenderHelp(reg)
-	if utf8.RuneCountInString(help) > telegramMessageMaxRunesForTest {
-		t.Fatalf("/help source is %d characters, exceeds conservative Telegram limit %d", utf8.RuneCountInString(help), telegramMessageMaxRunesForTest)
+	for i, help := range moduleutil.RenderHelpMessages(reg) {
+		if utf8.RuneCountInString(help) > telegramMessageMaxRunesForTest {
+			t.Fatalf("/help message %d source is %d characters, exceeds conservative Telegram limit %d", i+1, utf8.RuneCountInString(help), telegramMessageMaxRunesForTest)
+		}
 	}
 }
 

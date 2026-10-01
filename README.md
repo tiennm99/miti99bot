@@ -40,8 +40,10 @@ description:
 <quantity> <ticker>. Buy VN stock at market price.
 ```
 
-`/help` combines the full command syntax and summary on one line. Neither
-discovery surface includes example invocations.
+`/help` combines the full command syntax and summary on one line. When the
+list exceeds Telegram's 4096-character message limit, `/help` sends it as
+several messages, breaking only between modules. Neither discovery surface
+includes example invocations.
 
 Future commands must follow the
 [command parameter conventions](docs/command-parameter-conventions.md). Keep

@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
@@ -159,5 +160,53 @@ func TestRenderHelp_NilRegistryReturnsFooterOnly(t *testing.T) {
 	}
 	if !strings.Contains(out, "github.com/tiennm99/miti99bot") {
 		t.Errorf("footer missing; got:\n%s", out)
+	}
+}
+
+func TestRenderHelpMessages_SplitsBetweenModulesUnderTelegramLimit(t *testing.T) {
+	factories := map[string]modules.Factory{}
+	var order []string
+	for i := range 12 {
+		name := "mod" + string(rune('a'+i))
+		var cmds []modules.Command
+		for j := range 10 {
+			cmds = append(cmds, modules.Command{
+				Name:        name + "_" + string(rune('a'+j)),
+				Visibility:  modules.VisibilityPublic,
+				Description: strings.Repeat("long description ", 2),
+				Handler:     helpTestNoop,
+			})
+		}
+		factories[name] = fakeFactory(name, cmds)
+		order = append(order, name)
+	}
+	reg, err := modules.Build(order, factories, storage.NewMemoryProvider(), modules.BuildOptions{})
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	messages := util.RenderHelpMessages(reg)
+	if len(messages) < 2 {
+		t.Fatalf("messages = %d, want the help split into several", len(messages))
+	}
+	for i, m := range messages {
+		if n := utf8.RuneCountInString(m); n > 4096 {
+			t.Errorf("message %d is %d runes, over 4096", i+1, n)
+		}
+		if !strings.HasPrefix(m, "<b>") {
+			t.Errorf("message %d does not start at a module section: %q", i+1, m[:min(len(m), 40)])
+		}
+		if hasFooter := strings.Contains(m, "starring the repo"); hasFooter != (i == len(messages)-1) {
+			t.Errorf("message %d footer present = %v", i+1, hasFooter)
+		}
+	}
+	if got := strings.Join(messages, "\n\n"); got != util.RenderHelp(reg) {
+		t.Error("joined messages differ from RenderHelp")
+	}
+}
+
+func TestRenderHelpMessages_SmallHelpIsOneMessage(t *testing.T) {
+	if got := util.RenderHelpMessages(nil); len(got) != 1 {
+		t.Fatalf("messages = %d, want 1", len(got))
 	}
 }

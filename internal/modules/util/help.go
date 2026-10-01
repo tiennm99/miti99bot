@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"html"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
@@ -19,17 +20,29 @@ var supportFooter = fmt.Sprintf(
 	repoURL, repoURL,
 )
 
-// RenderHelp produces the body of /help: each module's public commands
-// grouped under a bold module name, followed by the support footer.
-// Modules in MODULES-env order. Modules with no visible commands are omitted.
-// Protected and private commands are hidden; authorization-specific commands
-// stay discoverable only through operator knowledge, not the public help/menu.
+// helpMessageLimit is Telegram's message length cap. Telegram counts text
+// after HTML tags are parsed out, so measuring the HTML source is conservative.
+const helpMessageLimit = 4096
+
+// RenderHelp produces the full body of /help: each module's public commands
+// grouped under a bold module name, followed by the support footer. It is
+// RenderHelpMessages joined back into one string.
 //
 // Exposed (capitalised) so tests can assert on the string without spinning up
 // a bot context.
 func RenderHelp(reg *modules.Registry) string {
+	return strings.Join(RenderHelpMessages(reg), "\n\n")
+}
+
+// RenderHelpMessages renders /help as one or more messages, each within
+// Telegram's length cap. Messages break only between module sections, and the
+// support footer ends the last one.
+// Modules in MODULES-env order. Modules with no visible commands are omitted.
+// Protected and private commands are hidden; authorization-specific commands
+// stay discoverable only through operator knowledge, not the public help/menu.
+func RenderHelpMessages(reg *modules.Registry) []string {
 	if reg == nil {
-		return "no commands registered\n\n" + supportFooter
+		return []string{"no commands registered\n\n" + supportFooter}
 	}
 
 	byModule := make(map[string][]modules.Command, len(reg.Modules))
@@ -53,12 +66,30 @@ func RenderHelp(reg *modules.Registry) string {
 		}
 		sections = append(sections, sb.String())
 	}
-
-	body := "no commands registered"
-	if len(sections) > 0 {
-		body = strings.Join(sections, "\n\n")
+	if len(sections) == 0 {
+		sections = []string{"no commands registered"}
 	}
-	return body + "\n\n" + supportFooter
+	return packHelpSections(append(sections, supportFooter), helpMessageLimit)
+}
+
+// packHelpSections greedily joins sections with blank lines into messages of
+// at most limit runes. A section longer than limit gets a message of its own.
+func packHelpSections(sections []string, limit int) []string {
+	var messages []string
+	current := ""
+	for _, section := range sections {
+		candidate := section
+		if current != "" {
+			candidate = current + "\n\n" + section
+		}
+		if current != "" && utf8.RuneCountInString(candidate) > limit {
+			messages = append(messages, current)
+			current = section
+			continue
+		}
+		current = candidate
+	}
+	return append(messages, current)
 }
 
 // ownerOf finds the module that registered the named command. Linear scan
@@ -85,15 +116,18 @@ func helpCommand(reg *modules.Registry) modules.Command {
 			if update.Message == nil {
 				return nil
 			}
-			text := RenderHelp(reg)
-			_, err := b.SendMessage(ctx, &bot.SendMessageParams{
-				ChatID:             update.Message.Chat.ID,
-				MessageThreadID:    update.Message.MessageThreadID,
-				Text:               text,
-				ParseMode:          models.ParseModeHTML,
-				LinkPreviewOptions: &models.LinkPreviewOptions{IsDisabled: bot.True()},
-			})
-			return err
+			for _, text := range RenderHelpMessages(reg) {
+				if _, err := b.SendMessage(ctx, &bot.SendMessageParams{
+					ChatID:             update.Message.Chat.ID,
+					MessageThreadID:    update.Message.MessageThreadID,
+					Text:               text,
+					ParseMode:          models.ParseModeHTML,
+					LinkPreviewOptions: &models.LinkPreviewOptions{IsDisabled: bot.True()},
+				}); err != nil {
+					return err
+				}
+			}
+			return nil
 		},
 	}
 }
