@@ -11,7 +11,7 @@ const config = {
   renderTimeoutMs: 30000,
 };
 
-const app = await buildServer({config, warmRemotionBundle: true});
+const app = await buildServer({config, warmRenderers: true});
 
 try {
   const response = await app.inject({

@@ -67,23 +67,26 @@ only draws it.
 ### Gacha wish beta
 
 `POST /api/gachabeta` takes the same body and returns the same response as
-`/api/gacha`, rendering a 10.5-second beta style instead, cut like an anime
-gacha game's six-star wish:
+`/api/gacha`, rendering a 6-second beta style instead: a collectible card pack
+from [pack-cards](https://github.com/paubineau/pack-cards) is torn open, and
+its card shows the request's `label`, its rank, and its stars. As on
+`/api/gacha`, `rarity` picks the rank (`B` for 3★, `A` for 4★, `S` for 5★),
+the star count, the card's material (rare, epic, legendary), and the pack's
+colour (blue, purple, gold).
 
-1. The camera dives through a ring of painterly clouds into a swirling eye,
-   then a beam rushes past.
-2. A meteor slows to a stop over a sea of clouds inside a rainbow halo,
-   sheds sparkles, and bursts into a starburst under a red flash.
-3. Crystal comets fall through the daytime sky while a red star joins them
-   and strikes in a white flash.
-4. A black silhouette of the rank emblem sheds shards on a red disc, then the
-   splash card shows the emblem, a name plate with the request's `label` and
-   rank, and one star per rarity level popping in.
+pack-cards animates on the browser clock, so this route does not use Remotion
+compositions. `src/render/render-gacha-beta.js` keeps one headless Chrome per
+server process in `--deterministic-mode`, steps virtual time one frame at a
+time, tears the pack with a scripted drag, captures each frame, and encodes
+them with Remotion's bundled ffmpeg. The page and the package are served from
+disk; the page has no network access. The first render compiles the pack's
+WebGL shaders in software, which takes several seconds, so server start-up
+runs one throwaway wish first.
 
-The caller randomly chooses the food and sends it as `label` (for example,
-`"Bún bò"`). As on `/api/gacha`, `rarity` picks the rank (`B` for 3★, `A` for
-4★, `S` for 5★), the star count, and the tint of the meteor head and emblem
-(blue, purple, gold).
+pack-cards has no npm release, so it is installed from a GitHub tarball pinned
+to a commit. A moving branch URL would change the tarball's checksum and break
+`npm ci` against the lockfile, and the Docker image has no `git` for a git
+dependency.
 
 Response is a silent H.264 `video/mp4` (Telegram plays it as an animation)
 with `X-Gacha-Rarity` and `X-Render-Duration-Ms` headers. Both routes share the

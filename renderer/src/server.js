@@ -2,7 +2,8 @@ import Fastify from 'fastify';
 import {loadConfig} from './config.js';
 import {createRenderSemaphore} from './lib/render-semaphore.js';
 import {getRemotionServeUrl} from './render/remotion-bundle.js';
-import {renderGachaBetaVideo, renderGachaVideo} from './render/render-gacha.js';
+import {closeGachaBetaBrowser, renderGachaBetaVideo, warmGachaBetaBrowser} from './render/render-gacha-beta.js';
+import {renderGachaVideo} from './render/render-gacha.js';
 import {renderWheelGif} from './render/render-gif.js';
 import {registerGachaRoute} from './routes/gacha.js';
 import {registerGifRoute} from './routes/gif.js';
@@ -20,14 +21,15 @@ import {registerHealthRoute} from './routes/health.js';
  * @param {(request: WheelRenderRequest, renderOptions: {timeoutInMilliseconds: number}) => Promise<{buffer: Buffer, durationMs: number, byteLength: number}>} [options.renderGif]
  * @param {(request: GachaRenderRequest, renderOptions: {timeoutInMilliseconds: number}) => Promise<{buffer: Buffer, durationMs: number, byteLength: number}>} [options.renderGacha]
  * @param {(request: GachaRenderRequest, renderOptions: {timeoutInMilliseconds: number}) => Promise<{buffer: Buffer, durationMs: number, byteLength: number}>} [options.renderGachaBeta]
- * @param {boolean} [options.warmRemotionBundle]
+ * @param {boolean} [options.warmRenderers]  Prepare the Remotion bundle and the beta wish browser before serving.
  */
 export const buildServer = async (options = {}) => {
   const config = options.config ?? loadConfig();
-  const warmRemotionBundle = options.warmRemotionBundle ?? process.env.NODE_ENV !== 'test';
+  const warmRenderers = options.warmRenderers ?? process.env.NODE_ENV !== 'test';
 
-  if (warmRemotionBundle) {
+  if (warmRenderers) {
     await getRemotionServeUrl();
+    await warmGachaBetaBrowser();
   }
 
   const app = Fastify({
@@ -59,6 +61,8 @@ export const buildServer = async (options = {}) => {
     renderGacha: options.renderGachaBeta ?? renderGachaBetaVideo,
     semaphore,
   });
+  // The beta wish keeps one headless Chrome alive between renders.
+  app.addHook('onClose', closeGachaBetaBrowser);
 
   return app;
 };

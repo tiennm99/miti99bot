@@ -1,6 +1,7 @@
 import {mkdir, writeFile} from 'node:fs/promises';
 import path from 'node:path';
-import {renderGachaBetaVideo, renderGachaVideo} from '../src/render/render-gacha.js';
+import {closeGachaBetaBrowser, renderGachaBetaVideo} from '../src/render/render-gacha-beta.js';
+import {renderGachaVideo} from '../src/render/render-gacha.js';
 import {renderWheelGif} from '../src/render/render-gif.js';
 
 const smoke = process.argv.includes('--smoke');
@@ -80,4 +81,8 @@ const betaFixture = {
   width: /** @type {const} */ (640),
   seed: 7,
 };
-await save('gachabeta-5-star.mp4', await renderGachaBetaVideo(betaFixture, {timeoutInMilliseconds: 30000}));
+try {
+  await save('gachabeta-5-star.mp4', await renderGachaBetaVideo(betaFixture, {timeoutInMilliseconds: 60000}));
+} finally {
+  await closeGachaBetaBrowser();
+}
