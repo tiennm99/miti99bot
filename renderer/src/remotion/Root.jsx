@@ -38,6 +38,7 @@ const defaultGachaProps = {
   rarity: 5,
   fps: 24,
   width: 640,
+  seed: 7,
 };
 
 /**

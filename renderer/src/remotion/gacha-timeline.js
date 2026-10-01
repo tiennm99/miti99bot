@@ -34,6 +34,9 @@ export const gachaTimeline = Object.freeze({
   starStep: 0.18,
 });
 
+/** Centre of the rank emblem on the reveal, as fractions of the frame. */
+export const emblemCenter = Object.freeze({x: 0.66, y: 0.47});
+
 /** Every rarity reveals its stars in the same gold, as in the source game. */
 export const starColor = '#ffcc33';
 
@@ -51,8 +54,9 @@ const palettes = {
 export const getRarityPalette = (rarity) => palettes[rarity];
 
 /**
- * Point on the meteor's curved fall from the upper right toward the lower
- * left of the frame, as a quadratic Bézier.
+ * Point on the meteor's curved flight from the upper left toward the rank
+ * emblem on the right, as a quadratic Bézier. It lands exactly on the emblem,
+ * so the impact burst becomes the badge reveal.
  *
  * @param {number} progress 0 at launch, 1 at landing; values outside clamp.
  * @param {number} width
@@ -61,9 +65,9 @@ export const getRarityPalette = (rarity) => palettes[rarity];
  */
 export const getMeteorPoint = (progress, width, height) => {
   const t = Math.min(1, Math.max(0, progress));
-  const start = {x: width * 1.08, y: -height * 0.18};
-  const control = {x: width * 0.8, y: height * 0.3};
-  const end = {x: width * 0.42, y: height * 0.6};
+  const start = {x: -width * 0.08, y: -height * 0.18};
+  const control = {x: width * 0.22, y: height * 0.38};
+  const end = {x: width * emblemCenter.x, y: height * emblemCenter.y};
   const u = 1 - t;
   return {
     x: u * u * start.x + 2 * u * t * control.x + t * t * end.x,
@@ -104,6 +108,8 @@ export const createRandom = (seed) => {
  * @property {number} y       Fraction of height.
  * @property {number} radius  Fraction of height.
  * @property {number} phase   Twinkle phase offset in radians.
+ * @property {number} speed   Twinkle speed in radians per second.
+ * @property {boolean} glint  Draws a cross-shaped glint when it flares.
  */
 
 /**
@@ -118,8 +124,21 @@ export const createStarfield = (count, seed) => {
     y: random() * 0.8,
     radius: 0.002 + random() * 0.004,
     phase: random() * Math.PI * 2,
+    speed: 2 + random() * 5,
+    glint: random() < 0.18,
   }));
 };
+
+/**
+ * Twinkle brightness in [0, 1]. Cubing the sine keeps a star dim most of the
+ * time with short bright flares, which reads as twinkling rather than a slow
+ * pulse.
+ *
+ * @param {number} seconds
+ * @param {SkyStar} star
+ * @returns {number}
+ */
+export const getTwinkle = (seconds, star) => (0.5 + 0.5 * Math.sin(seconds * star.speed + star.phase)) ** 3;
 
 /**
  * Font size for the revealed name, shrinking long labels so they fit within
@@ -157,7 +176,7 @@ export const getRankLetter = (rarity) => /** @type {'B' | 'A' | 'S'} */ (rankLet
  * @property {number} headScale     Meteor head size multiplier.
  * @property {number} trailSamples  Glow blobs drawn along the meteor trail.
  * @property {number} sparks        Sparks shed by the meteor.
- * @property {boolean} halo         Rainbow ring forming around the meteor before landing.
+ * @property {boolean} halo         Rainbow sunburst bursting from the meteor before landing.
  * @property {number} skyFlood      Peak opacity of the sky tint as the meteor lands.
  * @property {number} shake         Impact camera shake amplitude, as a fraction of height.
  * @property {number} shockwaves    Rings bursting from the emblem on reveal.

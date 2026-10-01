@@ -1,14 +1,17 @@
+import {useMemo} from 'react';
 import {AbsoluteFill, Easing, interpolate, useCurrentFrame, useVideoConfig} from 'remotion';
 import {
   createRandom,
   createStarfield,
   gachaTimeline,
   getLabelFontSize,
+  emblemCenter,
   getMeteorPoint,
   getRankLetter,
   getRarityPalette,
   getShakeOffset,
   getStarRevealTimes,
+  getTwinkle,
   getTierEffects,
   starColor,
 } from './gacha-timeline.js';
@@ -18,27 +21,46 @@ const baseFont =
 
 const clamp = /** @type {const} */ ({extrapolateLeft: 'clamp', extrapolateRight: 'clamp'});
 
-const skyStars = createStarfield(70, 7);
 const trailSpacing = 0.011;
 const starburstSpikes = 10;
 
 /**
+ * Every decorative particle for one roll. The request seed picks the layout,
+ * so each roll scatters its stars differently while every frame of one
+ * render stays consistent.
+ *
+ * @param {number} seed
+ */
+const createParticles = (seed) => ({
+  skyStars: createStarfield(70, seed),
+  meteorSparks: createMeteorSparks(seed + 1),
+  revealMotes: createRevealMotes(seed + 2),
+  rainSparkles: createRainSparkles(seed + 3),
+});
+
+/**
  * Sparks shed by the meteor. Each is born at a point along the fall and
  * drifts away from it while fading. Tiers draw a prefix of this pool.
+ *
+ * @param {number} seed
  */
-const meteorSparks = (() => {
-  const random = createRandom(11);
+function createMeteorSparks(seed) {
+  const random = createRandom(seed);
   return Array.from({length: 80}, () => ({
     born: random(),
     driftX: (random() - 0.5) * 0.1,
     driftY: (random() - 0.2) * 0.1,
     size: 0.006 + random() * 0.012,
   }));
-})();
+}
 
-/** Motes that float upward behind the revealed item. */
-const revealMotes = (() => {
-  const random = createRandom(23);
+/**
+ * Motes that float upward behind the revealed item.
+ *
+ * @param {number} seed
+ */
+function createRevealMotes(seed) {
+  const random = createRandom(seed);
   return Array.from({length: 56}, () => ({
     x: random(),
     y: random(),
@@ -46,11 +68,15 @@ const revealMotes = (() => {
     size: 0.004 + random() * 0.009,
     phase: random() * Math.PI * 2,
   }));
-})();
+}
 
-/** Sparkles that rain down across the 5★ reveal. */
-const rainSparkles = (() => {
-  const random = createRandom(31);
+/**
+ * Sparkles that rain down across the 5★ reveal.
+ *
+ * @param {number} seed
+ */
+function createRainSparkles(seed) {
+  const random = createRandom(seed);
   return Array.from({length: 40}, () => ({
     x: random(),
     offset: random(),
@@ -58,7 +84,31 @@ const rainSparkles = (() => {
     size: 0.025 + random() * 0.03,
     spin: (random() - 0.5) * 360,
   }));
-})();
+}
+
+const rainbowConic = 'conic-gradient(from 0deg, #ff6b6b, #ffd36b, #8cff9a, #6bd6ff, #b48cff, #ff8cd8, #ff6b6b)';
+
+/** Fades the 5★ rainbow sunburst from a bright core out to its ray tips. */
+const sunburstFade = 'radial-gradient(circle, black 0%, black 18%, rgba(0, 0, 0, 0.6) 40%, transparent 70%)';
+
+/**
+ * Two ray layers turning in opposite directions; each ray takes the rainbow
+ * hue of the angle it points at.
+ */
+const sunburstLayers = [
+  {
+    rays: 16,
+    spin: 40,
+    opacity: 1,
+    mask: 'repeating-conic-gradient(from 0deg, black 0deg 6deg, transparent 6deg 22.5deg)',
+  },
+  {
+    rays: 24,
+    spin: -60,
+    opacity: 0.7,
+    mask: 'repeating-conic-gradient(from 4deg, black 0deg 2deg, transparent 2deg 15deg)',
+  },
+];
 
 /**
  * @param {string} hex
@@ -102,6 +152,7 @@ export const GachaComposition = (props) => {
   const palette = getRarityPalette(props.rarity);
   const fx = getTierEffects(props.rarity);
   const tl = gachaTimeline;
+  const {skyStars, meteorSparks, revealMotes, rainSparkles} = useMemo(() => createParticles(props.seed), [props.seed]);
 
   const meteorProgress = interpolate(seconds, [tl.meteorStart, tl.meteorEnd], [0, 1], {
     ...clamp,
@@ -123,8 +174,8 @@ export const GachaComposition = (props) => {
   const revealed = seconds >= tl.revealStart;
   const shake = getShakeOffset(seconds, tl.revealStart, fx.shake * height);
   const emblemSize = height * 0.52;
-  const emblemX = width * 0.66;
-  const emblemY = height * 0.47;
+  const emblemX = width * emblemCenter.x;
+  const emblemY = height * emblemCenter.y;
   const emblemScale = interpolate(
     seconds,
     [tl.revealStart, tl.revealStart + 0.45, tl.emblemSettled],
@@ -175,21 +226,61 @@ export const GachaComposition = (props) => {
               background: `radial-gradient(ellipse 80% 40% at 50% 100%, ${withAlpha('#9bb4ff', 0.35)} 0%, transparent 70%)`,
             }}
           />
-          {skyStars.map((star, index) => (
-            <div
-              key={`sky-${index}`}
-              style={{
-                background: '#ffffff',
-                borderRadius: '50%',
-                height: star.radius * 2 * height,
-                left: star.x * width,
-                opacity: 0.35 + 0.65 * (0.5 + 0.5 * Math.sin(seconds * 2.4 + star.phase)),
-                position: 'absolute',
-                top: star.y * height,
-                width: star.radius * 2 * height,
-              }}
-            />
-          ))}
+          {skyStars.map((star, index) => {
+            const twinkle = getTwinkle(seconds, star);
+            const size = star.radius * 2 * height * (0.8 + 0.7 * twinkle);
+            const glint = star.glint ? size * 6 * twinkle : 0;
+            return (
+              <div
+                key={`sky-${index}`}
+                style={{
+                  height: 0,
+                  left: star.x * width,
+                  opacity: 0.2 + 0.8 * twinkle,
+                  position: 'absolute',
+                  top: star.y * height,
+                  width: 0,
+                }}
+              >
+                <div
+                  style={{
+                    background: '#ffffff',
+                    borderRadius: '50%',
+                    boxShadow: twinkle > 0.4 ? `0 0 ${size * 2}px rgba(200, 220, 255, ${twinkle})` : undefined,
+                    height: size,
+                    left: -size / 2,
+                    position: 'absolute',
+                    top: -size / 2,
+                    width: size,
+                  }}
+                />
+                {glint > 1 ? (
+                  <>
+                    <div
+                      style={{
+                        background: 'linear-gradient(90deg, transparent, #ffffff, transparent)',
+                        height: 1,
+                        left: -glint / 2,
+                        position: 'absolute',
+                        top: -0.5,
+                        width: glint,
+                      }}
+                    />
+                    <div
+                      style={{
+                        background: 'linear-gradient(180deg, transparent, #ffffff, transparent)',
+                        height: glint,
+                        left: -0.5,
+                        position: 'absolute',
+                        top: -glint / 2,
+                        width: 1,
+                      }}
+                    />
+                  </>
+                ) : null}
+              </div>
+            );
+          })}
 
           {skyFlood > 0 ? (
             <AbsoluteFill
@@ -259,19 +350,33 @@ export const GachaComposition = (props) => {
           {meteorVisible && haloOpacity > 0 ? (
             <div
               style={{
-                background: 'conic-gradient(from 0deg, #ff6b6b, #ffd36b, #8cff9a, #6bd6ff, #b48cff, #ff8cd8, #ff6b6b)',
-                borderRadius: '50%',
-                height: headRadius * 6,
-                left: head.x - headRadius * 3,
-                maskImage: 'radial-gradient(circle, transparent 52%, black 58%, black 64%, transparent 72%)',
-                opacity: haloOpacity * 0.9,
+                height: headRadius * 9,
+                left: head.x - headRadius * 4.5,
+                maskImage: sunburstFade,
+                opacity: haloOpacity,
                 position: 'absolute',
-                top: head.y - headRadius * 3,
-                transform: `rotate(${seconds * 240}deg) scale(${0.7 + 0.3 * haloOpacity})`,
-                WebkitMaskImage: 'radial-gradient(circle, transparent 52%, black 58%, black 64%, transparent 72%)',
-                width: headRadius * 6,
+                top: head.y - headRadius * 4.5,
+                transform: `scale(${0.5 + 0.5 * haloOpacity})`,
+                WebkitMaskImage: sunburstFade,
+                width: headRadius * 9,
               }}
-            />
+            >
+              {sunburstLayers.map((layer) => (
+                <div
+                  key={layer.rays}
+                  style={{
+                    background: rainbowConic,
+                    borderRadius: '50%',
+                    inset: 0,
+                    maskImage: layer.mask,
+                    opacity: layer.opacity,
+                    position: 'absolute',
+                    transform: `rotate(${seconds * layer.spin}deg)`,
+                    WebkitMaskImage: layer.mask,
+                  }}
+                />
+              ))}
+            </div>
           ) : null}
 
           {meteorVisible ? (

@@ -4,12 +4,14 @@ import {
   gachaTimeline,
   gachaTotalSeconds,
   getLabelFontSize,
+  emblemCenter,
   getMeteorPoint,
   getRankLetter,
   getRarityPalette,
   getShakeOffset,
   getStarRevealTimes,
   getTierEffects,
+  getTwinkle,
 } from '../src/remotion/gacha-timeline.js';
 
 describe('gacha timeline', () => {
@@ -38,13 +40,13 @@ describe('gacha timeline', () => {
     expect(new Set(glows).size).toBe(3);
   });
 
-  test('meteor falls from off-screen upper right toward the lower left', () => {
+  test('meteor flies in from off-screen upper left and lands on the rank emblem', () => {
     const start = getMeteorPoint(0, 640, 360);
     const end = getMeteorPoint(1, 640, 360);
-    expect(start.x).toBeGreaterThan(640);
+    expect(start.x).toBeLessThan(0);
     expect(start.y).toBeLessThan(0);
-    expect(end.x).toBeLessThan(start.x);
-    expect(end.y).toBeGreaterThan(start.y);
+    expect(end.x).toBeCloseTo(640 * emblemCenter.x);
+    expect(end.y).toBeCloseTo(360 * emblemCenter.y);
     expect(getMeteorPoint(2, 640, 360)).toEqual(end);
     expect(getMeteorPoint(-1, 640, 360)).toEqual(start);
   });
@@ -52,6 +54,18 @@ describe('gacha timeline', () => {
   test('starfield is deterministic per seed', () => {
     expect(createStarfield(5, 7)).toEqual(createStarfield(5, 7));
     expect(createStarfield(5, 7)).not.toEqual(createStarfield(5, 8));
+  });
+
+  test('stars twinkle with short bright flares', () => {
+    const [star] = createStarfield(1, 3);
+    if (!star) {
+      throw new Error('expected a star');
+    }
+    const samples = Array.from({length: 200}, (_, index) => getTwinkle(index / 50, star));
+    expect(Math.max(...samples)).toBeGreaterThan(0.95);
+    expect(Math.min(...samples)).toBeLessThan(0.05);
+    const bright = samples.filter((value) => value > 0.5).length / samples.length;
+    expect(bright).toBeLessThan(0.4);
   });
 
   test('long labels get smaller text', () => {

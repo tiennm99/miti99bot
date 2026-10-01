@@ -47,7 +47,32 @@ describe('POST /api/gacha', () => {
     expect(response.headers['content-type']).toBe('video/mp4');
     expect(response.headers['x-gacha-rarity']).toBe('5');
     expect(response.rawPayload.subarray(4, 8).toString()).toBe('ftyp');
-    expect(rendered).toEqual({label: 'Pizza', rarity: 5, fps: 24, width: 640});
+    expect(rendered).toMatchObject({label: 'Pizza', rarity: 5, fps: 24, width: 640});
+    expect(Number.isInteger(/** @type {{seed: number}} */ (rendered).seed)).toBe(true);
+
+    await app.close();
+  });
+
+  test('picks a different seed per roll unless one is given', async () => {
+    /** @type {number[]} */
+    const seeds = [];
+    const app = await build(
+      {},
+      {
+        renderGacha: async (request) => {
+          seeds.push(request.seed);
+          return {buffer: mp4, byteLength: mp4.byteLength, durationMs: 9};
+        },
+      },
+    );
+
+    for (let index = 0; index < 3; index += 1) {
+      await app.inject({method: 'POST', url: '/api/gacha', payload: {label: 'Pizza', rarity: 5}});
+    }
+    await app.inject({method: 'POST', url: '/api/gacha', payload: {label: 'Pizza', rarity: 5, seed: 5}});
+
+    expect(new Set(seeds.slice(0, 3)).size).toBeGreaterThan(1);
+    expect(seeds[3]).toBe(5);
 
     await app.close();
   });

@@ -51,15 +51,17 @@ Authorization: Bearer change-me
 ```
 
 Renders a 7-second wish animation in the style of a gacha game: a meteor
-coloured by rarity (blue 3★, purple 4★, gold 5★) falls across a night sky,
-lands in a white flash, and the label is revealed beside a rank emblem (`B`,
+coloured by rarity (blue 3★, purple 4★, gold 5★) flies in from the left across
+a night sky and bursts in a white flash where the rank emblem appears, and the label is revealed beside a rank emblem (`B`,
 `A`, `S`) with its stars popping in. Each tier is louder than the one below:
 4★ adds a bigger meteor, a lens flare, impact shake, and a double shockwave;
-5★ adds a rainbow halo before landing, a gold sky flood, a starburst, counter
+5★ adds a rainbow sunburst before landing, a gold sky flood, a starburst, counter
 rotating rays, falling sparkles, and a sheen across the emblem. The per-tier
 table lives in `src/remotion/gacha-timeline.js`.
 `rarity` is required; `fps` is `24` or `30`; `width` is `640` (360 tall) or
-`854` (480 tall). The caller chooses the result and its rarity — the service
+`854` (480 tall). Optional `seed` (integer, `0` to `2147483647`) lays out the
+twinkling stars and particles; when omitted the service picks a random one, so
+every roll draws a different sky. The caller chooses the result and its rarity — the service
 only draws it.
 
 Response is a silent H.264 `video/mp4` (Telegram plays it as an animation)

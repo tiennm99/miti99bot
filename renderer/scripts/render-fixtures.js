@@ -50,9 +50,9 @@ await mkdir(fixturesDir, {recursive: true});
 
 /** @type {{name: string, request: import('../src/schemas/gacha-request.js').GachaRenderRequest}[]} */
 const gachaFixtures = [
-  {name: 'gacha-5-star', request: {label: 'Pizza', rarity: 5, fps: 24, width: 640}},
-  {name: 'gacha-4-star', request: {label: 'Phở bò tái nạm gầu', rarity: 4, fps: 24, width: 640}},
-  {name: 'gacha-3-star', request: {label: 'Cơm tấm', rarity: 3, fps: 24, width: 854}},
+  {name: 'gacha-5-star', request: {label: 'Pizza', rarity: 5, fps: 24, width: 640, seed: 7}},
+  {name: 'gacha-4-star', request: {label: 'Phở bò tái nạm gầu', rarity: 4, fps: 24, width: 640, seed: 11}},
+  {name: 'gacha-3-star', request: {label: 'Cơm tấm', rarity: 3, fps: 24, width: 854, seed: 23}},
 ];
 
 /**

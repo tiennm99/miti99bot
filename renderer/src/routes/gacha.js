@@ -1,7 +1,8 @@
+import {randomInt} from 'node:crypto';
 import {ZodError} from 'zod';
 import {isAuthorized} from '../lib/bearer-auth.js';
 import {isRenderTimeoutError} from '../lib/render-errors.js';
-import {parseGachaRequest} from '../schemas/gacha-request.js';
+import {maxGachaSeed, parseGachaRequest} from '../schemas/gacha-request.js';
 
 /**
  * @typedef {import('../config.js').AppConfig} AppConfig
@@ -30,7 +31,9 @@ export const registerGachaRoute = async (app, deps) => {
 
     let gachaRequest;
     try {
-      gachaRequest = parseGachaRequest(request.body, {maxOptionChars: deps.config.maxOptionChars});
+      gachaRequest = parseGachaRequest(request.body, {maxOptionChars: deps.config.maxOptionChars}, () =>
+        randomInt(maxGachaSeed),
+      );
     } catch (error) {
       if (error instanceof ZodError) {
         return reply.code(400).send({error: 'invalid_request', issues: error.issues});

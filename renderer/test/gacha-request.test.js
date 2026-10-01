@@ -5,13 +5,17 @@ const limits = {maxOptionChars: 12};
 
 describe('parseGachaRequest', () => {
   test('trims the label and applies defaults', () => {
-    const request = parseGachaRequest({label: ' Pizza ', rarity: 5}, limits);
+    const request = parseGachaRequest({label: ' Pizza ', rarity: 5}, limits, () => 42);
 
-    expect(request).toEqual({label: 'Pizza', rarity: 5, fps: 24, width: 640});
+    expect(request).toEqual({label: 'Pizza', rarity: 5, fps: 24, width: 640, seed: 42});
+  });
+
+  test('keeps a caller-provided seed', () => {
+    expect(parseGachaRequest({label: 'Pizza', rarity: 5, seed: 9}, limits, () => 42).seed).toBe(9);
   });
 
   test('accepts the larger frame and fps', () => {
-    const request = parseGachaRequest({label: 'Pho', rarity: 4, fps: 30, width: 854}, limits);
+    const request = parseGachaRequest({label: 'Pho', rarity: 4, fps: 30, width: 854}, limits, () => 1);
 
     expect(request.fps).toBe(30);
     expect(request.width).toBe(854);
@@ -26,7 +30,9 @@ describe('parseGachaRequest', () => {
     {label: 'Pizza', rarity: 3, width: 512},
     {label: 'Pizza', rarity: 3, fps: 15},
     {label: 'Pizza', rarity: 3, extra: true},
+    {label: 'Pizza', rarity: 3, seed: -1},
+    {label: 'Pizza', rarity: 3, seed: 1.5},
   ])('rejects %o', (input) => {
-    expect(() => parseGachaRequest(input, limits)).toThrow();
+    expect(() => parseGachaRequest(input, limits, () => 0)).toThrow();
   });
 });
