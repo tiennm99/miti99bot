@@ -47,6 +47,31 @@ const createFace = () => {
   return face;
 };
 
+/**
+ * pack-cards reveals the card with a half turn, animating rotateY from 180deg
+ * to 0deg. Starting that one animation further round spins the card more
+ * before it lands face up, without changing the library.
+ */
+const flipStartDegrees = 540;
+const animate = Element.prototype.animate;
+/**
+ * @this {Element}
+ * @param {Keyframe[] | PropertyIndexedKeyframes | null} keyframes
+ * @param {number | KeyframeAnimationOptions} [options]
+ */
+Element.prototype.animate = function (keyframes, options) {
+  const isFlip =
+    Array.isArray(keyframes) &&
+    keyframes.length === 2 &&
+    keyframes[0]?.transform === 'rotateY(180deg)' &&
+    keyframes[1]?.transform === 'rotateY(0deg)';
+  return animate.call(
+    this,
+    isFlip ? [{transform: `rotateY(${flipStartDegrees}deg)`}, keyframes[1] ?? {}] : keyframes,
+    options,
+  );
+};
+
 const view = createPackView(stage, {
   label: 'Gacha',
   artwork: wish.artwork,
