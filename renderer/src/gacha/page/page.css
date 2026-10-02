@@ -132,3 +132,54 @@ body {
 .wish-sparkle::after {
   transform: rotate(90deg);
 }
+
+/* The mirror glint that sweeps across the card once it lands (page.js). */
+.wish-glint-clip {
+  border-radius: inherit;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  position: absolute;
+  z-index: 3;
+}
+
+.wish-glint {
+  background: linear-gradient(
+    135deg,
+    transparent 36%,
+    rgb(255 255 255 / 0.18) 43%,
+    rgb(255 255 255 / 0.85) 49%,
+    #ffffff 50%,
+    rgb(255 255 255 / 0.85) 51%,
+    rgb(255 255 255 / 0.18) 57%,
+    transparent 64%
+  );
+  inset: 0;
+  position: absolute;
+  transform: translate(-100%, -100%);
+}
+
+/* A four-ray flare riding the band's centre, which travels corner to corner. */
+.wish-glint-flare {
+  background: radial-gradient(circle, #ffffff 0 14%, rgb(255 255 255 / 0.6) 30%, transparent 64%);
+  aspect-ratio: 1;
+  left: 50%;
+  position: absolute;
+  top: 50%;
+  width: 46%;
+}
+
+.wish-glint-flare::before,
+.wish-glint-flare::after {
+  background: linear-gradient(90deg, transparent, #ffffff 46% 54%, transparent);
+  content: '';
+  height: 5%;
+  left: -40%;
+  position: absolute;
+  top: 47.5%;
+  width: 180%;
+}
+
+.wish-glint-flare::after {
+  transform: rotate(90deg);
+}

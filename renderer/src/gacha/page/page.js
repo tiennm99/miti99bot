@@ -35,15 +35,16 @@ const el = (tag, className, text) => {
 
 const createFace = () => {
   const face = el('article', 'wish-card');
-  const header = el('header', 'recap-card-header');
-  header.append(el('span', '', 'GACHA'), el('span', '', `RANK ${wish.rank}`));
   const content = el('div', 'recap-card-content');
   const title = el('h2', 'wish-label', wish.label);
   title.setAttribute('data-foil-text', '');
   content.append(el('span', 'wish-rank', wish.rank), title, el('p', 'wish-stars', '★'.repeat(wish.stars)));
-  const footer = el('footer', 'recap-card-footer');
-  footer.append(el('span', '', `${wish.stars}★`), el('span', '', '01 / 01'));
-  face.append(header, content, footer);
+  const clip = el('span', 'wish-glint-clip');
+  clip.setAttribute('aria-hidden', 'true');
+  const band = el('span', 'wish-glint');
+  band.append(el('span', 'wish-glint-flare'));
+  clip.append(band);
+  face.append(content, clip);
   return face;
 };
 
@@ -125,6 +126,41 @@ const burstSparkles = (deck, delay, duration) => {
   setTimeout(() => layer.remove(), delay + duration + 1200);
 };
 
+const glint = Object.freeze({duration: 650, easing: 'cubic-bezier(.45, 0, .55, 1)'});
+
+/**
+ * Keeps the card's text hidden while it spins and fades it in once the card
+ * lies flat, then sweeps a mirror glint from the top-left corner to the
+ * bottom-right one as the card comes to rest. The glint band is a gradient
+ * across its own card-sized box, so moving that box from one corner to the
+ * other carries the band diagonally over the whole face.
+ *
+ * @param {Element} turn
+ * @param {number} delay     Milliseconds until the spin starts.
+ * @param {number} duration  Length of the spin.
+ */
+const revealFace = (turn, delay, duration) => {
+  turn.querySelector('.wish-card .recap-card-content')?.animate(
+    [{opacity: 0}, {opacity: 0, offset: flip.flatAt}, {opacity: 1}],
+    {delay, duration, easing: 'linear', fill: 'both'},
+  );
+  const band = turn.querySelector('.wish-glint');
+  band?.animate([{transform: 'translate(-100%, -100%)'}, {transform: 'translate(100%, 100%)'}], {
+    delay: delay + duration,
+    duration: glint.duration,
+    easing: glint.easing,
+    fill: 'both',
+  });
+  band?.querySelector('.wish-glint-flare')?.animate(
+    [
+      {transform: 'translate(-50%, -50%) scale(0) rotate(0deg)', opacity: 0},
+      {transform: 'translate(-50%, -50%) scale(1) rotate(45deg)', opacity: 1, offset: 0.5},
+      {transform: 'translate(-50%, -50%) scale(0) rotate(90deg)', opacity: 0},
+    ],
+    {delay: delay + duration, duration: glint.duration, easing: glint.easing, fill: 'both'},
+  );
+};
+
 /**
  * Engravings carry the polychrome (page.css): 4★ cards are tooled with the
  * epic contour, 5★ cards with the legendary rings or facets, picked by
@@ -178,6 +214,7 @@ Element.prototype.animate = function (keyframes, options) {
     if (this.parentElement) {
       burstSparkles(this.parentElement, flight.clearAt, duration);
     }
+    revealFace(this, flight.clearAt, duration);
     const flat = keyframes[1] ?? {};
     return animate.call(
       this,
@@ -188,10 +225,11 @@ Element.prototype.animate = function (keyframes, options) {
   return animate.call(this, keyframes, options);
 };
 
+// Blank label and title keep the pack wrapper free of printed text.
 const view = createPackView(stage, {
-  label: 'Gacha',
+  label: '',
   artwork: wish.artwork,
-  labels: {title: 'Gacha', swipe: '', tap: ''},
+  labels: {title: '', swipe: '', tap: ''},
   appearance: {opening: 'animated', motion: 'interactive', glow: wish.glow, pack_zoom: true, rarities: engravings},
 });
 
