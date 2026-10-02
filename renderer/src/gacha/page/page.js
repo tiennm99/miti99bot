@@ -257,10 +257,40 @@ Element.prototype.animate = function (keyframes, options) {
 };
 
 // Blank label and title keep the pack wrapper free of printed text.
+/**
+ * The wish's emblem: the symbol of pack-cards' example Moon card (☽), flipped
+ * to its mirror-image crescent.
+ */
+const moon = '☾';
+
+/**
+ * The moon as an image for the pack, which pack-cards prints in place of its
+ * default ✦ when the artwork carries a logo. It must be decoded before the
+ * pack draws its artwork.
+ */
+const moonLogo = new Image(132, 132);
+moonLogo.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(
+  `<svg xmlns="http://www.w3.org/2000/svg" width="132" height="132" viewBox="0 0 132 132"><text x="66" y="66" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-size="120" fill="${wish.artwork.accent}">${moon}</text></svg>`,
+)}`;
+await moonLogo.decode();
+
+/**
+ * The card back, in pack-cards' own print layout: the moon sits in the
+ * diamond seal in place of the default ✦, over the bot's name.
+ */
+const renderBack = () => {
+  const print = el('div', 'recap-card-print');
+  const seal = el('span', 'recap-print-seal wish-moon-seal');
+  seal.append(el('span', '', moon));
+  print.append(el('span', 'recap-print-channel'), seal, el('span', 'recap-print-edition', 'miti99bot'));
+  return print;
+};
+
 const view = createPackView(stage, {
   label: '',
-  artwork: wish.artwork,
+  artwork: {...wish.artwork, logo: moonLogo},
   labels: {title: '', swipe: '', tap: ''},
+  renderBack,
   appearance: {opening: 'animated', motion: 'interactive', glow: wish.glow, pack_zoom: true, rarities: engravings},
 });
 

@@ -183,3 +183,13 @@ body {
 .wish-glint-flare::after {
   transform: rotate(90deg);
 }
+
+/*
+ * The moon in the card back's diamond seal, in the card's accent and sized to
+ * the diamond as on the pack (a 120px glyph in a 184px diamond).
+ */
+.recap-print-seal.wish-moon-seal > span {
+  color: var(--recap-back-accent, var(--accent, #e8c477));
+  font-size: calc(26.83cqw * 120 / 184);
+  line-height: 1;
+}
