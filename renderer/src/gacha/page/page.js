@@ -41,6 +41,8 @@ const createFace = () => {
   content.append(el('span', 'wish-rank', wish.rank), title, el('p', 'wish-stars', '★'.repeat(wish.stars)));
   const clip = el('span', 'wish-glint-clip');
   clip.setAttribute('aria-hidden', 'true');
+  // Set on the clip itself: the card flies in an overlay outside #stage.
+  clip.style.setProperty('--glint', wish.artwork.accent);
   const band = el('span', 'wish-glint');
   band.append(el('span', 'wish-glint-flare'));
   clip.append(band);
@@ -162,9 +164,12 @@ const glint = Object.freeze({duration: 650, easing: 'cubic-bezier(.45, 0, .55, 1
  * Keeps the card's text hidden while it spins and switches it on as the card
  * turns edge-on for its last swing face up, so the text rides in on the final
  * turn without visibly popping on. Then it sweeps a mirror glint from the
- * top-left corner to the bottom-right one as the card comes to rest. The glint band is a gradient
- * across its own card-sized box, so moving that box from one corner to the
- * other carries the band diagonally over the whole face.
+ * top-left corner to the bottom-right one as the card comes to rest. The glint
+ * band is a gradient across a box three times the card's size and centred on
+ * it, so the card stays inside that box for the whole sweep and every corner is
+ * lit; a card-sized box would leave the top-right and bottom-left corners
+ * outside it as it slid diagonally. Moving the box 0.8 card-widths and heights
+ * each way starts and ends the band clear of the card.
  *
  * @param {Element} turn
  * @param {number} delay     Milliseconds until the spin starts.
@@ -176,7 +181,7 @@ const revealFace = (turn, delay, duration) => {
     {delay, duration, easing: 'linear', fill: 'both'},
   );
   const band = turn.querySelector('.wish-glint');
-  band?.animate([{transform: 'translate(-100%, -100%)'}, {transform: 'translate(100%, 100%)'}], {
+  band?.animate([{transform: 'translate(-26.7%, -26.7%)'}, {transform: 'translate(26.7%, 26.7%)'}], {
     delay: delay + duration,
     duration: glint.duration,
     easing: glint.easing,

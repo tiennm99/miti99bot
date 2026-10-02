@@ -133,10 +133,17 @@ body {
   transform: rotate(90deg);
 }
 
-/* The mirror glint that sweeps across the card once it lands (page.js). */
+/*
+ * The mirror glint that sweeps across the card once it lands (page.js). It is
+ * blended additively (plus-lighter), so it brightens the card's own colours
+ * instead of painting flat white over them; the light is tinted with the
+ * card's accent (--glint) so it matches the card's tone.
+ */
 .wish-glint-clip {
+  --glint-core: color-mix(in srgb, var(--glint, #fff) 35%, #fff);
   border-radius: inherit;
   inset: 0;
+  mix-blend-mode: plus-lighter;
   overflow: hidden;
   pointer-events: none;
   position: absolute;
@@ -146,32 +153,43 @@ body {
 .wish-glint {
   background: linear-gradient(
     135deg,
-    transparent 36%,
-    rgb(255 255 255 / 0.18) 43%,
-    rgb(255 255 255 / 0.85) 49%,
-    #ffffff 50%,
-    rgb(255 255 255 / 0.85) 51%,
-    rgb(255 255 255 / 0.18) 57%,
-    transparent 64%
+    transparent 45.3%,
+    color-mix(in srgb, var(--glint, #fff) 14%, transparent) 47.7%,
+    color-mix(in srgb, var(--glint-core) 60%, transparent) 49.7%,
+    color-mix(in srgb, var(--glint-core) 75%, transparent) 50%,
+    color-mix(in srgb, var(--glint-core) 60%, transparent) 50.3%,
+    color-mix(in srgb, var(--glint, #fff) 14%, transparent) 52.3%,
+    transparent 54.7%
   );
-  inset: 0;
+  height: 300%;
+  left: -100%;
   position: absolute;
-  transform: translate(-100%, -100%);
+  top: -100%;
+  transform: translate(-26.7%, -26.7%);
+  width: 300%;
 }
 
-/* A four-ray flare riding the band's centre, which travels corner to corner. */
+/*
+ * A four-ray flare riding the band's centre, which travels corner to corner.
+ * Sized against the band's 3x box, so it spans 46% of the card.
+ */
 .wish-glint-flare {
-  background: radial-gradient(circle, #ffffff 0 14%, rgb(255 255 255 / 0.6) 30%, transparent 64%);
+  background: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--glint-core) 85%, transparent) 0 14%,
+    color-mix(in srgb, var(--glint) 45%, transparent) 30%,
+    transparent 64%
+  );
   aspect-ratio: 1;
   left: 50%;
   position: absolute;
   top: 50%;
-  width: 46%;
+  width: 15.3%;
 }
 
 .wish-glint-flare::before,
 .wish-glint-flare::after {
-  background: linear-gradient(90deg, transparent, #ffffff 46% 54%, transparent);
+  background: linear-gradient(90deg, transparent, var(--glint-core) 46% 54%, transparent);
   content: '';
   height: 5%;
   left: -40%;
