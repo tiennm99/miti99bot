@@ -71,7 +71,37 @@ const flight = Object.freeze({duration: 1750, clearAt: 900, settleMs: 60});
 /** Exponential ease-in-out, as a CSS timing function. */
 const easeInOutExpo = 'cubic-bezier(.87, 0, .13, 1)';
 const afterClearStretch = 1.65;
-const flip = Object.freeze({startDegrees: 180 + 3 * 360, easing: 'cubic-bezier(.3, .4, .25, 1)', flatAt: 0.8});
+/** The flip's ease-out, as the control points of a CSS cubic-bezier. */
+const flipCurve = Object.freeze({x1: 0.3, y1: 0.4, x2: 0.25, y2: 1});
+const flip = Object.freeze({
+  startDegrees: 180 + 3 * 360,
+  easing: `cubic-bezier(${flipCurve.x1}, ${flipCurve.y1}, ${flipCurve.x2}, ${flipCurve.y2})`,
+  flatAt: 0.8,
+});
+
+/**
+ * The fraction of the spin at which the card turns edge-on for the last
+ * time, so its face swings into view for good: where the flip's ease has
+ * covered all but the final 90 degrees.
+ */
+const lastFaceUpAt = (() => {
+  const {x1, y1, x2, y2} = flipCurve;
+  const coordinate = (/** @type {number} */ t, /** @type {number} */ a, /** @type {number} */ b) =>
+    3 * a * t * (1 - t) ** 2 + 3 * b * t ** 2 * (1 - t) + t ** 3;
+  const target = 1 - 90 / flip.startDegrees;
+  // Both bezier coordinates rise monotonically with t, so bisect on t.
+  let low = 0;
+  let high = 1;
+  for (let step = 0; step < 40; step += 1) {
+    const middle = (low + high) / 2;
+    if (coordinate(middle, y1, y2) < target) {
+      low = middle;
+    } else {
+      high = middle;
+    }
+  }
+  return coordinate(low, x1, x2) * flip.flatAt;
+})();
 
 /**
  * Maps a time in the original flight to the stretched one.
@@ -129,9 +159,10 @@ const burstSparkles = (deck, delay, duration) => {
 const glint = Object.freeze({duration: 650, easing: 'cubic-bezier(.45, 0, .55, 1)'});
 
 /**
- * Keeps the card's text hidden while it spins and fades it in once the card
- * lies flat, then sweeps a mirror glint from the top-left corner to the
- * bottom-right one as the card comes to rest. The glint band is a gradient
+ * Keeps the card's text hidden while it spins and switches it on as the card
+ * turns edge-on for its last swing face up, so the text rides in on the final
+ * turn without visibly popping on. Then it sweeps a mirror glint from the
+ * top-left corner to the bottom-right one as the card comes to rest. The glint band is a gradient
  * across its own card-sized box, so moving that box from one corner to the
  * other carries the band diagonally over the whole face.
  *
@@ -141,7 +172,7 @@ const glint = Object.freeze({duration: 650, easing: 'cubic-bezier(.45, 0, .55, 1
  */
 const revealFace = (turn, delay, duration) => {
   turn.querySelector('.wish-card .recap-card-content')?.animate(
-    [{opacity: 0}, {opacity: 0, offset: flip.flatAt}, {opacity: 1}],
+    [{opacity: 0}, {opacity: 0, offset: lastFaceUpAt}, {opacity: 1, offset: lastFaceUpAt}, {opacity: 1}],
     {delay, duration, easing: 'linear', fill: 'both'},
   );
   const band = turn.querySelector('.wish-glint');
