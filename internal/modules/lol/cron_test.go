@@ -13,6 +13,7 @@ import (
 	"github.com/go-telegram/bot/models"
 
 	"github.com/tiennm99/miti99bot/internal/modules"
+	"github.com/tiennm99/miti99bot/internal/modules/util/subscription"
 	"github.com/tiennm99/miti99bot/internal/storage"
 )
 
@@ -60,11 +61,11 @@ func fixedNow() time.Time {
 
 // newTestStore builds a fresh set of typed stores over a shared in-memory
 // collection, matching what the factory wires in production.
-func newTestStore(t *testing.T) (SubscriberStore, PushDateStore, CacheStore) {
+func newTestStore(t *testing.T) (subscription.Store, PushDateStore, CacheStore) {
 	t.Helper()
 	col := storage.NewMemoryProvider().Collection("lol")
-	return storage.Typed[subscribersDoc](col),
-		storage.Typed[lastPushDoc](col),
+	return storage.Typed[subscription.Doc](col),
+		storage.Typed[subscription.DayDoc](col),
 		storage.Typed[cacheRecord](col)
 }
 
@@ -118,7 +119,7 @@ func TestRunDailyPush_SendsEmptyScheduleSilently(t *testing.T) {
 
 	chatIDs := []int64{100, 200, 300}
 	for _, id := range chatIDs {
-		if _, err := addSubscriber(context.Background(), s.subscribers, id, 0); err != nil {
+		if _, err := subscription.Add(context.Background(), s.subscribers, id, 0); err != nil {
 			t.Fatalf("addSubscriber %d: %v", id, err)
 		}
 	}
@@ -166,7 +167,7 @@ func TestRunDailyPush_SendsMatchScheduleWithNotification(t *testing.T) {
 		},
 	}})
 
-	if _, err := addSubscriber(context.Background(), s.subscribers, 100, 0); err != nil {
+	if _, err := subscription.Add(context.Background(), s.subscribers, 100, 0); err != nil {
 		t.Fatalf("addSubscriber: %v", err)
 	}
 
@@ -189,13 +190,13 @@ func TestRunDailyPush_ForwardsMessageThreadID(t *testing.T) {
 	s := newTestState(t)
 	seedFreshCache(t, s.cache, nil)
 
-	subs := []Subscriber{
+	subs := []subscription.Subscriber{
 		{ChatID: 100, ThreadID: 0},
 		{ChatID: 100, ThreadID: 7},
 		{ChatID: 200, ThreadID: 42},
 	}
 	for _, sub := range subs {
-		if _, err := addSubscriber(context.Background(), s.subscribers, sub.ChatID, sub.ThreadID); err != nil {
+		if _, err := subscription.Add(context.Background(), s.subscribers, sub.ChatID, sub.ThreadID); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -226,7 +227,7 @@ func TestRunDailyPush_IdempotentPerICTDay(t *testing.T) {
 
 	chatIDs := []int64{100, 200, 300}
 	for _, id := range chatIDs {
-		if _, err := addSubscriber(context.Background(), s.subscribers, id, 0); err != nil {
+		if _, err := subscription.Add(context.Background(), s.subscribers, id, 0); err != nil {
 			t.Fatalf("addSubscriber %d: %v", id, err)
 		}
 	}
@@ -249,10 +250,10 @@ func TestRunDailyPush_ClaimsICTDayAtMidnight(t *testing.T) {
 		return time.Date(2026, 5, 9, 17, 0, 0, 0, time.UTC) // 2026-05-10 00:00 ICT
 	}
 	seedFreshCache(t, s.cache, nil)
-	if _, err := addSubscriber(context.Background(), s.subscribers, 100, 0); err != nil {
+	if _, err := subscription.Add(context.Background(), s.subscribers, 100, 0); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.pushDate.Put(context.Background(), lastPushDateKey, lastPushDoc{Date: "2026-05-09"}); err != nil {
+	if err := s.pushDate.Put(context.Background(), lastPushDateKey, subscription.DayDoc{Date: "2026-05-09"}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -278,7 +279,7 @@ func TestRunDailyPush_PartialFailureContinues(t *testing.T) {
 
 	chatIDs := []int64{100, 200, 300}
 	for _, id := range chatIDs {
-		if _, err := addSubscriber(context.Background(), s.subscribers, id, 0); err != nil {
+		if _, err := subscription.Add(context.Background(), s.subscribers, id, 0); err != nil {
 			t.Fatalf("addSubscriber %d: %v", id, err)
 		}
 	}
@@ -302,7 +303,7 @@ func TestRunDailyPush_PrunesDeadSubscribers(t *testing.T) {
 
 	// Chat 400 has two topic subs; both should be pruned when the chat
 	// returns a chat-wide terminal error.
-	seedSubs := []Subscriber{
+	seedSubs := []subscription.Subscriber{
 		{ChatID: 100, ThreadID: 0},
 		{ChatID: 200, ThreadID: 0},
 		{ChatID: 300, ThreadID: 0},
@@ -310,7 +311,7 @@ func TestRunDailyPush_PrunesDeadSubscribers(t *testing.T) {
 		{ChatID: 400, ThreadID: 9},
 	}
 	for _, sub := range seedSubs {
-		if _, err := addSubscriber(context.Background(), s.subscribers, sub.ChatID, sub.ThreadID); err != nil {
+		if _, err := subscription.Add(context.Background(), s.subscribers, sub.ChatID, sub.ThreadID); err != nil {
 			t.Fatalf("addSubscriber %v: %v", sub, err)
 		}
 	}
@@ -323,11 +324,11 @@ func TestRunDailyPush_PrunesDeadSubscribers(t *testing.T) {
 		t.Fatalf("runDailyPush: %v", err)
 	}
 
-	remaining, err := listSubscribers(context.Background(), s.subscribers)
+	remaining, err := subscription.List(context.Background(), s.subscribers)
 	if err != nil {
 		t.Fatalf("listSubscribers: %v", err)
 	}
-	want := []Subscriber{{ChatID: 100}, {ChatID: 200}, {ChatID: 300}}
+	want := []subscription.Subscriber{{ChatID: 100}, {ChatID: 200}, {ChatID: 300}}
 	if len(remaining) != len(want) {
 		t.Fatalf("subscribers after prune: got %v, want %v", remaining, want)
 	}
@@ -345,13 +346,13 @@ func TestRunDailyPush_TopicOnlyTerminalPrunesOneTopic(t *testing.T) {
 	s := newTestState(t)
 	seedFreshCache(t, s.cache, nil)
 
-	seedSubs := []Subscriber{
+	seedSubs := []subscription.Subscriber{
 		{ChatID: 500, ThreadID: 0},
 		{ChatID: 500, ThreadID: 11},
 		{ChatID: 500, ThreadID: 22},
 	}
 	for _, sub := range seedSubs {
-		if _, err := addSubscriber(context.Background(), s.subscribers, sub.ChatID, sub.ThreadID); err != nil {
+		if _, err := subscription.Add(context.Background(), s.subscribers, sub.ChatID, sub.ThreadID); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -364,7 +365,7 @@ func TestRunDailyPush_TopicOnlyTerminalPrunesOneTopic(t *testing.T) {
 		t.Fatalf("runDailyPush: %v", err)
 	}
 
-	remaining, _ := listSubscribers(context.Background(), s.subscribers)
+	remaining, _ := subscription.List(context.Background(), s.subscribers)
 	if len(remaining) != 0 {
 		t.Errorf("expected all topic-only entries pruned, got %v", remaining)
 	}
@@ -378,13 +379,13 @@ func TestRunDailyPush_TopicOnlyTerminalKeepsOtherTopics(t *testing.T) {
 
 	// Two distinct chats, each with multiple topic subs. Only chat 600 hits
 	// the topic-terminal error; chat 700 sends cleanly.
-	seedSubs := []Subscriber{
+	seedSubs := []subscription.Subscriber{
 		{ChatID: 600, ThreadID: 1},
 		{ChatID: 600, ThreadID: 2},
 		{ChatID: 700, ThreadID: 3},
 	}
 	for _, sub := range seedSubs {
-		if _, err := addSubscriber(context.Background(), s.subscribers, sub.ChatID, sub.ThreadID); err != nil {
+		if _, err := subscription.Add(context.Background(), s.subscribers, sub.ChatID, sub.ThreadID); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -395,46 +396,9 @@ func TestRunDailyPush_TopicOnlyTerminalKeepsOtherTopics(t *testing.T) {
 		t.Fatalf("runDailyPush: %v", err)
 	}
 
-	remaining, _ := listSubscribers(context.Background(), s.subscribers)
-	if len(remaining) != 1 || remaining[0] != (Subscriber{ChatID: 700, ThreadID: 3}) {
+	remaining, _ := subscription.List(context.Background(), s.subscribers)
+	if len(remaining) != 1 || remaining[0] != (subscription.Subscriber{ChatID: 700, ThreadID: 3}) {
 		t.Errorf("after topic-terminal prune of chat 600: got %v, want [{700 3}]", remaining)
-	}
-}
-
-func TestClassifyTerminal(t *testing.T) {
-	chatWide := []string{
-		"Forbidden: bot was blocked by the user",
-		"Forbidden: user is deactivated",
-		"Bad Request: chat not found",
-		"Bad Request: group chat was upgraded to a supergroup chat",
-	}
-	for _, msg := range chatWide {
-		if got := classifyTerminal(errors.New(msg)); got != terminalChatWide {
-			t.Errorf("classifyTerminal(%q) = %v, want terminalChatWide", msg, got)
-		}
-	}
-
-	topicOnly := []string{
-		"Bad Request: have no rights to send a message",
-	}
-	for _, msg := range topicOnly {
-		if got := classifyTerminal(errors.New(msg)); got != terminalTopicOnly {
-			t.Errorf("classifyTerminal(%q) = %v, want terminalTopicOnly", msg, got)
-		}
-	}
-
-	transients := []string{
-		"connection reset by peer",
-		"Too Many Requests: retry after 30",
-		"context deadline exceeded",
-	}
-	for _, msg := range transients {
-		if got := classifyTerminal(errors.New(msg)); got != terminalNone {
-			t.Errorf("classifyTerminal(%q) = %v, want terminalNone (transient)", msg, got)
-		}
-	}
-	if got := classifyTerminal(nil); got != terminalNone {
-		t.Errorf("classifyTerminal(nil) = %v, want terminalNone", got)
 	}
 }
 

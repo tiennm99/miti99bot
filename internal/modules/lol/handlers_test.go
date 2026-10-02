@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/tiennm99/miti99bot/internal/modules"
+	"github.com/tiennm99/miti99bot/internal/modules/util/subscription"
 	"github.com/tiennm99/miti99bot/internal/storage"
 	"github.com/tiennm99/miti99bot/internal/testutil"
 )
@@ -17,7 +18,7 @@ import (
 // custom upstream HTTP server returning bodyJSON for every request. nowMs
 // fixes the clock so date-based handlers are deterministic.
 // Returns the recording bot and the subscriber store for inspection in tests.
-func installSchedule(t *testing.T, bodyJSON string, nowMs int64) (*testutil.RecordingBot, SubscriberStore) {
+func installSchedule(t *testing.T, bodyJSON string, nowMs int64) (*testutil.RecordingBot, subscription.Store) {
 	t.Helper()
 	setTestToken(t)
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -30,8 +31,8 @@ func installSchedule(t *testing.T, bodyJSON string, nowMs int64) (*testutil.Reco
 	col := storage.NewMemoryProvider().Collection("lol")
 
 	s := &state{
-		subscribers: storage.Typed[subscribersDoc](col),
-		pushDate:    storage.Typed[lastPushDoc](col),
+		subscribers: storage.Typed[subscription.Doc](col),
+		pushDate:    storage.Typed[subscription.DayDoc](col),
 		cache:       storage.Typed[cacheRecord](col),
 		client:      &Client{HTTP: upstream.Client(), URL: upstream.URL},
 		nowFn:       func() time.Time { return time.UnixMilli(nowMs).UTC() },
@@ -196,8 +197,8 @@ func TestHandleSubscribe_AddsAndIsIdempotent(t *testing.T) {
 	if got := rb.LastSent().Text(); !strings.Contains(got, "Already subscribed") {
 		t.Errorf("duplicate subscribe should report Already; got %q", got)
 	}
-	ids, _ := listSubscribers(context.Background(), subsStore)
-	if len(ids) != 1 || ids[0] != (Subscriber{ChatID: 7}) {
+	ids, _ := subscription.List(context.Background(), subsStore)
+	if len(ids) != 1 || ids[0] != (subscription.Subscriber{ChatID: 7}) {
 		t.Errorf("subscribers = %v, want [{7 0}]", ids)
 	}
 }
@@ -215,8 +216,8 @@ func TestHandleSubscribe_ForumTopic_CapturesThreadID(t *testing.T) {
 	if got := rb.LastSent().Text(); !strings.Contains(got, "Subscribed this topic") {
 		t.Errorf("topic subscribe reply = %q", got)
 	}
-	subs, _ := listSubscribers(context.Background(), subsStore)
-	want := Subscriber{ChatID: 555, ThreadID: 42}
+	subs, _ := subscription.List(context.Background(), subsStore)
+	want := subscription.Subscriber{ChatID: 555, ThreadID: 42}
 	if len(subs) != 1 || subs[0] != want {
 		t.Errorf("subscribers = %v, want [%v]", subs, want)
 	}
@@ -240,8 +241,8 @@ func TestHandleUnsubscribe_ForumTopic_RemovesOnlyThatTopic(t *testing.T) {
 	upd.Message.MessageThreadID = 42
 	rb.Bot.ProcessUpdate(context.Background(), upd)
 
-	subs, _ := listSubscribers(context.Background(), subsStore)
-	want := Subscriber{ChatID: 555, ThreadID: 99}
+	subs, _ := subscription.List(context.Background(), subsStore)
+	want := subscription.Subscriber{ChatID: 555, ThreadID: 99}
 	if len(subs) != 1 || subs[0] != want {
 		t.Errorf("subscribers = %v, want [%v]", subs, want)
 	}
@@ -271,8 +272,8 @@ func TestHandleSchedule_UpstreamFailureGivesFriendlyError(t *testing.T) {
 	rb := testutil.NewRecordingBot(t)
 	col := storage.NewMemoryProvider().Collection("lol")
 	s := &state{
-		subscribers: storage.Typed[subscribersDoc](col),
-		pushDate:    storage.Typed[lastPushDoc](col),
+		subscribers: storage.Typed[subscription.Doc](col),
+		pushDate:    storage.Typed[subscription.DayDoc](col),
 		cache:       storage.Typed[cacheRecord](col),
 		client:      &Client{HTTP: upstream.Client(), URL: upstream.URL},
 		nowFn:       func() time.Time { return time.UnixMilli(fakeNowMs).UTC() },
@@ -300,8 +301,8 @@ func TestHandleSchedule_CustomDateDoesNotUseFallbackCache(t *testing.T) {
 	col := storage.NewMemoryProvider().Collection("lol")
 	cache := storage.Typed[cacheRecord](col)
 	s := &state{
-		subscribers: storage.Typed[subscribersDoc](col),
-		pushDate:    storage.Typed[lastPushDoc](col),
+		subscribers: storage.Typed[subscription.Doc](col),
+		pushDate:    storage.Typed[subscription.DayDoc](col),
 		cache:       cache,
 		client:      &Client{HTTP: upstream.Client(), URL: upstream.URL},
 		nowFn:       func() time.Time { return time.UnixMilli(fakeNowMs).UTC() },

@@ -2,6 +2,7 @@ package lol
 
 import (
 	"github.com/tiennm99/miti99bot/internal/modules"
+	"github.com/tiennm99/miti99bot/internal/modules/util/subscription"
 	"github.com/tiennm99/miti99bot/internal/storage"
 )
 
@@ -15,8 +16,8 @@ const CollectionName = "lol"
 // without it the handler fails fast with a clear error.
 func New(deps modules.Deps) modules.Module {
 	s := &state{
-		subscribers: storage.Typed[subscribersDoc](deps.Store),
-		pushDate:    storage.Typed[lastPushDoc](deps.Store),
+		subscribers: storage.Typed[subscription.Doc](deps.Store),
+		pushDate:    storage.Typed[subscription.DayDoc](deps.Store),
 		cache:       storage.Typed[cacheRecord](deps.Store),
 		client:      &Client{},
 	}

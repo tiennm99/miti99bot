@@ -1,4 +1,4 @@
-package lol
+package subscription
 
 import (
 	"context"
@@ -7,51 +7,51 @@ import (
 	"github.com/tiennm99/miti99bot/internal/storage"
 )
 
-func newSubscriberStore() SubscriberStore {
-	return storage.Typed[subscribersDoc](storage.NewMemoryProvider().Collection("lol"))
+func newStore() Store {
+	return storage.Typed[Doc](storage.NewMemoryProvider().Collection("test"))
 }
 
 func TestSubscribers_AddRemoveListIdempotent(t *testing.T) {
 	ctx := context.Background()
-	store := newSubscriberStore()
+	store := newStore()
 
-	got, _ := listSubscribers(ctx, store)
+	got, _ := List(ctx, store)
 	if len(got) != 0 {
 		t.Errorf("empty list = %v, want []", got)
 	}
 
-	added, err := addSubscriber(ctx, store, 42, 0)
+	added, err := Add(ctx, store, 42, 0)
 	if err != nil || !added {
 		t.Fatalf("first add: added=%v err=%v", added, err)
 	}
-	added, _ = addSubscriber(ctx, store, 42, 0)
+	added, _ = Add(ctx, store, 42, 0)
 	if added {
 		t.Errorf("re-add should be no-op")
 	}
 
-	got, _ = listSubscribers(ctx, store)
+	got, _ = List(ctx, store)
 	if len(got) != 1 || got[0] != (Subscriber{ChatID: 42}) {
 		t.Errorf("after add(42,0): %v, want [{42 0}]", got)
 	}
 
-	if _, err := addSubscriber(ctx, store, 7, 0); err != nil {
+	if _, err := Add(ctx, store, 7, 0); err != nil {
 		t.Fatal(err)
 	}
-	got, _ = listSubscribers(ctx, store)
+	got, _ = List(ctx, store)
 	if len(got) != 2 {
 		t.Errorf("after add(7,0): %v, want len 2", got)
 	}
 
-	removed, err := removeSubscriber(ctx, store, 42, 0)
+	removed, err := Remove(ctx, store, 42, 0)
 	if err != nil || !removed {
 		t.Fatalf("remove(42,0): removed=%v err=%v", removed, err)
 	}
-	removed, _ = removeSubscriber(ctx, store, 42, 0)
+	removed, _ = Remove(ctx, store, 42, 0)
 	if removed {
 		t.Errorf("re-remove should be no-op")
 	}
 
-	got, _ = listSubscribers(ctx, store)
+	got, _ = List(ctx, store)
 	if len(got) != 1 || got[0].ChatID != 7 {
 		t.Errorf("after remove(42,0): %v, want [{7 0}]", got)
 	}
@@ -62,29 +62,29 @@ func TestSubscribers_AddRemoveListIdempotent(t *testing.T) {
 // topic must not affect the others.
 func TestSubscribers_TopicsAreDistinct(t *testing.T) {
 	ctx := context.Background()
-	store := newSubscriberStore()
+	store := newStore()
 
 	for _, tid := range []int{0, 5, 9} {
-		added, err := addSubscriber(ctx, store, 100, tid)
+		added, err := Add(ctx, store, 100, tid)
 		if err != nil || !added {
 			t.Fatalf("add(100,%d): added=%v err=%v", tid, added, err)
 		}
 	}
 	// Same (chat, thread) is rejected as duplicate.
-	if added, _ := addSubscriber(ctx, store, 100, 5); added {
+	if added, _ := Add(ctx, store, 100, 5); added {
 		t.Errorf("duplicate (100,5) should be no-op")
 	}
 
-	got, _ := listSubscribers(ctx, store)
+	got, _ := List(ctx, store)
 	if len(got) != 3 {
 		t.Fatalf("after 3 adds: %v, want len 3", got)
 	}
 
 	// Removing one topic leaves the other two intact.
-	if removed, _ := removeSubscriber(ctx, store, 100, 5); !removed {
+	if removed, _ := Remove(ctx, store, 100, 5); !removed {
 		t.Error("remove(100,5) should report removed=true")
 	}
-	got, _ = listSubscribers(ctx, store)
+	got, _ = List(ctx, store)
 	if len(got) != 2 {
 		t.Errorf("after remove(100,5): %v, want len 2", got)
 	}
@@ -99,47 +99,47 @@ func TestSubscribers_TopicsAreDistinct(t *testing.T) {
 // terminal error means every topic in that chat is dead too.
 func TestSubscribers_RemoveAllForChat(t *testing.T) {
 	ctx := context.Background()
-	store := newSubscriberStore()
+	store := newStore()
 
 	for _, tid := range []int{0, 5, 9} {
-		if _, err := addSubscriber(ctx, store, 100, tid); err != nil {
+		if _, err := Add(ctx, store, 100, tid); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if _, err := addSubscriber(ctx, store, 200, 0); err != nil {
+	if _, err := Add(ctx, store, 200, 0); err != nil {
 		t.Fatal(err)
 	}
 
-	n, err := removeAllForChat(ctx, store, 100)
+	n, err := RemoveAllForChat(ctx, store, 100)
 	if err != nil {
-		t.Fatalf("removeAllForChat(100): %v", err)
+		t.Fatalf("RemoveAllForChat(100): %v", err)
 	}
 	if n != 3 {
-		t.Errorf("removeAllForChat(100) returned %d, want 3", n)
+		t.Errorf("RemoveAllForChat(100) returned %d, want 3", n)
 	}
 
-	got, _ := listSubscribers(ctx, store)
+	got, _ := List(ctx, store)
 	if len(got) != 1 || got[0].ChatID != 200 {
 		t.Errorf("after wipe(100): %v, want only chat 200", got)
 	}
 
 	// Idempotent: second call removes nothing.
-	if n, _ := removeAllForChat(ctx, store, 100); n != 0 {
-		t.Errorf("second removeAllForChat(100) = %d, want 0", n)
+	if n, _ := RemoveAllForChat(ctx, store, 100); n != 0 {
+		t.Errorf("second RemoveAllForChat(100) = %d, want 0", n)
 	}
 }
 
 func TestSubscribers_CurrentShapeRoundTrip(t *testing.T) {
 	ctx := context.Background()
-	store := newSubscriberStore()
+	store := newStore()
 
 	// Write the current shape directly via Put so we can confirm round-trip.
 	currentSubs := []Subscriber{{ChatID: 11}, {ChatID: 22}, {ChatID: 33}}
-	if err := store.Put(ctx, subscribersKey, subscribersDoc{Subscribers: currentSubs}); err != nil {
+	if err := store.Put(ctx, Key, Doc{Subscribers: currentSubs}); err != nil {
 		t.Fatal(err)
 	}
 
-	got, err := listSubscribers(ctx, store)
+	got, err := List(ctx, store)
 	if err != nil {
 		t.Fatalf("listSubscribers: %v", err)
 	}
@@ -154,10 +154,10 @@ func TestSubscribers_CurrentShapeRoundTrip(t *testing.T) {
 	}
 
 	// Next mutation verifies subscribers wrap correctly.
-	if _, err := addSubscriber(ctx, store, 44, 7); err != nil {
+	if _, err := Add(ctx, store, 44, 7); err != nil {
 		t.Fatal(err)
 	}
-	doc, _, _ := store.Get(ctx, subscribersKey)
+	doc, _, _ := store.Get(ctx, Key)
 	if doc.Subscribers == nil {
 		t.Error("expected non-nil Subscribers field after add")
 	}

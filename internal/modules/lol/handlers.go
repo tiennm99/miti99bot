@@ -11,11 +11,12 @@ import (
 
 	"github.com/tiennm99/miti99bot/internal/log"
 	"github.com/tiennm99/miti99bot/internal/modules/util/chathelper"
+	"github.com/tiennm99/miti99bot/internal/modules/util/subscription"
 )
 
 // state captures everything a lol handler needs at runtime.
 type state struct {
-	subscribers SubscriberStore
+	subscribers subscription.Store
 	pushDate    PushDateStore
 	cache       CacheStore
 	client      *Client
@@ -123,20 +124,6 @@ func (s *state) replyForRange(ctx context.Context, b *bot.Bot, msg *models.Messa
 	return chathelper.ReplyHTML(ctx, b, msg, text)
 }
 
-func subscriptionScope(msg *models.Message) string {
-	if msg != nil && msg.MessageThreadID != 0 {
-		return "this topic"
-	}
-	return "this chat"
-}
-
-func subscriptionScopeSentenceSubject(msg *models.Message) string {
-	if msg != nil && msg.MessageThreadID != 0 {
-		return "This topic"
-	}
-	return "This chat"
-}
-
 // handleSubscribe is /lol_subscribe — opt the chat into the daily
 // digest delivered by the in-process cron handler.
 func (s *state) handleSubscribe(ctx context.Context, b *bot.Bot, update *models.Update) error {
@@ -146,11 +133,11 @@ func (s *state) handleSubscribe(ctx context.Context, b *bot.Bot, update *models.
 	}
 	s.subscribersMu.Lock()
 	defer s.subscribersMu.Unlock()
-	added, err := addSubscriber(ctx, s.subscribers, msg.Chat.ID, msg.MessageThreadID)
+	added, err := subscription.Add(ctx, s.subscribers, msg.Chat.ID, msg.MessageThreadID)
 	if err != nil {
 		return err
 	}
-	scope := subscriptionScope(msg)
+	scope := subscription.Scope(msg)
 	if added {
 		return chathelper.Reply(ctx, b, msg,
 			"✅ Subscribed "+scope+" to the daily LoL schedule at 08:00 ICT.\n"+
@@ -167,13 +154,13 @@ func (s *state) handleUnsubscribe(ctx context.Context, b *bot.Bot, update *model
 	}
 	s.subscribersMu.Lock()
 	defer s.subscribersMu.Unlock()
-	removed, err := removeSubscriber(ctx, s.subscribers, msg.Chat.ID, msg.MessageThreadID)
+	removed, err := subscription.Remove(ctx, s.subscribers, msg.Chat.ID, msg.MessageThreadID)
 	if err != nil {
 		return err
 	}
-	scope := subscriptionScope(msg)
+	scope := subscription.Scope(msg)
 	if removed {
 		return chathelper.Reply(ctx, b, msg, "Unsubscribed "+scope+".")
 	}
-	return chathelper.Reply(ctx, b, msg, subscriptionScopeSentenceSubject(msg)+" wasn't subscribed.")
+	return chathelper.Reply(ctx, b, msg, subscription.ScopeSubject(msg)+" wasn't subscribed.")
 }
