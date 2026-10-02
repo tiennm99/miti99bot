@@ -157,7 +157,7 @@ const burstSparkles = (deck, delay, duration) => {
 };
 
 /** The glint moves on ease-in-out. */
-const glint = Object.freeze({duration: 1200, easing: 'ease-in-out'});
+const glint = Object.freeze({duration: 1800, easing: 'ease-in-out'});
 
 /**
  * Keeps the card's text hidden while it spins and switches it on as the card
