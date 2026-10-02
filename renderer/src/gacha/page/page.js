@@ -158,7 +158,8 @@ const burstSparkles = (deck, delay, duration) => {
   setTimeout(() => layer.remove(), delay + duration + 1200);
 };
 
-const glint = Object.freeze({duration: 650, easing: 'cubic-bezier(.45, 0, .55, 1)'});
+/** The glint moves on easeInOutSine. */
+const glint = Object.freeze({duration: 800, easing: 'cubic-bezier(.37, 0, .63, 1)'});
 
 /**
  * Keeps the card's text hidden while it spins and switches it on as the card
@@ -168,8 +169,9 @@ const glint = Object.freeze({duration: 650, easing: 'cubic-bezier(.45, 0, .55, 1
  * band is a gradient across a box three times the card's size and centred on
  * it, so the card stays inside that box for the whole sweep and every corner is
  * lit; a card-sized box would leave the top-right and bottom-left corners
- * outside it as it slid diagonally. Moving the box 0.8 card-widths and heights
- * each way starts and ends the band clear of the card.
+ * outside it as it slid diagonally. The box moves from 0.8 card-widths and
+ * heights up-left to 0.95 down-right, so both streaks (the thin one trails the
+ * wide one) start and end clear of the card.
  *
  * @param {Element} turn
  * @param {number} delay     Milliseconds until the spin starts.
@@ -181,7 +183,7 @@ const revealFace = (turn, delay, duration) => {
     {delay, duration, easing: 'linear', fill: 'both'},
   );
   const band = turn.querySelector('.wish-glint');
-  band?.animate([{transform: 'translate(-26.7%, -26.7%)'}, {transform: 'translate(26.7%, 26.7%)'}], {
+  band?.animate([{transform: 'translate(-26.7%, -26.7%)'}, {transform: 'translate(31.7%, 31.7%)'}], {
     delay: delay + duration,
     duration: glint.duration,
     easing: glint.easing,

@@ -153,16 +153,30 @@ body {
 }
 
 .wish-glint {
-  background: linear-gradient(
-    135deg,
-    transparent 45.3%,
-    color-mix(in srgb, var(--glint, #fff) 19%, transparent) 47.7%,
-    color-mix(in srgb, var(--glint-core) 80%, transparent) 49.7%,
-    var(--glint-core) 50%,
-    color-mix(in srgb, var(--glint-core) 80%, transparent) 50.3%,
-    color-mix(in srgb, var(--glint, #fff) 19%, transparent) 52.3%,
-    transparent 54.7%
-  );
+  /*
+   * Two streaks: a wide band whose light fades out slowly on both sides, and a
+   * thin one trailing it. Stops are fractions of the 3x box's diagonal, so 1%
+   * here is 3% of the card's.
+   */
+  background:
+    linear-gradient(
+      135deg,
+      transparent 42%,
+      color-mix(in srgb, var(--glint, #fff) 10%, transparent) 44.5%,
+      color-mix(in srgb, var(--glint, #fff) 30%, transparent) 47%,
+      color-mix(in srgb, var(--glint-core) 55%, transparent) 49%,
+      color-mix(in srgb, var(--glint-core) 70%, transparent) 50%,
+      color-mix(in srgb, var(--glint-core) 55%, transparent) 51%,
+      color-mix(in srgb, var(--glint, #fff) 30%, transparent) 53%,
+      color-mix(in srgb, var(--glint, #fff) 10%, transparent) 55.5%,
+      transparent 58%
+    ),
+    linear-gradient(
+      135deg,
+      transparent 37%,
+      color-mix(in srgb, var(--glint-core) 45%, transparent) 38.5%,
+      transparent 40%
+    );
   height: 300%;
   left: -100%;
   position: absolute;
