@@ -1,4 +1,4 @@
-package thoitiet
+package weather
 
 import (
 	"context"
@@ -164,21 +164,41 @@ func fetchForecast(ctx context.Context, client *http.Client, p place) (forecast,
 }
 
 func getJSON(ctx context.Context, client *http.Client, rawURL string, out any) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
+	body, err := getBody(ctx, client, rawURL, maxBodySize, http.Header{"Accept": {"application/json"}})
 	if err != nil {
-		return fmt.Errorf("build request: %w", err)
+		return err
 	}
-	req.Header.Set("Accept", "application/json")
-	resp, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf("request: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("status %d", resp.StatusCode)
-	}
-	if err := json.NewDecoder(io.LimitReader(resp.Body, maxBodySize)).Decode(out); err != nil {
+	if err := json.Unmarshal(body, out); err != nil {
 		return fmt.Errorf("decode: %w", err)
 	}
 	return nil
+}
+
+// getBody GETs rawURL with the given headers and returns at most limit bytes
+// of a 200 response. A longer body is an error rather than a silent cut, so a
+// truncated JSON or PDF never reaches a parser.
+func getBody(ctx context.Context, client *http.Client, rawURL string, limit int64, header http.Header) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("build request: %w", err)
+	}
+	for k, v := range header {
+		req.Header[k] = v
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("status %d", resp.StatusCode)
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, limit+1))
+	if err != nil {
+		return nil, fmt.Errorf("read body: %w", err)
+	}
+	if int64(len(body)) > limit {
+		return nil, fmt.Errorf("body exceeds %d bytes", limit)
+	}
+	return body, nil
 }

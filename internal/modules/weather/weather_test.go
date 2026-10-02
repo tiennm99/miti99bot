@@ -1,4 +1,4 @@
-package thoitiet
+package weather
 
 import (
 	"context"
@@ -82,12 +82,12 @@ func stubOpenMeteo(t *testing.T, f *fakeOpenMeteo) {
 	t.Cleanup(func() { geocodeURL, forecastURL = origGeocode, origForecast })
 }
 
-func installThoitiet(t *testing.T) *testutil.RecordingBot {
+func installWeather(t *testing.T) *testutil.RecordingBot {
 	t.Helper()
 	rb := testutil.NewRecordingBot(t)
-	mod := New(modules.Deps{Store: storage.NewMemoryProvider().Collection("thoitiet")})
+	mod := New(modules.Deps{Store: storage.NewMemoryProvider().Collection(CollectionName)})
 	reg := &modules.Registry{
-		Modules:     []modules.Module{{Name: "thoitiet", Commands: mod.Commands}},
+		Modules:     []modules.Module{{Name: CollectionName, Commands: mod.Commands}},
 		AllCommands: map[string]modules.Command{},
 	}
 	for _, c := range mod.Commands {
@@ -103,28 +103,39 @@ func send(rb *testutil.RecordingBot, text string) string {
 }
 
 func TestCommands_RegistrationAndParameters(t *testing.T) {
-	mod := New(modules.Deps{})
-	want := []string{"thoitiethomnay", "thoitiet", "thoitietngaymai", "thoitiettuannay"}
+	mod := New(modules.Deps{Store: storage.NewMemoryProvider().Collection(CollectionName)})
+	want := []struct{ name, parameters string }{
+		{"thoitiethomnay", "[location...]"},
+		{"thoitiet", "[location...]"},
+		{"thoitietngaymai", "[location...]"},
+		{"thoitiettuannay", "[location...]"},
+		{"thuyvan", ""},
+		{"thuyvan_subscribe", ""},
+		{"thuyvan_unsubscribe", ""},
+	}
 	if len(mod.Commands) != len(want) {
 		t.Fatalf("commands = %d, want %d", len(mod.Commands), len(want))
 	}
 	for i, c := range mod.Commands {
-		if c.Name != want[i] {
-			t.Errorf("commands[%d] = %q, want %q", i, c.Name, want[i])
+		if c.Name != want[i].name {
+			t.Errorf("commands[%d] = %q, want %q", i, c.Name, want[i].name)
 		}
-		if c.Parameters != "[location...]" {
-			t.Errorf("/%s parameters = %q", c.Name, c.Parameters)
+		if c.Parameters != want[i].parameters {
+			t.Errorf("/%s parameters = %q, want %q", c.Name, c.Parameters, want[i].parameters)
 		}
 		if c.Visibility != modules.VisibilityPublic {
 			t.Errorf("/%s is not public", c.Name)
 		}
+	}
+	if len(mod.Crons) != 2 || mod.Crons[0].Schedule != "30 3 * * *" || mod.Crons[1].Schedule != "30 5 * * *" {
+		t.Errorf("crons = %+v, want the 10:30 ICT flood push and its 12:30 retry", mod.Crons)
 	}
 }
 
 func TestToday_DefaultsToHCMWithoutGeocoding(t *testing.T) {
 	f := &fakeOpenMeteo{forecastBody: forecastFixture}
 	stubOpenMeteo(t, f)
-	rb := installThoitiet(t)
+	rb := installWeather(t)
 
 	want := "🌦️ Thời tiết hôm nay 01/10 — Thành phố Hồ Chí Minh\n" +
 		"Hiện tại: 29°C (cảm giác 36°C), Nhiều mây ☁️\n" +
@@ -150,7 +161,7 @@ func TestToday_DefaultsToHCMWithoutGeocoding(t *testing.T) {
 func TestHourly_ListsNextSixHours(t *testing.T) {
 	f := &fakeOpenMeteo{forecastBody: forecastFixture}
 	stubOpenMeteo(t, f)
-	rb := installThoitiet(t)
+	rb := installWeather(t)
 
 	want := "🕐 Thời tiết 6 giờ tới — Thành phố Hồ Chí Minh\n" +
 		"Hiện tại 10:30: 29°C (cảm giác 36°C), Nhiều mây ☁️\n" +
@@ -175,7 +186,7 @@ func TestHourly_ListsNextSixHours(t *testing.T) {
 func TestHourly_NoUpcomingHoursRepliesError(t *testing.T) {
 	stale := strings.Replace(forecastFixture, `"time":"2026-10-01T10:30"`, `"time":"2026-10-01T16:30"`, 1)
 	stubOpenMeteo(t, &fakeOpenMeteo{forecastBody: stale})
-	rb := installThoitiet(t)
+	rb := installWeather(t)
 
 	if got := send(rb, "/thoitiet"); got != fetchErrorText {
 		t.Errorf("reply = %q, want %q", got, fetchErrorText)
@@ -185,7 +196,7 @@ func TestHourly_NoUpcomingHoursRepliesError(t *testing.T) {
 func TestTomorrow_GeocodesDiacriticLocation(t *testing.T) {
 	f := &fakeOpenMeteo{geocodeBody: daLatGeocodeFixture, forecastBody: forecastFixture}
 	stubOpenMeteo(t, f)
-	rb := installThoitiet(t)
+	rb := installWeather(t)
 
 	got := send(rb, "/thoitietngaymai  Đà   Lạt ")
 	want := "🌦️ Thời tiết ngày mai T6 02/10 — Ðà Lạt, Lam Dong\n" +
@@ -207,7 +218,7 @@ func TestTomorrow_GeocodesDiacriticLocation(t *testing.T) {
 func TestWeek_ListsSevenDays(t *testing.T) {
 	f := &fakeOpenMeteo{forecastBody: forecastFixture}
 	stubOpenMeteo(t, f)
-	rb := installThoitiet(t)
+	rb := installWeather(t)
 
 	want := "📅 Thời tiết 7 ngày tới — Thành phố Hồ Chí Minh\n" +
 		"T5 01/10: 24–33°C 🌦️ Mưa rào nhẹ, mưa 70%\n" +
@@ -231,7 +242,7 @@ func TestAliasExpansionAndForeignPlace(t *testing.T) {
 		forecastBody: forecastFixture,
 	}
 	stubOpenMeteo(t, f)
-	rb := installThoitiet(t)
+	rb := installWeather(t)
 
 	got := send(rb, "/thoitiettuannay Tokyo")
 	if !strings.HasPrefix(got, "📅 Thời tiết 7 ngày tới — Tokyo, Nhật Bản\n") {
@@ -246,7 +257,7 @@ func TestAliasExpansionAndForeignPlace(t *testing.T) {
 func TestUnknownLocation(t *testing.T) {
 	f := &fakeOpenMeteo{geocodeBody: `{"generationtime_ms":0.3}`}
 	stubOpenMeteo(t, f)
-	rb := installThoitiet(t)
+	rb := installWeather(t)
 
 	if got, want := send(rb, "/thoitiet xyzzy"), `Không tìm thấy địa điểm "xyzzy".`; got != want {
 		t.Errorf("reply = %q, want %q", got, want)
@@ -266,7 +277,7 @@ func TestUpstreamFailureRepliesError(t *testing.T) {
 	for name, f := range cases {
 		t.Run(name, func(t *testing.T) {
 			stubOpenMeteo(t, f)
-			rb := installThoitiet(t)
+			rb := installWeather(t)
 			cmd := "/thoitiet"
 			if f.geocodeBody != "" {
 				cmd = "/thoitiet Hue"
@@ -284,7 +295,7 @@ func TestTomorrow_NeedsTwoDailyRows(t *testing.T) {
 	).Replace(forecastFixture)
 	f := &fakeOpenMeteo{forecastBody: oneDay}
 	stubOpenMeteo(t, f)
-	rb := installThoitiet(t)
+	rb := installWeather(t)
 
 	if got := send(rb, "/thoitietngaymai"); got != fetchErrorText {
 		t.Errorf("reply = %q, want %q", got, fetchErrorText)

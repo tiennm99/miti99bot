@@ -1,4 +1,4 @@
-package thoitiet
+package weather
 
 import (
 	"fmt"

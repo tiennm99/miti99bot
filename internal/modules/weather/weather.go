@@ -1,8 +1,12 @@
-// Package thoitiet is the weather module: /thoitiet shows the next 6 hours
-// hour by hour, and /thoitiethomnay, /thoitietngaymai, and /thoitiettuannay
-// show today's, tomorrow's, and the next 7 days' forecast for a location, Ho
-// Chi Minh City by default. Data comes from Open-Meteo, which needs no API key.
-package thoitiet
+// Package weather is the weather and flood module. /thoitiet shows the next 6
+// hours hour by hour, and /thoitiethomnay, /thoitietngaymai, and
+// /thoitiettuannay show today's, tomorrow's, and the next 7 days' forecast for
+// a location, Ho Chi Minh City by default; that data comes from Open-Meteo,
+// which needs no API key. /thuyvan shows the flood risk at Tân Thuận (Quận 7)
+// from the KTTV Nam Bộ tide bulletin, the Open-Meteo rain forecast and VNDMS
+// river gauges, and /thuyvan_subscribe opts a chat into a daily alert sent
+// only when a tide or rain threshold is forecast.
+package weather
 
 import (
 	"context"
@@ -16,6 +20,8 @@ import (
 	"github.com/tiennm99/miti99bot/internal/log"
 	"github.com/tiennm99/miti99bot/internal/modules"
 	"github.com/tiennm99/miti99bot/internal/modules/util/chathelper"
+	"github.com/tiennm99/miti99bot/internal/modules/util/subscription"
+	"github.com/tiennm99/miti99bot/internal/storage"
 )
 
 const (
@@ -46,9 +52,19 @@ var (
 	weekView     = view{command: "thoitiettuannay", ready: hasDays(1), render: formatWeek}
 )
 
-// New is the thoitiet module Factory. The module keeps no state.
-func New(_ modules.Deps) modules.Module {
+// CollectionName is the module's registry key and storage collection, which
+// holds the /thuyvan alert subscribers.
+const CollectionName = "weather"
+
+// New is the weather module Factory. Only the flood alert keeps state: its
+// subscriber list and last-push date.
+func New(deps modules.Deps) modules.Module {
 	client := &http.Client{Timeout: httpTimeout}
+	fl := &flood{
+		client:      &http.Client{Timeout: floodFetchTimeout},
+		subscribers: storage.Typed[subscription.Doc](deps.Store),
+		pushDate:    storage.Typed[subscription.DayDoc](deps.Store),
+	}
 	command := func(name, description string, v view) modules.Command {
 		return modules.Command{
 			Name:        name,
@@ -59,12 +75,13 @@ func New(_ modules.Deps) modules.Module {
 		}
 	}
 	return modules.Module{
-		Commands: []modules.Command{
+		Commands: append([]modules.Command{
 			command("thoitiethomnay", "Thời tiết hôm nay (mặc định TP.HCM)", todayView),
 			command("thoitiet", "Thời tiết từng giờ trong 6 giờ tới (mặc định TP.HCM)", hourlyView),
 			command("thoitietngaymai", "Thời tiết ngày mai (mặc định TP.HCM)", tomorrowView),
 			command("thoitiettuannay", "Thời tiết 7 ngày tới (mặc định TP.HCM)", weekView),
-		},
+		}, fl.commands()...),
+		Crons: fl.crons(),
 	}
 }
 
@@ -85,7 +102,7 @@ func handler(client *http.Client, v view) modules.CommandHandler {
 			err = fmt.Errorf("forecast: missing rows for /%s", v.command)
 		}
 		if err != nil {
-			log.Error("weather fetch failed", "module", "thoitiet", "command", v.command, "err", err)
+			log.Error("weather fetch failed", "module", "weather", "command", v.command, "err", err)
 			return chathelper.Reply(ctx, b, msg, fetchErrorText)
 		}
 		return chathelper.Reply(ctx, b, msg, v.render(p, f))

@@ -35,8 +35,8 @@ import (
 	"github.com/tiennm99/miti99bot/internal/modules/stats"
 	"github.com/tiennm99/miti99bot/internal/modules/sticker"
 	"github.com/tiennm99/miti99bot/internal/modules/stock"
-	"github.com/tiennm99/miti99bot/internal/modules/thoitiet"
 	"github.com/tiennm99/miti99bot/internal/modules/util"
+	"github.com/tiennm99/miti99bot/internal/modules/weather"
 	"github.com/tiennm99/miti99bot/internal/modules/wordle"
 	"github.com/tiennm99/miti99bot/internal/server"
 	"github.com/tiennm99/miti99bot/internal/storage"
@@ -106,7 +106,7 @@ func factories() map[string]modules.Factory {
 		sticker.CollectionName: sticker.New,
 		"alias":                alias.New,
 		"blacklist":            blacklist.New,
-		"thoitiet":             thoitiet.New,
+		weather.CollectionName: weather.New,
 	}
 }
 
