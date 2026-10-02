@@ -161,61 +161,28 @@ body {
   background:
     linear-gradient(
       135deg,
-      transparent 42%,
-      color-mix(in srgb, var(--glint, #fff) 10%, transparent) 44.5%,
-      color-mix(in srgb, var(--glint, #fff) 30%, transparent) 47%,
-      color-mix(in srgb, var(--glint-core) 55%, transparent) 49%,
-      color-mix(in srgb, var(--glint-core) 70%, transparent) 50%,
-      color-mix(in srgb, var(--glint-core) 55%, transparent) 51%,
-      color-mix(in srgb, var(--glint, #fff) 30%, transparent) 53%,
-      color-mix(in srgb, var(--glint, #fff) 10%, transparent) 55.5%,
-      transparent 58%
+      transparent 41%,
+      color-mix(in srgb, var(--glint, #fff) 10%, transparent) 43.5%,
+      color-mix(in srgb, var(--glint, #fff) 30%, transparent) 46%,
+      color-mix(in srgb, var(--glint-core) 55%, transparent) 48%,
+      color-mix(in srgb, var(--glint-core) 70%, transparent) 49.5% 50.5%,
+      color-mix(in srgb, var(--glint-core) 55%, transparent) 52%,
+      color-mix(in srgb, var(--glint, #fff) 30%, transparent) 54%,
+      color-mix(in srgb, var(--glint, #fff) 10%, transparent) 56.5%,
+      transparent 59%
     ),
     linear-gradient(
       135deg,
-      transparent 37%,
-      color-mix(in srgb, var(--glint-core) 45%, transparent) 38.5%,
-      transparent 40%
+      transparent 39%,
+      color-mix(in srgb, var(--glint-core) 50%, transparent) 41.5%,
+      transparent 44%
     );
   height: 300%;
   left: -100%;
   position: absolute;
   top: -100%;
-  transform: translate(-26.7%, -26.7%);
+  transform: translate(-28.3%, -28.3%);
   width: 300%;
-}
-
-/*
- * A four-ray flare riding the band's centre, which travels corner to corner.
- * Sized against the band's 3x box, so it spans 46% of the card.
- */
-.wish-glint-flare {
-  background: radial-gradient(
-    circle,
-    var(--glint-core) 0 14%,
-    color-mix(in srgb, var(--glint) 53%, transparent) 30%,
-    transparent 64%
-  );
-  aspect-ratio: 1;
-  left: 50%;
-  position: absolute;
-  top: 50%;
-  width: 15.3%;
-}
-
-.wish-glint-flare::before,
-.wish-glint-flare::after {
-  background: linear-gradient(90deg, transparent, var(--glint-core) 46% 54%, transparent);
-  content: '';
-  height: 5%;
-  left: -40%;
-  position: absolute;
-  top: 47.5%;
-  width: 180%;
-}
-
-.wish-glint-flare::after {
-  transform: rotate(90deg);
 }
 
 /*

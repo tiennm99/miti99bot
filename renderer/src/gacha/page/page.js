@@ -43,9 +43,7 @@ const createFace = () => {
   clip.setAttribute('aria-hidden', 'true');
   // Set on the clip itself: the card flies in an overlay outside #stage.
   clip.style.setProperty('--glint', wish.artwork.accent);
-  const band = el('span', 'wish-glint');
-  band.append(el('span', 'wish-glint-flare'));
-  clip.append(band);
+  clip.append(el('span', 'wish-glint'));
   face.append(content, clip);
   return face;
 };
@@ -158,8 +156,8 @@ const burstSparkles = (deck, delay, duration) => {
   setTimeout(() => layer.remove(), delay + duration + 1200);
 };
 
-/** The glint moves on easeInOutSine. */
-const glint = Object.freeze({duration: 800, easing: 'cubic-bezier(.37, 0, .63, 1)'});
+/** The glint moves on ease-in-out. */
+const glint = Object.freeze({duration: 1200, easing: 'ease-in-out'});
 
 /**
  * Keeps the card's text hidden while it spins and switches it on as the card
@@ -169,9 +167,9 @@ const glint = Object.freeze({duration: 800, easing: 'cubic-bezier(.37, 0, .63, 1
  * band is a gradient across a box three times the card's size and centred on
  * it, so the card stays inside that box for the whole sweep and every corner is
  * lit; a card-sized box would leave the top-right and bottom-left corners
- * outside it as it slid diagonally. The box moves from 0.8 card-widths and
- * heights up-left to 0.95 down-right, so both streaks (the thin one trails the
- * wide one) start and end clear of the card.
+ * outside it as it slid diagonally. The box moves 0.85 card-widths and heights
+ * each way, so both streaks (the thin one trails the wide one) start and end
+ * clear of the card.
  *
  * @param {Element} turn
  * @param {number} delay     Milliseconds until the spin starts.
@@ -182,21 +180,12 @@ const revealFace = (turn, delay, duration) => {
     [{opacity: 0}, {opacity: 0, offset: lastFaceUpAt}, {opacity: 1, offset: lastFaceUpAt}, {opacity: 1}],
     {delay, duration, easing: 'linear', fill: 'both'},
   );
-  const band = turn.querySelector('.wish-glint');
-  band?.animate([{transform: 'translate(-26.7%, -26.7%)'}, {transform: 'translate(31.7%, 31.7%)'}], {
+  turn.querySelector('.wish-glint')?.animate([{transform: 'translate(-28.3%, -28.3%)'}, {transform: 'translate(28.3%, 28.3%)'}], {
     delay: delay + duration,
     duration: glint.duration,
     easing: glint.easing,
     fill: 'both',
   });
-  band?.querySelector('.wish-glint-flare')?.animate(
-    [
-      {transform: 'translate(-50%, -50%) scale(0) rotate(0deg)', opacity: 0},
-      {transform: 'translate(-50%, -50%) scale(1) rotate(45deg)', opacity: 1, offset: 0.5},
-      {transform: 'translate(-50%, -50%) scale(0) rotate(90deg)', opacity: 0},
-    ],
-    {delay: delay + duration, duration: glint.duration, easing: glint.easing, fill: 'both'},
-  );
 };
 
 /**
