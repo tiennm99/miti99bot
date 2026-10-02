@@ -137,13 +137,15 @@ body {
  * The mirror glint that sweeps across the card once it lands (page.js). It is
  * blended additively (plus-lighter), so it brightens the card's own colours
  * instead of painting flat white over them; the light is tinted with the
- * card's accent (--glint) so it matches the card's tone.
+ * card's accent (--glint) so it matches the card's tone. The gradients peak at
+ * full strength and the clip's opacity caps the whole sprite at 120/255.
  */
 .wish-glint-clip {
   --glint-core: color-mix(in srgb, var(--glint, #fff) 35%, #fff);
   border-radius: inherit;
   inset: 0;
   mix-blend-mode: plus-lighter;
+  opacity: calc(120 / 255);
   overflow: hidden;
   pointer-events: none;
   position: absolute;
@@ -154,11 +156,11 @@ body {
   background: linear-gradient(
     135deg,
     transparent 45.3%,
-    color-mix(in srgb, var(--glint, #fff) 14%, transparent) 47.7%,
-    color-mix(in srgb, var(--glint-core) 60%, transparent) 49.7%,
-    color-mix(in srgb, var(--glint-core) 75%, transparent) 50%,
-    color-mix(in srgb, var(--glint-core) 60%, transparent) 50.3%,
-    color-mix(in srgb, var(--glint, #fff) 14%, transparent) 52.3%,
+    color-mix(in srgb, var(--glint, #fff) 19%, transparent) 47.7%,
+    color-mix(in srgb, var(--glint-core) 80%, transparent) 49.7%,
+    var(--glint-core) 50%,
+    color-mix(in srgb, var(--glint-core) 80%, transparent) 50.3%,
+    color-mix(in srgb, var(--glint, #fff) 19%, transparent) 52.3%,
     transparent 54.7%
   );
   height: 300%;
@@ -176,8 +178,8 @@ body {
 .wish-glint-flare {
   background: radial-gradient(
     circle,
-    color-mix(in srgb, var(--glint-core) 85%, transparent) 0 14%,
-    color-mix(in srgb, var(--glint) 45%, transparent) 30%,
+    var(--glint-core) 0 14%,
+    color-mix(in srgb, var(--glint) 53%, transparent) 30%,
     transparent 64%
   );
   aspect-ratio: 1;
