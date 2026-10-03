@@ -14,8 +14,12 @@ services:
       MODULES: ${MODULES}                  # CSV; empty = all modules
       OWNER_ID: ${OWNER_ID}                # Telegram user id for owner-only commands
       ADMIN_IDS: ${ADMIN_IDS}              # CSV of admin Telegram user ids
-      WHEELOFNAMES_API_URL: ${WHEELOFNAMES_API_URL:-}       # Optional full /api/gif endpoint (/gacha uses /api/gacha)
-      WHEELOFNAMES_API_TOKEN: ${WHEELOFNAMES_API_TOKEN:-}   # Optional bearer token for that service
+      # The bundled renderer service below draws /wheelofnames, /gacha and
+      # /genshin. The URL is fixed to its in-network address so a stale
+      # platform-level value cannot point the bot elsewhere; /gacha and
+      # /genshin derive their endpoints from it.
+      WHEELOFNAMES_API_URL: http://renderer:3000/api/gif
+      WHEELOFNAMES_API_TOKEN: ${WHEELOFNAMES_API_TOKEN:-}   # Shared bearer token; the renderer uses it as API_TOKEN
       # SOURCE_COMMIT is intentionally not declared here. Coolify provides it
       # at runtime via its generated env file; declaring it here with Compose
       # interpolation can override the runtime value with an empty string.
@@ -37,3 +41,28 @@ services:
     # defined here. Configure that monitor against GET / instead
     # (returns text/plain "miti99bot ok"). Note: a plain / check does not verify
     # Mongo connectivity — see docs/deploy-coolify-selfhosted.md.
+
+  # Animation renderer (Node + Remotion + headless Chrome) from renderer/.
+  # Internal only: the bot reaches it over the compose network, so it has no
+  # published port and no public domain. Without WHEELOFNAMES_API_TOKEN it
+  # refuses to start in production, and the bot falls back to text replies.
+  renderer:
+    build:
+      context: ./renderer
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: "3000"
+      API_TOKEN: ${WHEELOFNAMES_API_TOKEN:-}
+      MAX_CONCURRENT_RENDERS: ${MAX_CONCURRENT_RENDERS:-1}
+      RENDER_TIMEOUT_MS: ${RENDER_TIMEOUT_MS:-15000}
+      MAX_OPTIONS: ${MAX_OPTIONS:-32}
+      MAX_OPTION_CHARS: ${MAX_OPTION_CHARS:-40}
+    expose:
+      - "3000"
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:3000/api/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 30s
+      timeout: 5s
+      retries: 3

@@ -1,5 +1,12 @@
 # Deployment
 
+## miti99bot compose
+
+The root `compose.yml` builds this folder as the `renderer` service and points
+the bot at it over the compose network. Only `WHEELOFNAMES_API_TOKEN` needs a
+value there; it becomes `API_TOKEN` below. The rest of this page covers running
+the service on its own.
+
 ## Recommendation
 
 Use a self-hosted/container runtime for v1. Static-only hosts are not enough
@@ -33,8 +40,8 @@ MAX_OPTION_CHARS=40
 API_TOKEN=change-me
 ```
 
-`compose.yml` forwards these values from the shell with `${VAR:-default}`
-fallbacks, so unset or empty shell variables use the defaults above.
+The root `compose.yml` forwards the tuning values with `${VAR:-default}`
+fallbacks, so unset or empty variables use the defaults above.
 
 Start with 1-2 vCPU and 1-2 GB RAM. Increase only after render benchmarks show
 the service is CPU-bound or concurrency-limited.

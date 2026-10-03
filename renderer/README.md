@@ -1,5 +1,7 @@
-# wheelofnames
+# renderer
 
+Part of miti99bot: the service behind `/wheelofnames`, `/gacha`, and
+`/genshin`, deployed by the root `compose.yml` as the `renderer` service.
 Self-hosted API that renders wheel-of-names GIF animations and Genshin-style
 meteor wish MP4 animations with Remotion, and card-pack gacha wish MP4
 animations with pack-cards.
