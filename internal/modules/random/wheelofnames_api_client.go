@@ -16,9 +16,9 @@ import (
 )
 
 const (
-	// The standard renderer is a deployment of
-	// https://github.com/tiennm99/wheelofnames. Operators may point this to any
-	// service that implements the same /api/gif contract.
+	// The standard renderer is the renderer/ service in this repository, wired
+	// in by compose.yml. Operators may point this to any service that
+	// implements the same /api/gif contract.
 	wheelOfNamesAPIURLEnv   = "WHEELOFNAMES_API_URL"
 	wheelOfNamesAPITokenEnv = "WHEELOFNAMES_API_TOKEN"
 

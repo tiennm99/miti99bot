@@ -36,8 +36,8 @@ Copy [`.env.example`](../.env.example) → `.env` (gitignored) and fill in.
 | `ADMIN_IDS` | optional | CSV of Telegram user ids for admin-only commands |
 | `STICKER_PACK_NAME` | optional | set `/addsticker` writes to; default `miti99_by_miti99bot`. See [sticker packs](sticker-packs.md) |
 | `LOL_PANDASCORE_TOKEN` | ✅ for lol module | PandaScore API token (free tier) — secret, never logged; without it every `/lol*` fetch fails (stale cache may still serve briefly) |
-| `WHEELOFNAMES_API_URL` | optional | full `/api/gif` endpoint for remote `/wheelofnames` GIF rendering |
-| `WHEELOFNAMES_API_TOKEN` | optional | bearer token matching the wheelofnames service `API_TOKEN` |
+| `WHEELOFNAMES_API_URL` | leave unset | fixed by `compose.yml` to the bundled renderer (`http://renderer:3000/api/gif`); a Coolify value is ignored |
+| `WHEELOFNAMES_API_TOKEN` | ✅ for animations | bearer token shared by the bot and the bundled renderer (its `API_TOKEN`) — secret; unset = the renderer refuses to start and the animated commands reply with text |
 | `LOG_LEVEL` | optional | `debug`, `info` (default), `warn`, or `error`; logs are JSON on stdout |
 | `GOLD_VNAPP_API_KEY` | leave unset | VNAppMob key; unset = the gold module fetches one and caches it in MongoDB |
 | `KV_PROVIDER` | leave unset | `memory` or `mongodb`; unset = `mongodb` when `MONGO_URL` is set, otherwise `memory` |
@@ -51,31 +51,30 @@ has no webhook.
 > Cron runs in-process (`internal/cron`) — there is no `/cron` HTTP route and no
 > `CRON_SHARED_SECRET`. The scheduler is the sole trigger; nothing inbound.
 
-### Optional wheelofnames renderer
+### Animation renderer
 
-`/wheelofnames` uses a remote GIF renderer when `WHEELOFNAMES_API_URL` is set.
-The standard renderer is a deployment of
-[`tiennm99/wheelofnames`](https://github.com/tiennm99/wheelofnames), but any
-service that implements the same `/api/gif` contract can be used. Set the URL
-to the full GIF endpoint and set the token to the same value as the service
-`API_TOKEN`:
-
-```env
-WHEELOFNAMES_API_URL=http://wheelofnames:3000/api/gif
-WHEELOFNAMES_API_TOKEN=<same value as wheelofnames API_TOKEN>
-```
-
-Use a public HTTPS URL instead when the bot cannot reach the service on a
-private Coolify/Docker network:
+`/wheelofnames`, `/gacha`, and `/genshin` are drawn by the Node renderer in
+[`renderer/`](../renderer/README.md) (Remotion and headless Chrome).
+`compose.yml` deploys it as a second service, `renderer`, next to the bot. It
+is internal only: the bot reaches it at `http://renderer:3000/api/gif` over the
+compose network, so it needs no domain and publishes no port. The only setting
+is the shared token:
 
 ```env
-WHEELOFNAMES_API_URL=https://wheelofnames.example.com/api/gif
-WHEELOFNAMES_API_TOKEN=<same value as wheelofnames API_TOKEN>
+WHEELOFNAMES_API_TOKEN=<random secret>
 ```
+
+Renderer tuning (`MAX_CONCURRENT_RENDERS`, `RENDER_TIMEOUT_MS`, `MAX_OPTIONS`,
+`MAX_OPTION_CHARS`) can be set in Coolify too; the defaults are in
+[`renderer/docs/deployment.md`](../renderer/docs/deployment.md). Give the host
+1-2 GB of headroom for the renderer's Chrome.
+
+Outside compose, `WHEELOFNAMES_API_URL` can point the bot at any service that
+implements the same `/api/gif` contract.
 
 The bot sends outbound HTTP only; no public bot ingress is required. Remote
-renders use `512px`, `20fps`, and `7` seconds total by default. If the remote
-service is unset, unavailable, unauthorized, or returns a non-GIF response,
+renders use `512px`, `20fps`, and `7` seconds total by default. If the renderer
+is unset, unavailable, unauthorized, or returns a non-GIF response,
 `/wheelofnames` falls back to the same plain text winner reply as `/random`.
 Successful GIF replies include the result behind Telegram spoiler formatting.
 
@@ -146,8 +145,8 @@ MP4, with the same text fallback.
 ## 2. Coolify
 
 1. New resource → from this Git repo (Docker Compose), or a prebuilt image.
-   The committed [`compose.yml`](../compose.yml) defines the single
-   `bot` service.
+   The committed [`compose.yml`](../compose.yml) defines the `bot` service
+   and the internal `renderer` service.
 2. Set the env vars above in Coolify.
 3. **No public domain / port** is needed — polling is outbound-only. Do not
    publish a port or attach a domain. `expose: 8080` keeps the health endpoint
