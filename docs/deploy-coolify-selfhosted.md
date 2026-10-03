@@ -43,6 +43,22 @@ Copy [`.env.example`](../.env.example) → `.env` (gitignored) and fill in.
 | `PORT` | leave unset | health server port; default `8080` |
 | `SOURCE_COMMIT` | never set | provided by Coolify at runtime for the deploy DM (see step 5 below) |
 
+`compose.yml` references only the required settings; every optional one is a
+commented-out `${VAR:-default}` line, and the code falls back to that default.
+Two Coolify behaviours, confirmed in its compose parser, shape this:
+
+- Coolify writes every dashboard variable into a generated `.env` and adds
+  `env_file: .env` to each service, so a variable set in the dashboard reaches
+  the containers whether or not `compose.yml` mentions it. Set optional values
+  in the dashboard; there is nothing to uncomment.
+- Coolify creates a dashboard entry for every variable `compose.yml`
+  references, and stores a `${VAR:-default}` default only when it first
+  creates that entry. An existing entry — even an empty one — is written into
+  the deployed compose as is, so the compose default never applies. Keeping
+  optional variables unreferenced avoids such empty entries.
+
+Outside Coolify, uncomment a line in `compose.yml` to pass that variable in.
+
 Stock, coin, and gold provider URL overrides are not supported in runtime env;
 modules use coded defaults. There is no `TELEGRAM_WEBHOOK_SECRET`: long polling
 has no webhook.
@@ -62,10 +78,9 @@ to it.
 
 Renderer tuning (`RENDERER_MAX_CONCURRENT_RENDERS`,
 `RENDERER_RENDER_TIMEOUT_MS`, `RENDERER_MAX_OPTIONS`,
-`RENDERER_MAX_OPTION_CHARS`) is optional. `compose.yml` references each one
-without a default, so Coolify lists it as a setting you can fill in or leave
-empty; an empty value uses the renderer's default, listed in
-[`renderer/docs/deployment.md`](../renderer/docs/deployment.md). Give the host
+`RENDERER_MAX_OPTION_CHARS`) is optional; the renderer falls back to the
+defaults listed in [`renderer/docs/deployment.md`](../renderer/docs/deployment.md).
+Set them in the Coolify dashboard to override. Give the host
 1-2 GB of headroom for the renderer's Chrome.
 
 Outside compose, set `RENDERER_URL` to the base URL of any service that
