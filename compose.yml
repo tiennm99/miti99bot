@@ -7,32 +7,41 @@ services:
     restart: unless-stopped
     environment:
       # --- Required ---
-      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
-      MONGO_URL: ${MONGO_URL}              # Atlas SRV string incl. credentials — SECRET
-      MONGO_DATABASE: ${MONGO_DATABASE}
-      # --- Operational ---
-      MODULES: ${MODULES}                  # CSV; empty = all modules
-      OWNER_ID: ${OWNER_ID}                # Telegram user id for owner-only commands
-      ADMIN_IDS: ${ADMIN_IDS}              # CSV of admin Telegram user ids
-      # --- Optional ---
-      LOL_PANDASCORE_TOKEN: ${LOL_PANDASCORE_TOKEN:-}  # PandaScore token — SECRET; unset = /lol* fetches fail
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}      # from @BotFather — SECRET
+      MONGO_URL: ${MONGO_URL}                        # Atlas SRV string incl. credentials — SECRET
+      MONGO_DATABASE: ${MONGO_DATABASE}              # e.g. miti99bot
+
+      # --- Access control (optional; empty = default) ---
+      MODULES: ${MODULES}                            # CSV of modules; empty = all modules
+      OWNER_ID: ${OWNER_ID}                          # Telegram user id for owner-only commands
+      ADMIN_IDS: ${ADMIN_IDS}                        # CSV of admin Telegram user ids
+
+      # --- Module settings (optional; empty = default) ---
+      LOL_PANDASCORE_TOKEN: ${LOL_PANDASCORE_TOKEN}  # PandaScore token — SECRET; empty = /lol* fetches fail
+      GOLD_VNAPP_API_KEY: ${GOLD_VNAPP_API_KEY}      # VNAppMob key — SECRET; empty = fetched and cached in Mongo
+      STICKER_PACK_NAME: ${STICKER_PACK_NAME}        # /addsticker set; empty = miti99_by_miti99bot
+
+      # --- Runtime (optional; empty = default) ---
+      LOG_LEVEL: ${LOG_LEVEL}                        # debug|info|warn|error; empty = info
+
+      # --- Fixed by this stack (not Coolify settings) ---
       # The bundled renderer service below draws /wheelofnames, /gacha and
       # /genshin. Its base URL is fixed to the in-network address so a stale
       # platform-level value cannot point the bot elsewhere; the bot appends
       # each /api/<name> route itself.
       RENDERER_URL: http://renderer:3000
-      # SOURCE_COMMIT is intentionally not declared here. Coolify provides it
-      # at runtime via its generated env file; declaring it here with Compose
-      # interpolation can override the runtime value with an empty string.
-      # Storage auto-selects mongodb because MONGO_URL is set — no KV_PROVIDER.
-      # The in-process cron scheduler runs by default — no CRON_MODE.
-      # PORT defaults to 8080 (internal health server) — omit unless overriding.
+
+      # --- Deliberately not declared ---
+      # SOURCE_COMMIT: Coolify provides it at runtime via its generated env
+      #   file; declaring it here with Compose interpolation can override the
+      #   runtime value with an empty string.
+      # PORT: the health server defaults to 8080, which the healthcheck uses.
+      # KV_PROVIDER: storage auto-selects mongodb because MONGO_URL is set.
       # Long polling = no TELEGRAM_WEBHOOK_SECRET, no /webhook, no public domain.
-      # Cron is in-process only — there is no /cron HTTP route and no secret.
-      # No stock/coin/gold URL env overrides — modules use their coded default
+      # Cron is in-process only — no CRON_MODE, no /cron route, no secret.
+      # No stock/coin/gold URL overrides — modules use their coded default
       # providers (stock: SSI/VCI/KBS; coin: Binance->Coinbase->CoinGecko;
-      # gold: VNAppMob). If GOLD_VNAPP_API_KEY is unset, the bot auto-fetches
-      # and caches a key to Mongo.
+      # gold: VNAppMob).
     # Long polling is outbound-only: nothing inbound to route, so no published
     # ports and no public domain. `expose` only documents the health server's
     # port; it publishes nothing on the host.
@@ -58,16 +67,19 @@ services:
       context: ./renderer
     restart: unless-stopped
     environment:
-      NODE_ENV: production
       # Every renderer setting carries the RENDERER_ prefix so it reads as a
       # renderer setting and cannot clash with the bot's variables.
+
+      # --- Tuning (optional; empty = default) ---
+      RENDERER_MAX_CONCURRENT_RENDERS: ${RENDERER_MAX_CONCURRENT_RENDERS}  # empty = 1
+      RENDERER_RENDER_TIMEOUT_MS: ${RENDERER_RENDER_TIMEOUT_MS}            # empty = 15000 (floor 7000)
+      RENDERER_MAX_OPTIONS: ${RENDERER_MAX_OPTIONS}                        # empty = 32 wheel options
+      RENDERER_MAX_OPTION_CHARS: ${RENDERER_MAX_OPTION_CHARS}              # empty = 40 chars per option/label
+
+      # --- Fixed by this stack (not Coolify settings) ---
+      NODE_ENV: production
       RENDERER_HOST: 0.0.0.0
       RENDERER_PORT: "3000"   # keep in sync with the bot's RENDERER_URL and the healthcheck
-      # Tuning is left out on purpose: the renderer's own defaults apply
-      # (RENDERER_MAX_CONCURRENT_RENDERS=1, RENDERER_RENDER_TIMEOUT_MS=15000,
-      # RENDERER_MAX_OPTIONS=32, RENDERER_MAX_OPTION_CHARS=40). Coolify lists
-      # every interpolated variable here as a setting, so to override one, add it
-      # here as a literal, e.g. RENDERER_MAX_OPTIONS: "48".
     expose:
       - "3000"
     healthcheck:

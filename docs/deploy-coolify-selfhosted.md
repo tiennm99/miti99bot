@@ -38,7 +38,7 @@ Copy [`.env.example`](../.env.example) → `.env` (gitignored) and fill in.
 | `LOL_PANDASCORE_TOKEN` | optional | PandaScore API token for the lol module (free tier) — secret, never logged; without it every `/lol*` fetch fails (stale cache may still serve briefly) |
 | `RENDERER_URL` | leave unset | base URL of the animation renderer; fixed by `compose.yml` to the bundled renderer (`http://renderer:3000`), so a Coolify value is ignored |
 | `LOG_LEVEL` | optional | `debug`, `info` (default), `warn`, or `error`; logs are JSON on stdout |
-| `GOLD_VNAPP_API_KEY` | leave unset | VNAppMob key; unset = the gold module fetches one and caches it in MongoDB |
+| `GOLD_VNAPP_API_KEY` | optional | VNAppMob key — secret; empty = the gold module fetches one and caches it in MongoDB |
 | `KV_PROVIDER` | leave unset | `memory` or `mongodb`; unset = `mongodb` when `MONGO_URL` is set, otherwise `memory` |
 | `PORT` | leave unset | health server port; default `8080` |
 | `SOURCE_COMMIT` | never set | provided by Coolify at runtime for the deploy DM (see step 5 below) |
@@ -62,12 +62,10 @@ to it.
 
 Renderer tuning (`RENDERER_MAX_CONCURRENT_RENDERS`,
 `RENDERER_RENDER_TIMEOUT_MS`, `RENDERER_MAX_OPTIONS`,
-`RENDERER_MAX_OPTION_CHARS`) is optional and needs nothing in Coolify: the
-renderer's defaults apply, listed in
-[`renderer/docs/deployment.md`](../renderer/docs/deployment.md). Coolify lists
-every `${VAR}` that `compose.yml` references as a setting, so the tuning values
-are deliberately not referenced there; to override one, add it to the
-`renderer` service's `environment:` in `compose.yml` as a literal value. Give the host
+`RENDERER_MAX_OPTION_CHARS`) is optional. `compose.yml` references each one
+without a default, so Coolify lists it as a setting you can fill in or leave
+empty; an empty value uses the renderer's default, listed in
+[`renderer/docs/deployment.md`](../renderer/docs/deployment.md). Give the host
 1-2 GB of headroom for the renderer's Chrome.
 
 Outside compose, set `RENDERER_URL` to the base URL of any service that
