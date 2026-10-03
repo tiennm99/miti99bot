@@ -37,7 +37,6 @@ Copy [`.env.example`](../.env.example) → `.env` (gitignored) and fill in.
 | `STICKER_PACK_NAME` | optional | set `/addsticker` writes to; default `miti99_by_miti99bot`. See [sticker packs](sticker-packs.md) |
 | `LOL_PANDASCORE_TOKEN` | ✅ for lol module | PandaScore API token (free tier) — secret, never logged; without it every `/lol*` fetch fails (stale cache may still serve briefly) |
 | `WHEELOFNAMES_API_URL` | leave unset | fixed by `compose.yml` to the bundled renderer (`http://renderer:3000/api/gif`); a Coolify value is ignored |
-| `WHEELOFNAMES_API_TOKEN` | ✅ for animations | bearer token shared by the bot and the bundled renderer (its `API_TOKEN`) — secret; unset = the renderer refuses to start and the animated commands reply with text |
 | `LOG_LEVEL` | optional | `debug`, `info` (default), `warn`, or `error`; logs are JSON on stdout |
 | `GOLD_VNAPP_API_KEY` | leave unset | VNAppMob key; unset = the gold module fetches one and caches it in MongoDB |
 | `KV_PROVIDER` | leave unset | `memory` or `mongodb`; unset = `mongodb` when `MONGO_URL` is set, otherwise `memory` |
@@ -57,12 +56,9 @@ has no webhook.
 [`renderer/`](../renderer/README.md) (Remotion and headless Chrome).
 `compose.yml` deploys it as a second service, `renderer`, next to the bot. It
 is internal only: the bot reaches it at `http://renderer:3000/api/gif` over the
-compose network, so it needs no domain and publishes no port. The only setting
-is the shared token:
-
-```env
-WHEELOFNAMES_API_TOKEN=<random secret>
-```
+compose network, so it needs no domain, publishes no port, and takes no auth
+token. Its API is unauthenticated, so never publish a port or attach a domain
+to it.
 
 Renderer tuning (`MAX_CONCURRENT_RENDERS`, `RENDER_TIMEOUT_MS`, `MAX_OPTIONS`,
 `MAX_OPTION_CHARS`) can be set in Coolify too; the defaults are in
@@ -74,7 +70,7 @@ implements the same `/api/gif` contract.
 
 The bot sends outbound HTTP only; no public bot ingress is required. Remote
 renders use `512px`, `20fps`, and `7` seconds total by default. If the renderer
-is unset, unavailable, unauthorized, or returns a non-GIF response,
+is unset, unavailable, or returns a non-GIF response,
 `/wheelofnames` falls back to the same plain text winner reply as `/random`.
 Successful GIF replies include the result behind Telegram spoiler formatting.
 

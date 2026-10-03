@@ -17,10 +17,10 @@ import (
 
 const (
 	// The standard renderer is the renderer/ service in this repository, wired
-	// in by compose.yml. Operators may point this to any service that
+	// in by compose.yml and reachable only on the compose network, so requests
+	// carry no credentials. Operators may point this to any service that
 	// implements the same /api/gif contract.
-	wheelOfNamesAPIURLEnv   = "WHEELOFNAMES_API_URL"
-	wheelOfNamesAPITokenEnv = "WHEELOFNAMES_API_TOKEN"
+	wheelOfNamesAPIURLEnv = "WHEELOFNAMES_API_URL"
 
 	wheelRemoteDurationMs = 6000
 	wheelRemoteHoldMs     = 1000
@@ -35,9 +35,8 @@ const (
 var errWheelAPINotConfigured = errors.New("wheelofnames api not configured")
 
 type wheelAPIClient struct {
-	HTTP  *http.Client
-	URL   string
-	Token string
+	HTTP *http.Client
+	URL  string
 }
 
 type wheelAPIRequest struct {
@@ -59,8 +58,7 @@ type wheelAnimation struct {
 
 func newWheelAPIClientFromEnv() wheelAPIClient {
 	return wheelAPIClient{
-		URL:   strings.TrimSpace(os.Getenv(wheelOfNamesAPIURLEnv)),
-		Token: strings.TrimSpace(os.Getenv(wheelOfNamesAPITokenEnv)),
+		URL: strings.TrimSpace(os.Getenv(wheelOfNamesAPIURLEnv)),
 	}
 }
 
@@ -102,9 +100,6 @@ func (c wheelAPIClient) post(ctx context.Context, endpoint *url.URL, body []byte
 	}
 	req.Header.Set("Accept", mediaType)
 	req.Header.Set("Content-Type", "application/json")
-	if c.Token != "" {
-		req.Header.Set("Authorization", "Bearer "+c.Token)
-	}
 
 	resp, err := c.httpClient().Do(req)
 	if err != nil {

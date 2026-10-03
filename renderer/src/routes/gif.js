@@ -1,5 +1,4 @@
 import {ZodError} from 'zod';
-import {isAuthorized} from '../lib/bearer-auth.js';
 import {isRenderTimeoutError} from '../lib/render-errors.js';
 import {pickWinnerIndex} from '../lib/winner.js';
 import {parseWheelRequest} from '../schemas/wheel-request.js';
@@ -31,10 +30,6 @@ const formatValidationError = (issues) => ({
  */
 export const registerGifRoute = async (app, deps) => {
   app.post('/api/gif', async (request, reply) => {
-    if (!isAuthorized(request, deps.config.apiToken)) {
-      return reply.code(401).send({error: 'unauthorized'});
-    }
-
     let wheelRequest;
     try {
       wheelRequest = parseWheelRequest(

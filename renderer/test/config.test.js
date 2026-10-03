@@ -7,15 +7,4 @@ describe('loadConfig', () => {
 
     expect(config.renderTimeoutMs).toBe(minRenderTimeoutMs);
   });
-
-  test('requires API_TOKEN in production', () => {
-    expect(() => loadConfig({NODE_ENV: 'production'})).toThrow(/API_TOKEN/);
-  });
-
-  test('accepts API_TOKEN in production', () => {
-    const config = loadConfig({NODE_ENV: 'production', API_TOKEN: 'secret'});
-
-    expect(config.requiresApiToken).toBe(true);
-    expect(config.apiToken).toBe('secret');
-  });
 });

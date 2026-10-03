@@ -19,7 +19,6 @@ services:
       # platform-level value cannot point the bot elsewhere; /gacha and
       # /genshin derive their endpoints from it.
       WHEELOFNAMES_API_URL: http://renderer:3000/api/gif
-      WHEELOFNAMES_API_TOKEN: ${WHEELOFNAMES_API_TOKEN:-}   # Shared bearer token; the renderer uses it as API_TOKEN
       # SOURCE_COMMIT is intentionally not declared here. Coolify provides it
       # at runtime via its generated env file; declaring it here with Compose
       # interpolation can override the runtime value with an empty string.
@@ -44,8 +43,8 @@ services:
 
   # Animation renderer (Node + Remotion + headless Chrome) from renderer/.
   # Internal only: the bot reaches it over the compose network, so it has no
-  # published port and no public domain. Without WHEELOFNAMES_API_TOKEN it
-  # refuses to start in production, and the bot falls back to text replies.
+  # published port, no public domain, and no auth token. Never publish a port
+  # or attach a domain to it — its API is unauthenticated.
   renderer:
     build:
       context: ./renderer
@@ -54,7 +53,6 @@ services:
       NODE_ENV: production
       HOST: 0.0.0.0
       PORT: "3000"
-      API_TOKEN: ${WHEELOFNAMES_API_TOKEN:-}
       MAX_CONCURRENT_RENDERS: ${MAX_CONCURRENT_RENDERS:-1}
       RENDER_TIMEOUT_MS: ${RENDER_TIMEOUT_MS:-15000}
       MAX_OPTIONS: ${MAX_OPTIONS:-32}

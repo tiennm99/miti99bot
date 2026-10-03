@@ -1,6 +1,5 @@
 import {randomInt} from 'node:crypto';
 import {ZodError} from 'zod';
-import {isAuthorized} from '../lib/bearer-auth.js';
 import {isRenderTimeoutError} from '../lib/render-errors.js';
 import {maxGachaSeed, parseGachaRequest} from '../schemas/gacha-request.js';
 
@@ -27,10 +26,6 @@ import {maxGachaSeed, parseGachaRequest} from '../schemas/gacha-request.js';
 export const registerGachaRoute = async (app, deps) => {
   const name = deps.name ?? 'gacha';
   app.post(`/api/${name}`, async (request, reply) => {
-    if (!isAuthorized(request, deps.config.apiToken)) {
-      return reply.code(401).send({error: 'unauthorized'});
-    }
-
     let gachaRequest;
     try {
       gachaRequest = parseGachaRequest(request.body, {maxOptionChars: deps.config.maxOptionChars}, () =>

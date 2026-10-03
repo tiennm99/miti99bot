@@ -67,7 +67,6 @@ func TestGacha_UsesRemoteAPIWhenConfigured(t *testing.T) {
 	}))
 	defer server.Close()
 	t.Setenv(wheelOfNamesAPIURLEnv, server.URL+"/api/gif")
-	t.Setenv(wheelOfNamesAPITokenEnv, "remote-token")
 
 	rb := installRandom(t, 999)
 	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(7, "/gacha 4* Pho"))
@@ -75,8 +74,8 @@ func TestGacha_UsesRemoteAPIWhenConfigured(t *testing.T) {
 	if gotPath != "/api/gacha" {
 		t.Fatalf("path = %q, want /api/gacha", gotPath)
 	}
-	if gotAuthorization != "Bearer remote-token" {
-		t.Fatalf("Authorization = %q, want bearer token", gotAuthorization)
+	if gotAuthorization != "" {
+		t.Fatalf("Authorization = %q, want none", gotAuthorization)
 	}
 	want := gachaAPIRequest{Label: "Pho", Rarity: 4, FPS: gachaRemoteFPS, Width: gachaRemoteWidth}
 	if got != want {

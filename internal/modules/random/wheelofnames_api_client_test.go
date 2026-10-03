@@ -14,7 +14,6 @@ import (
 func TestWheelAPIClient_RenderValidRequest(t *testing.T) {
 	var got wheelAPIRequest
 	var gotAccept string
-	var gotAuthorization string
 	var gotContentType string
 	var gotMethod string
 	var gotPath string
@@ -22,7 +21,6 @@ func TestWheelAPIClient_RenderValidRequest(t *testing.T) {
 		gotMethod = r.Method
 		gotPath = r.URL.Path
 		gotAccept = r.Header.Get("Accept")
-		gotAuthorization = r.Header.Get("Authorization")
 		gotContentType = r.Header.Get("Content-Type")
 		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
 			t.Errorf("Decode request body: %v", err)
@@ -33,9 +31,8 @@ func TestWheelAPIClient_RenderValidRequest(t *testing.T) {
 	defer server.Close()
 
 	client := wheelAPIClient{
-		HTTP:  server.Client(),
-		URL:   server.URL + "/api/gif",
-		Token: "secret-token",
+		HTTP: server.Client(),
+		URL:  server.URL + "/api/gif",
 	}
 	data, err := client.Render(context.Background(), []string{"alice", "bob", "carol"}, 1)
 	if err != nil {
@@ -56,9 +53,6 @@ func TestWheelAPIClient_RenderValidRequest(t *testing.T) {
 	if gotContentType != "application/json" {
 		t.Fatalf("Content-Type = %q, want application/json", gotContentType)
 	}
-	if gotAuthorization != "Bearer secret-token" {
-		t.Fatalf("Authorization = %q, want bearer token", gotAuthorization)
-	}
 	if !slices.Equal(got.Options, []string{"alice", "bob", "carol"}) {
 		t.Fatalf("options = %#v, want original options", got.Options)
 	}
@@ -68,7 +62,8 @@ func TestWheelAPIClient_RenderValidRequest(t *testing.T) {
 	assertWheelRemoteDefaults(t, got)
 }
 
-func TestWheelAPIClient_RenderWithoutTokenOmitsAuthorization(t *testing.T) {
+// The renderer is internal to the compose network; the bot sends no credentials.
+func TestWheelAPIClient_RenderSendsNoAuthorization(t *testing.T) {
 	var gotAuthorization string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotAuthorization = r.Header.Get("Authorization")

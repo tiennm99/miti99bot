@@ -4,13 +4,11 @@ import {buildServer} from '../src/server.js';
 
 /** @type {import('../src/config.js').AppConfig} */
 const config = {
-  apiToken: undefined,
   host: '127.0.0.1',
   maxConcurrentRenders: 1,
   maxOptionChars: 40,
   maxOptions: 32,
   port: 0,
-  requiresApiToken: false,
   renderTimeoutMs: 15000,
 };
 
@@ -94,23 +92,6 @@ describe('POST /api/gacha', () => {
     const response = await app.inject({method: 'POST', url: '/api/gacha', payload: {label: 'Pizza', rarity: 3}});
 
     expect(response.statusCode).toBe(400);
-
-    await app.close();
-  });
-
-  test('enforces bearer token when configured', async () => {
-    const app = await build({apiToken: 'secret'});
-
-    const denied = await app.inject({method: 'POST', url: '/api/gacha', payload: {label: 'Pizza', rarity: 3}});
-    const allowed = await app.inject({
-      method: 'POST',
-      url: '/api/gacha',
-      headers: {authorization: 'Bearer secret'},
-      payload: {label: 'Pizza', rarity: 3},
-    });
-
-    expect(denied.statusCode).toBe(401);
-    expect(allowed.statusCode).toBe(200);
 
     await app.close();
   });

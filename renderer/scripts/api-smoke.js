@@ -1,13 +1,11 @@
 import {buildServer} from '../src/server.js';
 
 const config = {
-  apiToken: 'smoke-token',
   host: '127.0.0.1',
   maxConcurrentRenders: 1,
   maxOptionChars: 40,
   maxOptions: 32,
   port: 0,
-  requiresApiToken: true,
   renderTimeoutMs: 30000,
 };
 
@@ -17,9 +15,6 @@ try {
   const response = await app.inject({
     method: 'POST',
     url: '/api/gif',
-    headers: {
-      authorization: 'Bearer smoke-token',
-    },
     payload: {
       durationMs: 3000,
       fps: 12,
@@ -49,9 +44,6 @@ try {
   const gacha = await app.inject({
     method: 'POST',
     url: '/api/gacha',
-    headers: {
-      authorization: 'Bearer smoke-token',
-    },
     payload: {label: 'Bún bò', rarity: 5},
   });
 
@@ -69,9 +61,6 @@ try {
   const genshin = await app.inject({
     method: 'POST',
     url: '/api/genshin',
-    headers: {
-      authorization: 'Bearer smoke-token',
-    },
     payload: {label: 'Bún bò', rarity: 5},
   });
 

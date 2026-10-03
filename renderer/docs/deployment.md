@@ -3,9 +3,9 @@
 ## miti99bot compose
 
 The root `compose.yml` builds this folder as the `renderer` service and points
-the bot at it over the compose network. Only `WHEELOFNAMES_API_TOKEN` needs a
-value there; it becomes `API_TOKEN` below. The rest of this page covers running
-the service on its own.
+the bot at it over the compose network. The API has no authentication: it is
+reachable only from inside that network, so never publish its port or attach a
+domain to it. The rest of this page covers running the service on its own.
 
 ## Recommendation
 
@@ -37,7 +37,6 @@ MAX_CONCURRENT_RENDERS=1
 RENDER_TIMEOUT_MS=15000
 MAX_OPTIONS=32
 MAX_OPTION_CHARS=40
-API_TOKEN=change-me
 ```
 
 The root `compose.yml` forwards the tuning values with `${VAR:-default}`
@@ -54,9 +53,6 @@ do not need to download Chrome Headless Shell on first render.
 `RENDER_TIMEOUT_MS` is a total render timeout. Values below `7000` are raised to
 `7000` because Remotion's browser timeout has that minimum.
 
-Set `API_TOKEN` for every production deployment. The server refuses to start
-with `NODE_ENV=production` unless the token is configured.
-
 ## Health
 
 ```sh
@@ -68,7 +64,6 @@ curl http://localhost:3000/api/healthz
 ```sh
 curl -X POST http://localhost:3000/api/gif \
   -H 'content-type: application/json' \
-  -H 'authorization: Bearer change-me' \
   --output wheel.gif \
   --data '{"options":["alice","bob","carol"],"winnerIndex":1}'
 ```

@@ -3,13 +3,11 @@ import {RenderTimeoutError} from '../src/lib/render-errors.js';
 import {buildServer} from '../src/server.js';
 
 const config = {
-  apiToken: undefined,
   host: '127.0.0.1',
   maxConcurrentRenders: 1,
   maxOptionChars: 40,
   maxOptions: 32,
   port: 0,
-  requiresApiToken: false,
   renderTimeoutMs: 15000,
 };
 
@@ -62,29 +60,6 @@ describe('POST /api/gif', () => {
 
     expect(response.statusCode).toBe(400);
     expect(response.json().error).toBe('invalid_request');
-
-    await app.close();
-  });
-
-  test('enforces bearer token when configured', async () => {
-    const app = await buildServer({
-      config: {...config, apiToken: 'secret'},
-      renderGif: async () => ({
-        buffer: Buffer.from('GIF89a-test'),
-        byteLength: 11,
-        durationMs: 12,
-      }),
-    });
-
-    const response = await app.inject({
-      method: 'POST',
-      url: '/api/gif',
-      payload: {
-        options: ['a', 'b'],
-      },
-    });
-
-    expect(response.statusCode).toBe(401);
 
     await app.close();
   });

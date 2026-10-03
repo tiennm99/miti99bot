@@ -132,7 +132,6 @@ func TestWheelOfNames_UsesRemoteAPIWhenConfigured(t *testing.T) {
 	}))
 	defer server.Close()
 	t.Setenv(wheelOfNamesAPIURLEnv, server.URL+"/api/gif")
-	t.Setenv(wheelOfNamesAPITokenEnv, "remote-token")
 
 	rb := installRandom(t, 999)
 	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(7, "/wheelofnames Alice, Bob, Carol"))
@@ -140,8 +139,8 @@ func TestWheelOfNames_UsesRemoteAPIWhenConfigured(t *testing.T) {
 	if calls != 1 {
 		t.Fatalf("remote calls = %d, want 1", calls)
 	}
-	if gotAuthorization != "Bearer remote-token" {
-		t.Fatalf("Authorization = %q, want bearer token", gotAuthorization)
+	if gotAuthorization != "" {
+		t.Fatalf("Authorization = %q, want none", gotAuthorization)
 	}
 	if !slices.Equal(got.Options, []string{"Alice", "Bob", "Carol"}) {
 		t.Fatalf("options = %#v, want parsed options", got.Options)
@@ -193,7 +192,6 @@ func TestWheelOfNames_RemoteFailureFallsBackToRandomReply(t *testing.T) {
 	}))
 	defer server.Close()
 	t.Setenv(wheelOfNamesAPIURLEnv, server.URL+"/api/gif")
-	t.Setenv(wheelOfNamesAPITokenEnv, "remote-token")
 
 	rb := installRandom(t, 999)
 	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(7, "/wheelofnames Alice"))

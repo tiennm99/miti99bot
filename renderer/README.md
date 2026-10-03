@@ -12,7 +12,6 @@ animations with pack-cards.
 POST /api/gif
 Content-Type: application/json
 Accept: image/gif
-Authorization: Bearer change-me
 ```
 
 ```json
@@ -41,7 +40,6 @@ Response is `image/gif` with winner metadata headers:
 POST /api/gacha
 Content-Type: application/json
 Accept: video/mp4
-Authorization: Bearer change-me
 ```
 
 ```json
@@ -180,10 +178,10 @@ dependencies, and FFmpeg/compositor support.
 
 ```sh
 docker build -t wheelofnames .
-docker run --rm -p 3000:3000 -e API_TOKEN=change-me wheelofnames
+docker run --rm -p 3000:3000 wheelofnames
 ```
 
 Recommended starting resources: 1-2 vCPU and 1-2 GB RAM, with
 `MAX_CONCURRENT_RENDERS=1`. `RENDER_TIMEOUT_MS` defaults to `15000` and is
 raised to Remotion's `7000ms` browser timeout floor when configured lower.
-`API_TOKEN` is required when `NODE_ENV=production`.
+The API has no authentication; publish its port only on a trusted network.
