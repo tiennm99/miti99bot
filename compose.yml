@@ -14,6 +14,8 @@ services:
       MODULES: ${MODULES}                  # CSV; empty = all modules
       OWNER_ID: ${OWNER_ID}                # Telegram user id for owner-only commands
       ADMIN_IDS: ${ADMIN_IDS}              # CSV of admin Telegram user ids
+      # --- Optional ---
+      LOL_PANDASCORE_TOKEN: ${LOL_PANDASCORE_TOKEN:-}  # PandaScore token — SECRET; unset = /lol* fetches fail
       # The bundled renderer service below draws /wheelofnames, /gacha and
       # /genshin. Its base URL is fixed to the in-network address so a stale
       # platform-level value cannot point the bot elsewhere; the bot appends
