@@ -183,5 +183,5 @@ docker run --rm -p 3000:3000 miti99bot-renderer
 
 Recommended starting resources: 1-2 vCPU and 1-2 GB RAM, with
 `RENDERER_MAX_CONCURRENT_RENDERS=1`. `RENDERER_RENDER_TIMEOUT_MS` defaults to
-`15000` and is raised to Remotion's `7000ms` browser timeout floor when configured lower.
+`30000` and is raised to Remotion's `7000ms` browser timeout floor when configured lower.
 The API has no authentication; publish its port only on a trusted network.

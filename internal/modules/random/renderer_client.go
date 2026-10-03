@@ -24,7 +24,11 @@ const (
 	rendererURLEnv = "RENDERER_URL"
 
 	rendererMaxBytes = 12 << 20
-	rendererTimeout  = 30 * time.Second
+	// rendererTimeout outlasts the renderer's own default render limit
+	// (RENDERER_RENDER_TIMEOUT_MS, 30s) plus upload time, so a slow render
+	// ends in the renderer's 504 rather than the bot abandoning a render
+	// that was about to finish.
+	rendererTimeout = 45 * time.Second
 
 	wheelRemoteDurationMs = 6000
 	wheelRemoteHoldMs     = 1000

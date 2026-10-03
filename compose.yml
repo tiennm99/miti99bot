@@ -75,7 +75,7 @@ services:
       # Set any of these in the Coolify dashboard; it reaches this service
       # through Coolify's injected .env. Outside Coolify, uncomment a line.
       # RENDERER_MAX_CONCURRENT_RENDERS: ${RENDERER_MAX_CONCURRENT_RENDERS:-1}
-      # RENDERER_RENDER_TIMEOUT_MS: ${RENDERER_RENDER_TIMEOUT_MS:-15000}  # floor 7000
+      # RENDERER_RENDER_TIMEOUT_MS: ${RENDERER_RENDER_TIMEOUT_MS:-30000}  # floor 7000
       # RENDERER_MAX_OPTIONS: ${RENDERER_MAX_OPTIONS:-32}                 # wheel options
       # RENDERER_MAX_OPTION_CHARS: ${RENDERER_MAX_OPTION_CHARS:-40}       # chars per option/label
 
