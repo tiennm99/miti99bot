@@ -159,12 +159,13 @@ MP4, with the same text fallback.
    invalidate Docker cache on every commit. Do not add `SOURCE_COMMIT` to
    `compose.yml`; an interpolated empty value can override Coolify's runtime
    env-file value.
-6. **Health check:** use Coolify's HTTP monitor against `GET /` (returns
-   `text/plain` `miti99bot ok`). The committed `compose.yml` defines no
-   `healthcheck`, and `cmd/server` has no `-healthcheck` flag. Note: `/`
-   reports healthy even if Mongo is unreachable (the driver auto-reconnects on
-   the next op); a DB outage will not auto-restart the container — accepted
-   trade-off.
+6. **Health check:** Coolify's UI health-check settings do not apply to
+   Docker Compose apps; Coolify reads each service's `healthcheck:` in
+   `compose.yml` instead. The `bot` service checks `GET /` (returns
+   `text/plain` `miti99bot ok`) with the image's busybox `wget`, and the
+   `renderer` service checks `/api/healthz`. Note: `/` reports healthy even if
+   Mongo is unreachable (the driver auto-reconnects on the next op); a DB
+   outage will not mark the container unhealthy — accepted trade-off.
 
 ## 3. Command menu
 

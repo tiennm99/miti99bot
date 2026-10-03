@@ -32,14 +32,20 @@ services:
       # gold: VNAppMob). If GOLD_VNAPP_API_KEY is unset, the bot auto-fetches
       # and caches a key to Mongo.
     # Long polling is outbound-only: nothing inbound to route, so no published
-    # ports and no public domain. `expose` keeps :8080 reachable inside the
-    # Coolify network for the container health monitor against GET / only.
+    # ports and no public domain. `expose` only documents the health server's
+    # port; it publishes nothing on the host.
     expose:
       - "8080"
-    # No compose healthcheck: Coolify's own HTTP monitor covers it, so none is
-    # defined here. Configure that monitor against GET / instead
-    # (returns text/plain "miti99bot ok"). Note: a plain / check does not verify
-    # Mongo connectivity — see docs/deploy-coolify-selfhosted.md.
+    # Coolify's UI health check does not apply to Docker Compose apps; it reads
+    # this block instead. GET / returns text/plain "miti99bot ok". It proves the
+    # process is serving, not that Mongo is reachable — see
+    # docs/deploy-coolify-selfhosted.md. busybox wget ships in the Alpine image.
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
 
   # Animation renderer (Node + Remotion + headless Chrome) from renderer/.
   # Internal only: the bot reaches it over the compose network, so it has no
