@@ -17,15 +17,18 @@ import (
 )
 
 const (
-	// stickerPackNameEnv names the set /addsticker writes to; compose.yml
-	// supplies its default. The name must end in "_by_<bot_username>", the only thing that makes a set
+	// stickerPackNameEnv overrides which set /addsticker writes to. The name
+	// must end in "_by_<bot_username>", the only thing that makes a set
 	// bot-manageable; packTitle checks it before any upload. A set that does
 	// not exist yet is created by the first successful /addsticker.
 	stickerPackNameEnv = "STICKER_PACK_NAME"
 
+	// defaultStickerPackName is the shared pack used when the env is unset.
+	defaultStickerPackName = "miti99_by_miti99bot"
+
 	// stickerPackOwnerEnv reuses the bot-wide owner setting rather than
 	// introducing a second variable: AddStickerToSet needs the *set owner's*
-	// user ID, and the standard pack belongs to the bot owner. A pack
+	// user ID, and the default pack above belongs to the bot owner. A pack
 	// owned by any other account needs this env pointed at that account.
 	stickerPackOwnerEnv = "OWNER_ID"
 
@@ -75,10 +78,6 @@ type stickerPack struct {
 	OwnerID int64  // the account the set belongs to; AddStickerToSet demands it
 }
 
-// errNoPackName means STICKER_PACK_NAME is unset, so no sticker can be added.
-// Internal, not user-facing: nothing the caller does fixes a misconfiguration.
-var errNoPackName = errors.New("util: sticker pack name unset")
-
 // errNoPackOwner means the owner ID is unset, so no sticker can be added.
 // Internal, not user-facing: nothing the caller does fixes a misconfiguration.
 var errNoPackOwner = errors.New("util: sticker pack owner ID unset")
@@ -91,7 +90,7 @@ var errNoPackOwner = errors.New("util: sticker pack owner ID unset")
 func loadStickerPack() (stickerPack, error) {
 	name := strings.TrimSpace(os.Getenv(stickerPackNameEnv))
 	if name == "" {
-		return stickerPack{}, errNoPackName
+		name = defaultStickerPackName
 	}
 	ownerID, err := strconv.ParseInt(strings.TrimSpace(os.Getenv(stickerPackOwnerEnv)), 10, 64)
 	if err != nil || ownerID == 0 {

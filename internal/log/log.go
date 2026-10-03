@@ -19,42 +19,35 @@ package log
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"os"
 	"strings"
 )
 
-// level is the default logger's minimum level. It starts at Info so logging
-// works before configuration is read (and in tests); SetLevel applies the
-// configured LOG_LEVEL at startup.
-var level = new(slog.LevelVar)
+// defaultLogger is constructed at init from LOG_LEVEL. Tests can swap it via
+// SetDefault — but the public Info/Warn/Error/Fatal helpers always read the
+// current default so test substitutions take effect immediately.
+var defaultLogger *slog.Logger
 
-// defaultLogger writes JSON to stdout. Tests can swap it via SetDefault — but
-// the public Info/Warn/Error/Fatal helpers always read the current default so
-// test substitutions take effect immediately.
-var defaultLogger = slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: level}))
-
-// ParseLevel maps a LOG_LEVEL value to a slog.Level. There is no fallback: an
-// empty or unknown value is an error, so a typo cannot silently change what
-// gets logged.
-func ParseLevel(s string) (slog.Level, error) {
-	switch strings.ToLower(strings.TrimSpace(s)) {
-	case "debug":
-		return slog.LevelDebug, nil
-	case "info":
-		return slog.LevelInfo, nil
-	case "warn", "warning":
-		return slog.LevelWarn, nil
-	case "error":
-		return slog.LevelError, nil
-	default:
-		return 0, fmt.Errorf("invalid log level %q: want debug, info, warn, or error", s)
-	}
+func init() {
+	defaultLogger = slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+		Level: parseLevel(os.Getenv("LOG_LEVEL")),
+	}))
 }
 
-// SetLevel sets the default logger's minimum level.
-func SetLevel(l slog.Level) { level.Set(l) }
+// parseLevel maps LOG_LEVEL env to a slog.Level. Unknown / empty → Info.
+func parseLevel(s string) slog.Level {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "debug":
+		return slog.LevelDebug
+	case "warn", "warning":
+		return slog.LevelWarn
+	case "error":
+		return slog.LevelError
+	default:
+		return slog.LevelInfo
+	}
+}
 
 // SetDefault swaps the package-level logger. Used by tests to capture output;
 // production code never calls this.

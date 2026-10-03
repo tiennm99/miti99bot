@@ -368,9 +368,9 @@ type config struct {
 	MongoDatabase    string // required when KVProvider=mongodb
 }
 
-// loadConfig reads config from the environment. compose.yml supplies every
-// default, so the code keeps none: a missing or invalid PORT or LOG_LEVEL is
-// fatal. Malformed OWNER_ID / ADMIN_IDS entries are logged and ignored.
+// loadConfig reads config from the environment. PORT defaults to 8080 and an
+// invalid PORT is fatal; malformed OWNER_ID / ADMIN_IDS entries are logged and
+// ignored.
 func loadConfig() config {
 	envMap := make(map[string]string, len(os.Environ()))
 	for _, kv := range os.Environ() {
@@ -378,17 +378,15 @@ func loadConfig() config {
 			envMap[kv[:eq]] = kv[eq+1:]
 		}
 	}
-	level, err := log.ParseLevel(envMap["LOG_LEVEL"])
-	if err != nil {
-		log.Fatal("invalid LOG_LEVEL", "err", err)
+	port := envMap["PORT"]
+	if port == "" {
+		port = "8080"
 	}
-	log.SetLevel(level)
-	port := strings.TrimSpace(envMap["PORT"])
 	// PORT must be a number in 0..65535. http.Server uses ":<port>" verbatim,
 	// so a junk value would otherwise surface only at ListenAndServe time;
 	// fail fast here instead.
 	if n, err := strconv.Atoi(port); err != nil || n < 0 || n > 65535 {
-		log.Fatal("missing or invalid PORT", "value", port)
+		log.Fatal("invalid PORT", "value", port)
 	}
 	return config{
 		Port:             port,

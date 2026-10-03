@@ -28,7 +28,7 @@ Avoid for v1:
 
 ## Runtime
 
-Env vars, all required (standard values shown):
+Env vars, all optional (defaults shown):
 
 ```sh
 RENDERER_PORT=3000
@@ -39,11 +39,9 @@ RENDERER_MAX_OPTIONS=32
 RENDERER_MAX_OPTION_CHARS=40
 ```
 
-The renderer has no fallback values: it refuses to start and lists every
-missing or invalid variable. The root `compose.yml` owns the defaults — it
-fixes `RENDERER_HOST` and `RENDERER_PORT` and gives each tuning value a
-`${VAR:-default}`, so leaving them empty in Coolify uses these values. For a
-local run, copy `.env.example` to `.env`; `npm run dev` and `npm start` load it.
+An unset or empty variable uses the default above. The root `compose.yml`
+fixes `RENDERER_HOST` and `RENDERER_PORT` and passes the tuning values through
+without defaults, so leaving them empty in Coolify uses these defaults.
 
 Start with 1-2 vCPU and 1-2 GB RAM. Increase only after render benchmarks show
 the service is CPU-bound or concurrency-limited.

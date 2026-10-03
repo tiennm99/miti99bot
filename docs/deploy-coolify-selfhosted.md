@@ -34,19 +34,14 @@ Copy [`.env.example`](../.env.example) → `.env` (gitignored) and fill in.
 | `MODULES` | optional | CSV; empty = all modules, including any added later |
 | `OWNER_ID` | optional | Telegram user id for owner-only commands, the deploy DM, and the `/addsticker` pack owner. Unset = owner-only commands are denied and `/addsticker` refuses |
 | `ADMIN_IDS` | optional | CSV of Telegram user ids for admin-only commands |
-| `STICKER_PACK_NAME` | optional | set `/addsticker` writes to; `compose.yml` default `miti99_by_miti99bot`. See [sticker packs](sticker-packs.md) |
+| `STICKER_PACK_NAME` | optional | set `/addsticker` writes to; default `miti99_by_miti99bot`. See [sticker packs](sticker-packs.md) |
 | `LOL_PANDASCORE_TOKEN` | optional | PandaScore API token for the lol module (free tier) — secret, never logged; without it every `/lol*` fetch fails (stale cache may still serve briefly) |
 | `RENDERER_URL` | leave unset | base URL of the animation renderer; fixed by `compose.yml` to the bundled renderer (`http://renderer:3000`), so a Coolify value is ignored |
-| `LOG_LEVEL` | optional | `debug`, `info`, `warn`, or `error`; `compose.yml` default `info`; logs are JSON on stdout |
+| `LOG_LEVEL` | optional | `debug`, `info` (default), `warn`, or `error`; logs are JSON on stdout |
 | `GOLD_VNAPP_API_KEY` | optional | VNAppMob key — secret; empty = the gold module fetches one and caches it in MongoDB |
 | `KV_PROVIDER` | leave unset | `memory` or `mongodb`; unset = `mongodb` when `MONGO_URL` is set, otherwise `memory` |
-| `PORT` | leave unset | health server port; fixed to `8080` by `compose.yml`, which the health check uses |
+| `PORT` | leave unset | health server port; default `8080` |
 | `SOURCE_COMMIT` | never set | provided by Coolify at runtime for the deploy DM (see step 5 below) |
-
-Defaults live in `compose.yml` only (`${VAR:-default}`); the code has no
-fallback values. `PORT`, `LOG_LEVEL`, and (for `/addsticker`)
-`STICKER_PACK_NAME` must therefore be set when running outside compose — a
-missing or invalid `PORT` or `LOG_LEVEL` stops the bot at startup.
 
 Stock, coin, and gold provider URL overrides are not supported in runtime env;
 modules use coded defaults. There is no `TELEGRAM_WEBHOOK_SECRET`: long polling

@@ -22,14 +22,14 @@ Single-shot: one message replying to the media to add. No conversation state.
 
 ## Configuration
 
-| Env | `compose.yml` default | Meaning |
+| Env | Default | Meaning |
 |---|---|---|
-| `STICKER_PACK_NAME` | `miti99_by_miti99bot` | The Telegram set to write to; required — unset, `/addsticker` refuses |
+| `STICKER_PACK_NAME` | `miti99_by_miti99bot` | The Telegram set to write to |
 | `OWNER_ID` | — | Must be the account that **owns** that set |
 
 `OWNER_ID` is reused rather than given a sticker-specific twin because
 `addStickerToSet` takes the **set owner's** user ID, not the caller's, and the
-standard pack belongs to the bot owner. Point `OWNER_ID` at the owning account if
+default pack belongs to the bot owner. Point `OWNER_ID` at the owning account if
 the configured pack belongs to someone else.
 
 The caller's identity is used nowhere. That is what makes the command stateless:
