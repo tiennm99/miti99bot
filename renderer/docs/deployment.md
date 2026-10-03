@@ -28,15 +28,15 @@ Avoid for v1:
 
 ## Runtime
 
-Required env vars:
+Env vars, all optional (defaults shown):
 
 ```sh
-PORT=3000
-HOST=0.0.0.0
-MAX_CONCURRENT_RENDERS=1
-RENDER_TIMEOUT_MS=15000
-MAX_OPTIONS=32
-MAX_OPTION_CHARS=40
+RENDERER_PORT=3000
+RENDERER_HOST=0.0.0.0
+RENDERER_MAX_CONCURRENT_RENDERS=1
+RENDERER_RENDER_TIMEOUT_MS=15000
+RENDERER_MAX_OPTIONS=32
+RENDERER_MAX_OPTION_CHARS=40
 ```
 
 The root `compose.yml` forwards the tuning values with `${VAR:-default}`
@@ -50,7 +50,7 @@ including `libnspr4` and `libnss3`. Prefer Docker for consistent verification.
 The Docker image runs `npm run browser:ensure` during build so production requests
 do not need to download Chrome Headless Shell on first render.
 
-`RENDER_TIMEOUT_MS` is a total render timeout. Values below `7000` are raised to
+`RENDERER_RENDER_TIMEOUT_MS` is a total render timeout. Values below `7000` are raised to
 `7000` because Remotion's browser timeout has that minimum.
 
 ## Health

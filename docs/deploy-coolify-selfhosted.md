@@ -60,8 +60,9 @@ compose network, so it needs no domain, publishes no port, and takes no auth
 token. Its API is unauthenticated, so never publish a port or attach a domain
 to it.
 
-Renderer tuning (`MAX_CONCURRENT_RENDERS`, `RENDER_TIMEOUT_MS`, `MAX_OPTIONS`,
-`MAX_OPTION_CHARS`) can be set in Coolify too; the defaults are in
+Renderer tuning (`RENDERER_MAX_CONCURRENT_RENDERS`,
+`RENDERER_RENDER_TIMEOUT_MS`, `RENDERER_MAX_OPTIONS`,
+`RENDERER_MAX_OPTION_CHARS`) can be set in Coolify too; the defaults are in
 [`renderer/docs/deployment.md`](../renderer/docs/deployment.md). Give the host
 1-2 GB of headroom for the renderer's Chrome.
 

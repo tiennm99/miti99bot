@@ -57,12 +57,14 @@ services:
     restart: unless-stopped
     environment:
       NODE_ENV: production
-      HOST: 0.0.0.0
-      PORT: "3000"
-      MAX_CONCURRENT_RENDERS: ${MAX_CONCURRENT_RENDERS:-1}
-      RENDER_TIMEOUT_MS: ${RENDER_TIMEOUT_MS:-15000}
-      MAX_OPTIONS: ${MAX_OPTIONS:-32}
-      MAX_OPTION_CHARS: ${MAX_OPTION_CHARS:-40}
+      # Every renderer setting carries the RENDERER_ prefix so it cannot clash
+      # with the bot's variables, which Coolify also injects into this service.
+      RENDERER_HOST: 0.0.0.0
+      RENDERER_PORT: "3000"   # keep in sync with the bot's RENDERER_URL and the healthcheck
+      RENDERER_MAX_CONCURRENT_RENDERS: ${RENDERER_MAX_CONCURRENT_RENDERS:-1}
+      RENDERER_RENDER_TIMEOUT_MS: ${RENDERER_RENDER_TIMEOUT_MS:-15000}
+      RENDERER_MAX_OPTIONS: ${RENDERER_MAX_OPTIONS:-32}
+      RENDERER_MAX_OPTION_CHARS: ${RENDERER_MAX_OPTION_CHARS:-40}
     expose:
       - "3000"
     healthcheck:

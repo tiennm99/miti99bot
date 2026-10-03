@@ -30,14 +30,14 @@ const parsePositiveInt = (value, fallback) => {
  */
 export const loadConfig = (env = process.env) => {
   return {
-    host: env.HOST || '0.0.0.0',
-    port: parsePositiveInt(env.PORT, 3000),
-    maxConcurrentRenders: parsePositiveInt(env.MAX_CONCURRENT_RENDERS, 1),
+    host: env.RENDERER_HOST || '0.0.0.0',
+    port: parsePositiveInt(env.RENDERER_PORT, 3000),
+    maxConcurrentRenders: parsePositiveInt(env.RENDERER_MAX_CONCURRENT_RENDERS, 1),
     renderTimeoutMs: Math.max(
       minRenderTimeoutMs,
-      parsePositiveInt(env.RENDER_TIMEOUT_MS, 15000),
+      parsePositiveInt(env.RENDERER_RENDER_TIMEOUT_MS, 15000),
     ),
-    maxOptions: parsePositiveInt(env.MAX_OPTIONS, 32),
-    maxOptionChars: parsePositiveInt(env.MAX_OPTION_CHARS, 40),
+    maxOptions: parsePositiveInt(env.RENDERER_MAX_OPTIONS, 32),
+    maxOptionChars: parsePositiveInt(env.RENDERER_MAX_OPTION_CHARS, 40),
   };
 };

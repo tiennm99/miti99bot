@@ -67,7 +67,7 @@ result and its rarity — the service only draws it.
 
 Response is a silent H.264 `video/mp4` (Telegram plays it as an animation)
 with `X-Gacha-Rarity` and `X-Render-Duration-Ms` headers. All routes share the
-`MAX_CONCURRENT_RENDERS` slots. No game assets are used.
+`RENDERER_MAX_CONCURRENT_RENDERS` slots. No game assets are used.
 
 pack-cards animates on the browser clock, so the wish does not use Remotion
 compositions. `src/render/render-gacha.js` keeps one headless Chrome per
@@ -182,6 +182,6 @@ docker run --rm -p 3000:3000 miti99bot-renderer
 ```
 
 Recommended starting resources: 1-2 vCPU and 1-2 GB RAM, with
-`MAX_CONCURRENT_RENDERS=1`. `RENDER_TIMEOUT_MS` defaults to `15000` and is
-raised to Remotion's `7000ms` browser timeout floor when configured lower.
+`RENDERER_MAX_CONCURRENT_RENDERS=1`. `RENDERER_RENDER_TIMEOUT_MS` defaults to
+`15000` and is raised to Remotion's `7000ms` browser timeout floor when configured lower.
 The API has no authentication; publish its port only on a trusted network.
