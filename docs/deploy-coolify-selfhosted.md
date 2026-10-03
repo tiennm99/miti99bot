@@ -42,7 +42,7 @@ Copy [`.env.example`](../.env.example) → `.env` (gitignored) and fill in.
 | `GOLD_VNAPP_API_KEY` | leave unset | VNAppMob key; unset = the gold module fetches one and caches it in MongoDB |
 | `KV_PROVIDER` | leave unset | `memory` or `mongodb`; unset = `mongodb` when `MONGO_URL` is set, otherwise `memory` |
 | `PORT` | leave unset | health server port; default `8080` |
-| `SOURCE_COMMIT` | never set | provided by Coolify at runtime for the deploy DM (see step 6 below) |
+| `SOURCE_COMMIT` | never set | provided by Coolify at runtime for the deploy DM (see step 5 below) |
 
 Stock, coin, and gold provider URL overrides are not supported in runtime env;
 modules use coded defaults. There is no `TELEGRAM_WEBHOOK_SECRET`: long polling
@@ -148,22 +148,15 @@ MP4, with the same text fallback.
 1. New resource → from this Git repo (Docker Compose), or a prebuilt image.
    The committed [`compose.yml`](../compose.yml) defines the single
    `bot` service.
-2. **Enable submodule checkout.** The `monkeyd` module builds against
-   `third_party/monkeyd-crawler`, a git submodule wired in through a `go.mod`
-   `replace` directive. Coolify must clone submodules, or the Docker build
-   fails at `go mod download` with an unresolved
-   `github.com/tiennm99/monkeyd-crawler`. Turn on Coolify's recursive-clone /
-   submodule option for the resource. There is no build without it: leaving
-   `monkeyd` out of `MODULES` only disables the commands at runtime.
-3. Set the env vars above in Coolify.
-4. **No public domain / port** is needed — polling is outbound-only. Do not
+2. Set the env vars above in Coolify.
+3. **No public domain / port** is needed — polling is outbound-only. Do not
    publish a port or attach a domain. `expose: 8080` keeps the health endpoint
    reachable only inside Coolify's network.
-5. **Exactly one replica.** Telegram permits only one `getUpdates` consumer per
+4. **Exactly one replica.** Telegram permits only one `getUpdates` consumer per
    bot token; a second poller gets HTTP 409, and a second in-process scheduler
    double-fires crons. Prefer **stop-first redeploys** so two containers never
    overlap near a cron time.
-6. **deploynotify commit SHA:** `SOURCE_COMMIT` is a Coolify predefined
+5. **deploynotify commit SHA:** `SOURCE_COMMIT` is a Coolify predefined
    variable. The bot reads it at startup and DMs the owner on every boot;
    outside Coolify (local `docker compose up`) it is unset and the DM shows
    `unknown`. Keep "Include Source Commit in Build" disabled: that setting
@@ -171,7 +164,7 @@ MP4, with the same text fallback.
    invalidate Docker cache on every commit. Do not add `SOURCE_COMMIT` to
    `compose.yml`; an interpolated empty value can override Coolify's runtime
    env-file value.
-7. **Health check:** use Coolify's HTTP monitor against `GET /` (returns
+6. **Health check:** use Coolify's HTTP monitor against `GET /` (returns
    `text/plain` `miti99bot ok`). The committed `compose.yml` defines no
    `healthcheck`, and `cmd/server` has no `-healthcheck` flag. Note: `/`
    reports healthy even if Mongo is unreachable (the driver auto-reconnects on

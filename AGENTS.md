@@ -7,11 +7,10 @@
 in-memory otherwise, which is what tests and local no-database runs use. Read
 `README.md` before implementation work.
 
-`third_party/monkeyd-crawler` is a git submodule resolved through a `go.mod`
-`replace` directive, not a versioned dependency. Go commands fail until it is
-checked out (`git submodule update --init --recursive`). Changes to the crawler
-belong in its own repository and must be pushed before the submodule pointer is
-advanced here, or fresh clones cannot resolve the pinned commit.
+The `monkeyd` module's crawler, PDF renderer, and export flow are an in-tree
+port of `tiennm99/mttools/monkeyd-crawler` under
+`internal/modules/monkeyd/{crawler,pdf,export}`. Change them here; they no
+longer track the mttools copy.
 
 ## Development Rules
 

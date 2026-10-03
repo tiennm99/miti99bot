@@ -163,9 +163,11 @@ prevents a position opened after Record date from applying an older event.
 
 `/monkeyd_crawl <url> [font_size]` downloads every chapter of a monkeydd.com
 novel and sends it back as a single PDF document, sized for reading on a phone.
-The crawling and rendering come from the
-[monkeyd-crawler](https://github.com/tiennm99/monkeyd-crawler) submodule; the
-module is the Telegram surface around it.
+The crawler, the PDF renderer, and the export flow live in
+`internal/modules/monkeyd/{crawler,pdf,export}`, ported from
+[mttools/monkeyd-crawler](https://github.com/tiennm99/mttools/tree/main/monkeyd-crawler)
+and trimmed to what the bot uses: a fixed phone page and the bundled DejaVu
+Sans font.
 
 `font_size` is the body text size in points and accepts half points. It ranges
 from 6 to 24 and defaults to the crawler's own default of 10, which fits roughly
@@ -238,7 +240,6 @@ internal/modules/            Module framework, registry, dispatchers, modules
 internal/storage/            typed DocStore[T] (Provider + Typed); mongodb runtime + memory (tests). Values persist as flattened native BSON root documents
 internal/systemstate/        shared `system` collection helper for startup migration records
 internal/log/, metrics/      JSON logging (LOG_LEVEL) and periodic metrics flush
-third_party/monkeyd-crawler/ git submodule; resolved by a go.mod replace directive
 compose.yml                  Coolify self-host stack (single bot service)
 ```
 
@@ -253,20 +254,6 @@ compose.yml                  Coolify self-host stack (single bot service)
 - [Agent and contributor rules](AGENTS.md)
 
 ## Run locally
-
-Clone with submodules — the `monkeyd` module builds against
-`third_party/monkeyd-crawler`, and Go resolves it through a `replace` directive
-pointing at that directory:
-
-```sh
-git clone --recurse-submodules https://github.com/tiennm99/miti99bot.git
-
-# already cloned without them:
-git submodule update --init --recursive
-```
-
-Without the submodule checked out, every Go command fails to resolve
-`github.com/tiennm99/monkeyd-crawler`.
 
 In-memory storage requires no database. Set the environment variables for your
 shell, then run the server with Go:
