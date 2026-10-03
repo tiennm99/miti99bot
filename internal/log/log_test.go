@@ -32,8 +32,7 @@ func decodeOne(t *testing.T, buf *bytes.Buffer) map[string]any {
 }
 
 func TestParseLevel(t *testing.T) {
-	tests := map[string]slog.Level{
-		"":         slog.LevelInfo,
+	valid := map[string]slog.Level{
 		"info":     slog.LevelInfo,
 		"INFO":     slog.LevelInfo,
 		"debug":    slog.LevelDebug,
@@ -41,11 +40,17 @@ func TestParseLevel(t *testing.T) {
 		"warning":  slog.LevelWarn,
 		"error":    slog.LevelError,
 		"  Error ": slog.LevelError,
-		"bogus":    slog.LevelInfo,
 	}
-	for in, want := range tests {
-		if got := parseLevel(in); got != want {
-			t.Errorf("parseLevel(%q) = %v, want %v", in, got, want)
+	for in, want := range valid {
+		got, err := ParseLevel(in)
+		if err != nil || got != want {
+			t.Errorf("ParseLevel(%q) = %v, %v; want %v", in, got, err, want)
+		}
+	}
+	// No fallback: empty and unknown values are configuration errors.
+	for _, in := range []string{"", "  ", "bogus"} {
+		if _, err := ParseLevel(in); err == nil {
+			t.Errorf("ParseLevel(%q) = nil error, want an error", in)
 		}
 	}
 }

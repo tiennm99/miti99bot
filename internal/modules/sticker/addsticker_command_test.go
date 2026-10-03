@@ -94,17 +94,18 @@ func TestAddSticker_NonOwnerWritesToConfiguredPack(t *testing.T) {
 	}
 }
 
-func TestAddSticker_DefaultsToMiti99Pack(t *testing.T) {
+// There is no fallback pack: an unset STICKER_PACK_NAME must not write
+// anywhere.
+func TestAddSticker_RequiresPackName(t *testing.T) {
 	rb := installAddSticker(t, "", "miti99bot")
 
 	rb.Bot.ProcessUpdate(context.Background(), stickerReply(999, "", "src", ""))
 
-	call, ok := callTo(rb, "addStickerToSet")
-	if !ok {
-		t.Fatalf("no addStickerToSet call; got %+v", rb.Sent())
+	if _, ok := callTo(rb, "addStickerToSet"); ok {
+		t.Fatal("addStickerToSet called without a configured pack name")
 	}
-	if got := call.Form["name"]; got != "miti99_by_miti99bot" {
-		t.Errorf("name = %q, want the default pack", got)
+	if _, ok := callTo(rb, "createNewStickerSet"); ok {
+		t.Fatal("createNewStickerSet called without a configured pack name")
 	}
 }
 

@@ -108,9 +108,11 @@ npm install
 npm run browser:ensure
 ```
 
-Start the local API:
+Start the local API. Every `RENDERER_*` setting is required, so copy the
+template first; `npm run dev` loads `.env`:
 
 ```sh
+cp .env.example .env
 npm run dev
 ```
 
@@ -178,7 +180,7 @@ dependencies, and FFmpeg/compositor support.
 
 ```sh
 docker build -t miti99bot-renderer .
-docker run --rm -p 3000:3000 miti99bot-renderer
+docker run --rm -p 3000:3000 --env-file .env.example miti99bot-renderer
 ```
 
 Recommended starting resources: 1-2 vCPU and 1-2 GB RAM, with

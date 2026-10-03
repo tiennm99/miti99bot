@@ -106,18 +106,27 @@ func TestPackTitle_AtNameLengthCap(t *testing.T) {
 }
 
 func TestLoadStickerPack(t *testing.T) {
-	t.Run("defaults the name and requires an owner", func(t *testing.T) {
+	t.Run("reads the name and owner", func(t *testing.T) {
 		t.Setenv("OWNER_ID", "42")
-		t.Setenv("STICKER_PACK_NAME", "")
+		t.Setenv("STICKER_PACK_NAME", "miti99_by_miti99bot")
 		pack, err := loadStickerPack()
 		if err != nil {
 			t.Fatalf("loadStickerPack: %v", err)
 		}
-		if pack.Name != defaultStickerPackName {
-			t.Errorf("name = %q, want %q", pack.Name, defaultStickerPackName)
+		if pack.Name != "miti99_by_miti99bot" {
+			t.Errorf("name = %q, want miti99_by_miti99bot", pack.Name)
 		}
 		if pack.OwnerID != 42 {
 			t.Errorf("ownerID = %d, want 42", pack.OwnerID)
+		}
+	})
+
+	// No fallback name: an unset STICKER_PACK_NAME is a misconfiguration.
+	t.Run("requires a name", func(t *testing.T) {
+		t.Setenv("OWNER_ID", "42")
+		t.Setenv("STICKER_PACK_NAME", "")
+		if _, err := loadStickerPack(); !errors.Is(err, errNoPackName) {
+			t.Errorf("loadStickerPack() err = %v, want errNoPackName", err)
 		}
 	})
 
@@ -126,6 +135,7 @@ func TestLoadStickerPack(t *testing.T) {
 	for _, owner := range []string{"", "0", "not-a-number"} {
 		t.Run("rejects owner "+owner, func(t *testing.T) {
 			t.Setenv("OWNER_ID", owner)
+			t.Setenv("STICKER_PACK_NAME", "miti99_by_miti99bot")
 			if _, err := loadStickerPack(); !errors.Is(err, errNoPackOwner) {
 				t.Errorf("loadStickerPack() err = %v, want errNoPackOwner", err)
 			}

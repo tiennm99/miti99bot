@@ -262,6 +262,8 @@ shell, then run the server with Go:
 ```powershell
 # PowerShell
 $env:TELEGRAM_BOT_TOKEN = "…"
+$env:LOG_LEVEL = "info"
+$env:PORT = "8080"
 $env:MODULES = ""
 go run ./cmd/server
 ```
@@ -269,9 +271,14 @@ go run ./cmd/server
 ```sh
 # POSIX shells (Linux/macOS)
 export TELEGRAM_BOT_TOKEN="…"
+export LOG_LEVEL=info
+export PORT=8080
 export MODULES=""
 go run ./cmd/server
 ```
+
+The code has no default values: `compose.yml` supplies them, so a local run
+sets `LOG_LEVEL` and `PORT` itself (and `STICKER_PACK_NAME` for `/addsticker`).
 
 The bot uses long polling, so a local run talks to Telegram directly — no
 `ngrok` or public URL. The server clears any existing webhook on startup. The
