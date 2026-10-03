@@ -11,18 +11,18 @@ services:
       MONGO_URL: ${MONGO_URL}                        # Atlas SRV string incl. credentials — SECRET
       MONGO_DATABASE: ${MONGO_DATABASE}              # e.g. miti99bot
 
-      # --- Access control (optional; empty = default) ---
-      MODULES: ${MODULES}                            # CSV of modules; empty = all modules
-      OWNER_ID: ${OWNER_ID}                          # Telegram user id for owner-only commands
-      ADMIN_IDS: ${ADMIN_IDS}                        # CSV of admin Telegram user ids
+      # --- Access control (optional; empty uses the default) ---
+      MODULES: ${MODULES}                            # CSV of modules; default: all modules
+      OWNER_ID: ${OWNER_ID}                          # Telegram user id for owner-only commands; default: none
+      ADMIN_IDS: ${ADMIN_IDS}                        # CSV of admin Telegram user ids; default: none
 
-      # --- Module settings (optional; empty = default) ---
-      LOL_PANDASCORE_TOKEN: ${LOL_PANDASCORE_TOKEN}  # PandaScore token — SECRET; empty = /lol* fetches fail
-      GOLD_VNAPP_API_KEY: ${GOLD_VNAPP_API_KEY}      # VNAppMob key — SECRET; empty = fetched and cached in Mongo
-      STICKER_PACK_NAME: ${STICKER_PACK_NAME}        # /addsticker set; empty = miti99_by_miti99bot
+      # --- Module settings (optional; empty uses the default) ---
+      LOL_PANDASCORE_TOKEN: ${LOL_PANDASCORE_TOKEN}  # PandaScore token — SECRET; default: none (/lol* fetches fail)
+      GOLD_VNAPP_API_KEY: ${GOLD_VNAPP_API_KEY}      # VNAppMob key — SECRET; default: fetched and cached in Mongo
+      STICKER_PACK_NAME: ${STICKER_PACK_NAME}        # /addsticker set; default: miti99_by_miti99bot
 
-      # --- Runtime (optional; empty = default) ---
-      LOG_LEVEL: ${LOG_LEVEL}                        # debug|info|warn|error; empty = info
+      # --- Runtime (optional; empty uses the default) ---
+      LOG_LEVEL: ${LOG_LEVEL}                        # debug|info|warn|error; default: info
 
       # --- Fixed by this stack (not Coolify settings) ---
       # The bundled renderer service below draws /wheelofnames, /gacha and
@@ -70,11 +70,11 @@ services:
       # Every renderer setting carries the RENDERER_ prefix so it reads as a
       # renderer setting and cannot clash with the bot's variables.
 
-      # --- Tuning (optional; empty = default) ---
-      RENDERER_MAX_CONCURRENT_RENDERS: ${RENDERER_MAX_CONCURRENT_RENDERS}  # empty = 1
-      RENDERER_RENDER_TIMEOUT_MS: ${RENDERER_RENDER_TIMEOUT_MS}            # empty = 15000 (floor 7000)
-      RENDERER_MAX_OPTIONS: ${RENDERER_MAX_OPTIONS}                        # empty = 32 wheel options
-      RENDERER_MAX_OPTION_CHARS: ${RENDERER_MAX_OPTION_CHARS}              # empty = 40 chars per option/label
+      # --- Tuning (optional; empty uses the default) ---
+      RENDERER_MAX_CONCURRENT_RENDERS: ${RENDERER_MAX_CONCURRENT_RENDERS}  # default: 1
+      RENDERER_RENDER_TIMEOUT_MS: ${RENDERER_RENDER_TIMEOUT_MS}            # default: 15000 (floor 7000)
+      RENDERER_MAX_OPTIONS: ${RENDERER_MAX_OPTIONS}                        # default: 32 wheel options
+      RENDERER_MAX_OPTION_CHARS: ${RENDERER_MAX_OPTION_CHARS}              # default: 40 chars per option/label
 
       # --- Fixed by this stack (not Coolify settings) ---
       NODE_ENV: production
