@@ -1,7 +1,7 @@
 # miti99bot Integration
 
 miti99bot's `/wheelofnames` renders its wheel with this service, configured
-by `WHEELOFNAMES_API_URL` (pointing at `/api/gif`). The service is internal to
+by `RENDERER_URL`, the service's base URL. The service is internal to
 the compose network, so requests carry no credentials. Winner handling stays
 explicit:
 
@@ -43,8 +43,7 @@ winner selection is used.
 ## Gacha
 
 `/gacha` in miti99bot calls `POST /api/gacha` on the same service.
-The bot derives the endpoint from `WHEELOFNAMES_API_URL` by replacing its last
-path segment (`/api/gif` becomes `/api/gacha`), picks the result and rarity
+The bot appends the route to `RENDERER_URL`, picks the result and rarity
 itself, and sends the MP4 with `sendAnimation`. On any failure it falls back to
 a text reply.
 

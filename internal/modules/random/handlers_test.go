@@ -115,7 +115,7 @@ func TestWheelOfNames_ResultCaptionPadsShortWinnerToLongestOption(t *testing.T) 
 }
 
 func TestWheelOfNames_UsesRemoteAPIWhenConfigured(t *testing.T) {
-	var got wheelAPIRequest
+	var got wheelRenderRequest
 	var gotAuthorization string
 	var calls int
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -131,7 +131,7 @@ func TestWheelOfNames_UsesRemoteAPIWhenConfigured(t *testing.T) {
 		_, _ = w.Write([]byte("GIF89a-remote"))
 	}))
 	defer server.Close()
-	t.Setenv(wheelOfNamesAPIURLEnv, server.URL+"/api/gif")
+	t.Setenv(rendererURLEnv, server.URL)
 
 	rb := installRandom(t, 999)
 	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(7, "/wheelofnames Alice, Bob, Carol"))
@@ -191,7 +191,7 @@ func TestWheelOfNames_RemoteFailureFallsBackToRandomReply(t *testing.T) {
 		http.Error(w, "no", http.StatusInternalServerError)
 	}))
 	defer server.Close()
-	t.Setenv(wheelOfNamesAPIURLEnv, server.URL+"/api/gif")
+	t.Setenv(rendererURLEnv, server.URL)
 
 	rb := installRandom(t, 999)
 	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(7, "/wheelofnames Alice"))
@@ -221,7 +221,7 @@ func TestWheelOfNames_PlaceholderEditFailureFallsBackToReply(t *testing.T) {
 		http.Error(w, "no", http.StatusInternalServerError)
 	}))
 	defer server.Close()
-	t.Setenv(wheelOfNamesAPIURLEnv, server.URL+"/api/gif")
+	t.Setenv(rendererURLEnv, server.URL)
 
 	rb := installRandom(t, 999)
 	rb.FailMethod("editMessageText", http.StatusInternalServerError, "")
@@ -254,7 +254,7 @@ func TestWheelOfNames_SendAnimationFailureFallsBackToRandomReply(t *testing.T) {
 		_, _ = w.Write([]byte("GIF89a-remote"))
 	}))
 	defer server.Close()
-	t.Setenv(wheelOfNamesAPIURLEnv, server.URL+"/api/gif")
+	t.Setenv(rendererURLEnv, server.URL)
 
 	rb := installRandom(t, 999)
 	rb.FailMethod("sendAnimation", http.StatusInternalServerError, "")
@@ -283,7 +283,7 @@ func TestWheelOfNames_ForwardsMessageThreadID(t *testing.T) {
 		_, _ = w.Write([]byte("GIF89a-remote"))
 	}))
 	defer server.Close()
-	t.Setenv(wheelOfNamesAPIURLEnv, server.URL+"/api/gif")
+	t.Setenv(rendererURLEnv, server.URL)
 
 	rb := installRandom(t, 999)
 	update := testutil.NewSupergroupMessage(-100, 7, "/wheelofnames Alice")

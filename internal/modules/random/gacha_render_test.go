@@ -7,27 +7,28 @@ import (
 	"testing"
 )
 
-func TestGachaAPIEndpoint_SwapsLastPathSegment(t *testing.T) {
+func TestRendererClient_EndpointJoinsAPIRoute(t *testing.T) {
 	for raw, want := range map[string]string{
-		"https://render.example/api/gif":  "https://render.example/api/gacha",
-		"https://render.example/api/gif/": "https://render.example/api/gacha",
-		"http://10.0.0.5:3000/api/gif":    "http://10.0.0.5:3000/api/gacha",
+		"http://renderer:3000":            "http://renderer:3000/api/gacha",
+		"http://renderer:3000/":           "http://renderer:3000/api/gacha",
+		"https://render.example/proxied":  "https://render.example/proxied/api/gacha",
+		"https://render.example/proxied/": "https://render.example/proxied/api/gacha",
 	} {
-		got, err := gachaAPIEndpoint(raw, "gacha")
+		got, err := rendererClient{BaseURL: raw}.endpoint("gacha")
 		if err != nil {
-			t.Fatalf("gachaAPIEndpoint(%q): %v", raw, err)
+			t.Fatalf("endpoint(%q): %v", raw, err)
 		}
 		if got.String() != want {
-			t.Errorf("gachaAPIEndpoint(%q) = %q, want %q", raw, got, want)
+			t.Errorf("endpoint(%q) = %q, want %q", raw, got, want)
 		}
 	}
-	if _, err := gachaAPIEndpoint("", "gacha"); err != errWheelAPINotConfigured {
-		t.Fatalf("empty url err = %v, want errWheelAPINotConfigured", err)
+	if _, err := (rendererClient{}).endpoint("gacha"); err != errRendererNotConfigured {
+		t.Fatalf("empty url err = %v, want errRendererNotConfigured", err)
 	}
 }
 
-func TestWheelAPIClient_RenderGachaRejectsInvalidInput(t *testing.T) {
-	client := wheelAPIClient{URL: "https://example.com/api/gif"}
+func TestRendererClient_RenderGachaRejectsInvalidInput(t *testing.T) {
+	client := rendererClient{BaseURL: "https://example.com"}
 	for _, tc := range []struct {
 		name   string
 		label  string
@@ -45,7 +46,7 @@ func TestWheelAPIClient_RenderGachaRejectsInvalidInput(t *testing.T) {
 	}
 }
 
-func TestWheelAPIClient_RenderGachaReturnsErrorsForBadResponses(t *testing.T) {
+func TestRendererClient_RenderGachaReturnsErrorsForBadResponses(t *testing.T) {
 	for _, tc := range []struct {
 		name        string
 		status      int
@@ -65,7 +66,7 @@ func TestWheelAPIClient_RenderGachaReturnsErrorsForBadResponses(t *testing.T) {
 			}))
 			defer server.Close()
 
-			client := wheelAPIClient{HTTP: server.Client(), URL: server.URL + "/api/gif"}
+			client := rendererClient{HTTP: server.Client(), BaseURL: server.URL}
 			if _, err := client.RenderGacha(context.Background(), "gacha", "a", 3); err == nil {
 				t.Fatal("RenderGacha returned nil error")
 			}

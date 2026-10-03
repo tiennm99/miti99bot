@@ -11,8 +11,8 @@ import (
 	"testing"
 )
 
-func TestWheelAPIClient_RenderValidRequest(t *testing.T) {
-	var got wheelAPIRequest
+func TestRendererClient_RenderValidRequest(t *testing.T) {
+	var got wheelRenderRequest
 	var gotAccept string
 	var gotContentType string
 	var gotMethod string
@@ -30,13 +30,13 @@ func TestWheelAPIClient_RenderValidRequest(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := wheelAPIClient{
-		HTTP: server.Client(),
-		URL:  server.URL + "/api/gif",
+	client := rendererClient{
+		HTTP:    server.Client(),
+		BaseURL: server.URL,
 	}
-	data, err := client.Render(context.Background(), []string{"alice", "bob", "carol"}, 1)
+	data, err := client.RenderWheel(context.Background(), []string{"alice", "bob", "carol"}, 1)
 	if err != nil {
-		t.Fatalf("Render: %v", err)
+		t.Fatalf("RenderWheel: %v", err)
 	}
 	if !bytes.Equal(data, []byte("GIF89a-remote")) {
 		t.Fatalf("data = %q, want remote GIF bytes", data)
@@ -63,7 +63,7 @@ func TestWheelAPIClient_RenderValidRequest(t *testing.T) {
 }
 
 // The renderer is internal to the compose network; the bot sends no credentials.
-func TestWheelAPIClient_RenderSendsNoAuthorization(t *testing.T) {
+func TestRendererClient_RenderSendsNoAuthorization(t *testing.T) {
 	var gotAuthorization string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotAuthorization = r.Header.Get("Authorization")
@@ -72,45 +72,45 @@ func TestWheelAPIClient_RenderSendsNoAuthorization(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := wheelAPIClient{HTTP: server.Client(), URL: server.URL + "/api/gif"}
-	if _, err := client.Render(context.Background(), []string{"alice"}, 0); err != nil {
-		t.Fatalf("Render: %v", err)
+	client := rendererClient{HTTP: server.Client(), BaseURL: server.URL}
+	if _, err := client.RenderWheel(context.Background(), []string{"alice"}, 0); err != nil {
+		t.Fatalf("RenderWheel: %v", err)
 	}
 	if gotAuthorization != "" {
 		t.Fatalf("Authorization = %q, want empty", gotAuthorization)
 	}
 }
 
-func TestWheelAPIClient_RenderNotConfigured(t *testing.T) {
-	client := wheelAPIClient{}
-	_, err := client.Render(context.Background(), []string{"alice"}, 0)
-	if !errors.Is(err, errWheelAPINotConfigured) {
-		t.Fatalf("Render error = %v, want errWheelAPINotConfigured", err)
+func TestRendererClient_RenderNotConfigured(t *testing.T) {
+	client := rendererClient{}
+	_, err := client.RenderWheel(context.Background(), []string{"alice"}, 0)
+	if !errors.Is(err, errRendererNotConfigured) {
+		t.Fatalf("RenderWheel error = %v, want errRendererNotConfigured", err)
 	}
 }
 
-func TestWheelAPIClient_RenderRejectsInvalidInput(t *testing.T) {
-	client := wheelAPIClient{URL: "https://example.com/api/gif"}
+func TestRendererClient_RenderRejectsInvalidInput(t *testing.T) {
+	client := rendererClient{BaseURL: "https://example.com"}
 	for _, tc := range []struct {
 		name    string
 		url     string
 		options []string
 		winner  int
 	}{
-		{name: "bad scheme", url: "ftp://example.com/api/gif", options: []string{"alice"}, winner: 0},
-		{name: "empty options", url: "https://example.com/api/gif", options: nil, winner: 0},
-		{name: "winner out of range", url: "https://example.com/api/gif", options: []string{"alice"}, winner: 1},
+		{name: "bad scheme", url: "ftp://example.com", options: []string{"alice"}, winner: 0},
+		{name: "empty options", url: "https://example.com", options: nil, winner: 0},
+		{name: "winner out of range", url: "https://example.com", options: []string{"alice"}, winner: 1},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			client.URL = tc.url
-			if _, err := client.Render(context.Background(), tc.options, tc.winner); err == nil {
-				t.Fatalf("Render returned nil error")
+			client.BaseURL = tc.url
+			if _, err := client.RenderWheel(context.Background(), tc.options, tc.winner); err == nil {
+				t.Fatalf("RenderWheel returned nil error")
 			}
 		})
 	}
 }
 
-func TestWheelAPIClient_RenderReturnsErrorsForBadResponses(t *testing.T) {
+func TestRendererClient_RenderReturnsErrorsForBadResponses(t *testing.T) {
 	for _, tc := range []struct {
 		name        string
 		status      int
@@ -131,35 +131,35 @@ func TestWheelAPIClient_RenderReturnsErrorsForBadResponses(t *testing.T) {
 			}))
 			defer server.Close()
 
-			client := wheelAPIClient{HTTP: server.Client(), URL: server.URL + "/api/gif"}
-			if _, err := client.Render(context.Background(), []string{"alice"}, 0); err == nil {
-				t.Fatalf("Render returned nil error")
+			client := rendererClient{HTTP: server.Client(), BaseURL: server.URL}
+			if _, err := client.RenderWheel(context.Background(), []string{"alice"}, 0); err == nil {
+				t.Fatalf("RenderWheel returned nil error")
 			}
 		})
 	}
 }
 
-func TestWheelAPIClient_RenderRejectsOversizedResponse(t *testing.T) {
+func TestRendererClient_RenderRejectsOversizedResponse(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "image/gif")
-		_, _ = w.Write(bytes.Repeat([]byte("a"), int(wheelRemoteMaxBytes)+1))
+		_, _ = w.Write(bytes.Repeat([]byte("a"), int(rendererMaxBytes)+1))
 	}))
 	defer server.Close()
 
-	client := wheelAPIClient{HTTP: server.Client(), URL: server.URL + "/api/gif"}
-	if _, err := client.Render(context.Background(), []string{"alice"}, 0); err == nil {
-		t.Fatalf("Render returned nil error")
+	client := rendererClient{HTTP: server.Client(), BaseURL: server.URL}
+	if _, err := client.RenderWheel(context.Background(), []string{"alice"}, 0); err == nil {
+		t.Fatalf("RenderWheel returned nil error")
 	}
 }
 
-func TestWheelAPIClient_DefaultHTTPClientHasTimeout(t *testing.T) {
-	client := wheelAPIClient{}
-	if got := client.httpClient().Timeout; got != wheelRemoteTimeout {
-		t.Fatalf("timeout = %s, want %s", got, wheelRemoteTimeout)
+func TestRendererClient_DefaultHTTPClientHasTimeout(t *testing.T) {
+	client := rendererClient{}
+	if got := client.httpClient().Timeout; got != rendererTimeout {
+		t.Fatalf("timeout = %s, want %s", got, rendererTimeout)
 	}
 }
 
-func assertWheelRemoteDefaults(t *testing.T, got wheelAPIRequest) {
+func assertWheelRemoteDefaults(t *testing.T, got wheelRenderRequest) {
 	t.Helper()
 	if got.DurationMs != wheelRemoteDurationMs {
 		t.Fatalf("durationMs = %d, want %d", got.DurationMs, wheelRemoteDurationMs)

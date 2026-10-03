@@ -177,8 +177,8 @@ Use a container runtime first. Static-only platforms cannot satisfy
 dependencies, and FFmpeg/compositor support.
 
 ```sh
-docker build -t wheelofnames .
-docker run --rm -p 3000:3000 wheelofnames
+docker build -t miti99bot-renderer .
+docker run --rm -p 3000:3000 miti99bot-renderer
 ```
 
 Recommended starting resources: 1-2 vCPU and 1-2 GB RAM, with

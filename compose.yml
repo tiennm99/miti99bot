@@ -15,10 +15,10 @@ services:
       OWNER_ID: ${OWNER_ID}                # Telegram user id for owner-only commands
       ADMIN_IDS: ${ADMIN_IDS}              # CSV of admin Telegram user ids
       # The bundled renderer service below draws /wheelofnames, /gacha and
-      # /genshin. The URL is fixed to its in-network address so a stale
-      # platform-level value cannot point the bot elsewhere; /gacha and
-      # /genshin derive their endpoints from it.
-      WHEELOFNAMES_API_URL: http://renderer:3000/api/gif
+      # /genshin. Its base URL is fixed to the in-network address so a stale
+      # platform-level value cannot point the bot elsewhere; the bot appends
+      # each /api/<name> route itself.
+      RENDERER_URL: http://renderer:3000
       # SOURCE_COMMIT is intentionally not declared here. Coolify provides it
       # at runtime via its generated env file; declaring it here with Compose
       # interpolation can override the runtime value with an empty string.

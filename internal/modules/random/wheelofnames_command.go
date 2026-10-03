@@ -38,7 +38,7 @@ func wheelOfNamesCommand() modules.Command {
 			placeholder := sendRenderPlaceholder(ctx, b, update.Message, wheelPlaceholder)
 			animation, err := renderWheelOfNamesAnimation(ctx, options, winner)
 			if err != nil {
-				if !errors.Is(err, errWheelAPINotConfigured) {
+				if !errors.Is(err, errRendererNotConfigured) {
 					log.Warn("wheelofnames remote render failed", "err", err)
 				}
 				return replaceWheelPlaceholder(ctx, b, update.Message, placeholder, options[winner])
@@ -81,12 +81,12 @@ const wheelPlaceholder = "Spinning..."
 // is immediate, and a placeholder would only flash. A failed placeholder is
 // non-fatal — the pick still resolves, just without the holding message.
 func sendRenderPlaceholder(ctx context.Context, b *bot.Bot, msg *models.Message, text string) int {
-	if _, err := wheelAPIEndpoint(newWheelAPIClientFromEnv().URL); err != nil {
+	if _, err := rendererBaseURL(newRendererClientFromEnv().BaseURL); err != nil {
 		return 0
 	}
 	id, err := chathelper.SendText(ctx, b, msg, text)
 	if err != nil {
-		log.Warn("wheelofnames placeholder send failed", "chat", msg.Chat.ID, "err", err)
+		log.Warn("render placeholder send failed", "chat", msg.Chat.ID, "err", err)
 		return 0
 	}
 	return id
@@ -101,7 +101,7 @@ func replaceWheelPlaceholder(ctx context.Context, b *bot.Bot, msg *models.Messag
 		if err == nil {
 			return nil
 		}
-		log.Warn("wheelofnames placeholder edit failed", "chat", msg.Chat.ID, "err", err)
+		log.Warn("render placeholder edit failed", "chat", msg.Chat.ID, "err", err)
 	}
 	return chathelper.Reply(ctx, b, msg, winner)
 }

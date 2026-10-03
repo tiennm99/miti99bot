@@ -100,7 +100,7 @@ func newGachaCommand(name string, visibility modules.Visibility, description, us
 			placeholder := sendRenderPlaceholder(ctx, b, update.Message, gachaPlaceholder)
 			animation, err := renderGachaAnimation(ctx, style, options[winner].Label, options[winner].Rarity)
 			if err != nil {
-				if !errors.Is(err, errWheelAPINotConfigured) {
+				if !errors.Is(err, errRendererNotConfigured) {
 					log.Warn("gacha remote render failed", "command", name, "err", err)
 				}
 				return replaceWheelPlaceholder(ctx, b, update.Message, placeholder, results[winner])

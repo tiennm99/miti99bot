@@ -54,7 +54,7 @@ func TestGacha_NotConfiguredRepliesWithStars(t *testing.T) {
 }
 
 func TestGacha_UsesRemoteAPIWhenConfigured(t *testing.T) {
-	var got gachaAPIRequest
+	var got gachaRenderRequest
 	var gotPath, gotAuthorization string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotPath = r.URL.Path
@@ -66,7 +66,7 @@ func TestGacha_UsesRemoteAPIWhenConfigured(t *testing.T) {
 		_, _ = w.Write(mp4Bytes)
 	}))
 	defer server.Close()
-	t.Setenv(wheelOfNamesAPIURLEnv, server.URL+"/api/gif")
+	t.Setenv(rendererURLEnv, server.URL)
 
 	rb := installRandom(t, 999)
 	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(7, "/gacha 4* Pho"))
@@ -77,7 +77,7 @@ func TestGacha_UsesRemoteAPIWhenConfigured(t *testing.T) {
 	if gotAuthorization != "" {
 		t.Fatalf("Authorization = %q, want none", gotAuthorization)
 	}
-	want := gachaAPIRequest{Label: "Pho", Rarity: 4, FPS: gachaRemoteFPS, Width: gachaRemoteWidth}
+	want := gachaRenderRequest{Label: "Pho", Rarity: 4, FPS: gachaRemoteFPS, Width: gachaRemoteWidth}
 	if got != want {
 		t.Fatalf("request = %+v, want %+v", got, want)
 	}
@@ -111,7 +111,7 @@ func TestGacha_RemoteFailureFallsBackToText(t *testing.T) {
 		http.Error(w, "no", http.StatusInternalServerError)
 	}))
 	defer server.Close()
-	t.Setenv(wheelOfNamesAPIURLEnv, server.URL+"/api/gif")
+	t.Setenv(rendererURLEnv, server.URL)
 
 	rb := installRandom(t, 999)
 	rb.Bot.ProcessUpdate(context.Background(), testutil.NewPrivateMessage(7, "/gacha 3* Rice"))
@@ -131,7 +131,7 @@ func TestGacha_SendAnimationFailureFallsBackToText(t *testing.T) {
 		_, _ = w.Write(mp4Bytes)
 	}))
 	defer server.Close()
-	t.Setenv(wheelOfNamesAPIURLEnv, server.URL+"/api/gif")
+	t.Setenv(rendererURLEnv, server.URL)
 
 	rb := installRandom(t, 999)
 	rb.FailMethod("sendAnimation", http.StatusInternalServerError, "")
@@ -149,7 +149,7 @@ func TestGacha_ForwardsMessageThreadID(t *testing.T) {
 		_, _ = w.Write(mp4Bytes)
 	}))
 	defer server.Close()
-	t.Setenv(wheelOfNamesAPIURLEnv, server.URL+"/api/gif")
+	t.Setenv(rendererURLEnv, server.URL)
 
 	rb := installRandom(t, 999)
 	update := testutil.NewSupergroupMessage(-100, 7, "/gacha 3* Rice")
@@ -175,7 +175,7 @@ func TestGacha_ForwardsMessageThreadID(t *testing.T) {
 
 func TestGenshin_UsesGenshinRendererAndAnyoneCanRunIt(t *testing.T) {
 	var gotPath string
-	var got gachaAPIRequest
+	var got gachaRenderRequest
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotPath = r.URL.Path
 		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
@@ -185,7 +185,7 @@ func TestGenshin_UsesGenshinRendererAndAnyoneCanRunIt(t *testing.T) {
 		_, _ = w.Write(mp4Bytes)
 	}))
 	defer server.Close()
-	t.Setenv(wheelOfNamesAPIURLEnv, server.URL+"/api/gif")
+	t.Setenv(rendererURLEnv, server.URL)
 
 	// 7 is neither the owner (999) nor an admin.
 	rb := installRandom(t, 999)
@@ -194,7 +194,7 @@ func TestGenshin_UsesGenshinRendererAndAnyoneCanRunIt(t *testing.T) {
 	if gotPath != "/api/genshin" {
 		t.Fatalf("path = %q, want /api/genshin", gotPath)
 	}
-	if want := (gachaAPIRequest{Label: "Bún bò", Rarity: 5, FPS: gachaRemoteFPS, Width: gachaRemoteWidth}); got != want {
+	if want := (gachaRenderRequest{Label: "Bún bò", Rarity: 5, FPS: gachaRemoteFPS, Width: gachaRemoteWidth}); got != want {
 		t.Fatalf("request = %+v, want %+v", got, want)
 	}
 	var animation *testutil.SentCall

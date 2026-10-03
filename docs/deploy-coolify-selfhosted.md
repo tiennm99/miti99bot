@@ -36,7 +36,7 @@ Copy [`.env.example`](../.env.example) → `.env` (gitignored) and fill in.
 | `ADMIN_IDS` | optional | CSV of Telegram user ids for admin-only commands |
 | `STICKER_PACK_NAME` | optional | set `/addsticker` writes to; default `miti99_by_miti99bot`. See [sticker packs](sticker-packs.md) |
 | `LOL_PANDASCORE_TOKEN` | ✅ for lol module | PandaScore API token (free tier) — secret, never logged; without it every `/lol*` fetch fails (stale cache may still serve briefly) |
-| `WHEELOFNAMES_API_URL` | leave unset | fixed by `compose.yml` to the bundled renderer (`http://renderer:3000/api/gif`); a Coolify value is ignored |
+| `RENDERER_URL` | leave unset | base URL of the animation renderer; fixed by `compose.yml` to the bundled renderer (`http://renderer:3000`), so a Coolify value is ignored |
 | `LOG_LEVEL` | optional | `debug`, `info` (default), `warn`, or `error`; logs are JSON on stdout |
 | `GOLD_VNAPP_API_KEY` | leave unset | VNAppMob key; unset = the gold module fetches one and caches it in MongoDB |
 | `KV_PROVIDER` | leave unset | `memory` or `mongodb`; unset = `mongodb` when `MONGO_URL` is set, otherwise `memory` |
@@ -55,7 +55,7 @@ has no webhook.
 `/wheelofnames`, `/gacha`, and `/genshin` are drawn by the Node renderer in
 [`renderer/`](../renderer/README.md) (Remotion and headless Chrome).
 `compose.yml` deploys it as a second service, `renderer`, next to the bot. It
-is internal only: the bot reaches it at `http://renderer:3000/api/gif` over the
+is internal only: the bot reaches it at `http://renderer:3000` over the
 compose network, so it needs no domain, publishes no port, and takes no auth
 token. Its API is unauthenticated, so never publish a port or attach a domain
 to it.
@@ -65,8 +65,9 @@ Renderer tuning (`MAX_CONCURRENT_RENDERS`, `RENDER_TIMEOUT_MS`, `MAX_OPTIONS`,
 [`renderer/docs/deployment.md`](../renderer/docs/deployment.md). Give the host
 1-2 GB of headroom for the renderer's Chrome.
 
-Outside compose, `WHEELOFNAMES_API_URL` can point the bot at any service that
-implements the same `/api/gif` contract.
+Outside compose, set `RENDERER_URL` to the base URL of any service that
+implements the same `/api/gif`, `/api/gacha`, and `/api/genshin` routes, e.g.
+`http://localhost:3000`. The bot appends each route itself.
 
 The bot sends outbound HTTP only; no public bot ingress is required. Remote
 renders use `512px`, `20fps`, and `7` seconds total by default. If the renderer
@@ -80,8 +81,7 @@ render or upload failure edits that same message into the plain text winner
 instead. With no renderer configured there is no holding message — the winner
 reply is immediate.
 
-`/gacha` uses the same service and token: the bot swaps the URL's last path
-segment, so `.../api/gif` becomes `.../api/gacha`. It renders a 6-second
+`/gacha` uses the same service at `/api/gacha`. It renders a 6-second
 `360x640` portrait silent MP4 wish animation (a card pack torn open), posts `Wishing...` while it renders, and
 falls back to a text reply such as `★★★★★ Pizza` on the same failures. Every
 option is equally likely, as with `/random`; the rarity only sets what the
