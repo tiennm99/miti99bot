@@ -3,20 +3,17 @@ module github.com/tiennm99/miti99bot
 go 1.26.5
 
 require (
+	github.com/go-pdf/fpdf v0.9.0
 	github.com/go-telegram/bot v1.20.0
 	github.com/ledongthuc/pdf v0.0.0-20260907135840-6c8c28e0e8a0
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/testcontainers/testcontainers-go v0.43.0
 	github.com/testcontainers/testcontainers-go/modules/mongodb v0.43.0
-	github.com/tiennm99/monkeyd-crawler v0.0.0
 	go.mongodb.org/mongo-driver/v2 v2.7.0
 	golang.org/x/image v0.45.0
+	golang.org/x/net v0.57.0
+	golang.org/x/sync v0.22.0
 	golang.org/x/text v0.41.0
-)
-
-require (
-	github.com/go-pdf/fpdf v0.9.0 // indirect
-	golang.org/x/net v0.57.0 // indirect
 )
 
 require (
@@ -72,9 +69,6 @@ require (
 	go.opentelemetry.io/otel/metric v1.41.0 // indirect
 	go.opentelemetry.io/otel/trace v1.41.0 // indirect
 	golang.org/x/crypto v0.54.0 // indirect
-	golang.org/x/sync v0.22.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
-
-replace github.com/tiennm99/monkeyd-crawler => ./third_party/monkeyd-crawler

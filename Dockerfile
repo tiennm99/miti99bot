@@ -1,12 +1,9 @@
 FROM golang:1.26.5-alpine AS builder
 WORKDIR /src
 
-# The monkeyd-crawler submodule is resolved through a `replace` directive, so
-# its go.mod must be present before `go mod download` can read the build list.
-# Only the module files are copied here, keeping this layer cached across
-# ordinary source edits.
+# Only the module files are copied first, keeping the download layer cached
+# across ordinary source edits.
 COPY go.mod go.sum ./
-COPY third_party/monkeyd-crawler/go.mod third_party/monkeyd-crawler/go.sum ./third_party/monkeyd-crawler/
 RUN go mod download
 
 COPY . .

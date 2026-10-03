@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/tiennm99/monkeyd-crawler/export"
-	"github.com/tiennm99/monkeyd-crawler/pdfout"
+	"github.com/tiennm99/miti99bot/internal/modules/monkeyd/export"
+	"github.com/tiennm99/miti99bot/internal/modules/monkeyd/pdf"
 
 	"github.com/tiennm99/miti99bot/internal/modules"
 	"github.com/tiennm99/miti99bot/internal/storage"
@@ -77,7 +77,7 @@ func stubPDF(t *testing.T, dir, name string, size int64) *export.Result {
 		SourceURL: testNovelURL,
 		Chapters:  3,
 		Words:     1200,
-		Page:      pdfout.Presets["phone"],
+		Page:      pdf.PhonePage,
 	}
 }
 

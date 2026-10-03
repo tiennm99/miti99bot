@@ -1,3 +1,0 @@
-[submodule "third_party/monkeyd-crawler"]
-	path = third_party/monkeyd-crawler
-	url = https://github.com/tiennm99/monkeyd-crawler.git
