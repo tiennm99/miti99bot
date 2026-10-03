@@ -62,8 +62,12 @@ to it.
 
 Renderer tuning (`RENDERER_MAX_CONCURRENT_RENDERS`,
 `RENDERER_RENDER_TIMEOUT_MS`, `RENDERER_MAX_OPTIONS`,
-`RENDERER_MAX_OPTION_CHARS`) can be set in Coolify too; the defaults are in
-[`renderer/docs/deployment.md`](../renderer/docs/deployment.md). Give the host
+`RENDERER_MAX_OPTION_CHARS`) is optional and needs nothing in Coolify: the
+renderer's defaults apply, listed in
+[`renderer/docs/deployment.md`](../renderer/docs/deployment.md). Coolify lists
+every `${VAR}` that `compose.yml` references as a setting, so the tuning values
+are deliberately not referenced there; to override one, add it to the
+`renderer` service's `environment:` in `compose.yml` as a literal value. Give the host
 1-2 GB of headroom for the renderer's Chrome.
 
 Outside compose, set `RENDERER_URL` to the base URL of any service that

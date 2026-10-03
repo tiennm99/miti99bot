@@ -57,14 +57,15 @@ services:
     restart: unless-stopped
     environment:
       NODE_ENV: production
-      # Every renderer setting carries the RENDERER_ prefix so it cannot clash
-      # with the bot's variables, which Coolify also injects into this service.
+      # Every renderer setting carries the RENDERER_ prefix so it reads as a
+      # renderer setting and cannot clash with the bot's variables.
       RENDERER_HOST: 0.0.0.0
       RENDERER_PORT: "3000"   # keep in sync with the bot's RENDERER_URL and the healthcheck
-      RENDERER_MAX_CONCURRENT_RENDERS: ${RENDERER_MAX_CONCURRENT_RENDERS:-1}
-      RENDERER_RENDER_TIMEOUT_MS: ${RENDERER_RENDER_TIMEOUT_MS:-15000}
-      RENDERER_MAX_OPTIONS: ${RENDERER_MAX_OPTIONS:-32}
-      RENDERER_MAX_OPTION_CHARS: ${RENDERER_MAX_OPTION_CHARS:-40}
+      # Tuning is left out on purpose: the renderer's own defaults apply
+      # (RENDERER_MAX_CONCURRENT_RENDERS=1, RENDERER_RENDER_TIMEOUT_MS=15000,
+      # RENDERER_MAX_OPTIONS=32, RENDERER_MAX_OPTION_CHARS=40). Coolify lists
+      # every ${VAR} referenced here as a setting, so to override one, add it
+      # here as a literal, e.g. RENDERER_MAX_OPTIONS: "48".
     expose:
       - "3000"
     healthcheck:

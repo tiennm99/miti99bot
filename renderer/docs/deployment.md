@@ -39,8 +39,9 @@ RENDERER_MAX_OPTIONS=32
 RENDERER_MAX_OPTION_CHARS=40
 ```
 
-The root `compose.yml` forwards the tuning values with `${VAR:-default}`
-fallbacks, so unset or empty variables use the defaults above.
+An unset or empty variable uses the default above. The root `compose.yml`
+sets only `RENDERER_HOST` and `RENDERER_PORT`, so the tuning values use these
+defaults unless added there.
 
 Start with 1-2 vCPU and 1-2 GB RAM. Increase only after render benchmarks show
 the service is CPU-bound or concurrency-limited.
