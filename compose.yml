@@ -64,7 +64,7 @@ services:
       # Tuning is left out on purpose: the renderer's own defaults apply
       # (RENDERER_MAX_CONCURRENT_RENDERS=1, RENDERER_RENDER_TIMEOUT_MS=15000,
       # RENDERER_MAX_OPTIONS=32, RENDERER_MAX_OPTION_CHARS=40). Coolify lists
-      # every ${VAR} referenced here as a setting, so to override one, add it
+      # every interpolated variable here as a setting, so to override one, add it
       # here as a literal, e.g. RENDERER_MAX_OPTIONS: "48".
     expose:
       - "3000"
